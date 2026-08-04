@@ -18,7 +18,7 @@ Funny, slightly unhinged, internet humor style. Roast tone but keep it playful.
 No hate speech, no sexual content, no real private/personal data.
 `.trim();
 
-const { OPENAI_API_KEY, ISSUE_NUMBER, ISSUE_TITLE, ISSUE_BODY = "", REPO } = process.env;
+const { OPENAI_API_KEY, ISSUE_NUMBER, ISSUE_TITLE, REPO } = process.env;
 
 if (!OPENAI_API_KEY) { console.error("Missing OPENAI_API_KEY"); process.exit(1); }
 if (!ISSUE_NUMBER)   { console.error("Missing ISSUE_NUMBER");   process.exit(1); }
@@ -42,13 +42,11 @@ if (fs.existsSync(outFile)) {
 }
 
 const title = stripTrigger(ISSUE_TITLE);
-const body  = stripTrigger(ISSUE_BODY);
 
 const prompt = `${STYLE_PROMPT}
 
 Context for this meme:
-Title: ${title}
-${body ? `Details: ${body}` : ""}`.slice(0, 4000);
+Title: ${title}`.slice(0, 4000);
 
 console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${title}`);
 
