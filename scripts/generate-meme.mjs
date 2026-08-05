@@ -42,14 +42,10 @@ function retryDelayMs(err) {
   return null;
 }
 
-function postSlack(data) {
-  if (SLACK_WEBHOOK_URL == null) {
-    console.log("No SLACK_WEBHOOK_URL set — skipping Slack notification.");
-    return;
-  }
-  const tmpFile = `/tmp/slack-payload-${ISSUE_NUMBER}.json`;
-  fs.writeFileSync(tmpFile, JSON.stringify(data));
-  exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmpFile} ${SLACK_WEBHOOK_URL}`);
+function postComment(body) {
+  const tmpFile = `/tmp/gh-comment-${ISSUE_NUMBER}.txt`;
+  fs.writeFileSync(tmpFile, body);
+  exec(`gh issue comment ${ISSUE_NUMBER} --repo ${REPO} --body-file ${tmpFile}`);
   fs.unlinkSync(tmpFile);
 }
 
