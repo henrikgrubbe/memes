@@ -76,10 +76,14 @@ Actual context for the meme: ${issueTitle}.`.slice(0, 4000);
 
 console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${issueTitle}`);
 
-// Spread concurrent jobs randomly across a 60s window to avoid thundering-herd on the rate limit
-const jitterMs = Math.floor(Math.random() * 60_000);
-console.log(`Waiting ${(jitterMs / 1000).toFixed(1)}s (jitter) before first attempt…`);
-await sleep(jitterMs);
+// Scale jitter to the number of currently-running workflow jobs (capped at 10)
+const runsJson = exec(`gh api repos/${REPO}/actions/runs --jq '.workflow_runs | map(select(.status == "in_progress")) | length'`).trim();
+const concurrentRuns = Math.min(parseInt(runsJson, 10) || 1, 10);
+const jitterMs = concurrentRuns <= 1 ? 0 : Math.floor(Math.random() * concurrentRuns * 13_000);
+if (jitterMs > 0) {
+  console.log(`${concurrentRuns} concurrent runs — waiting ${(jitterMs / 1000).toFixed(1)}s (jitter) before first attempt…`);
+  await sleep(jitterMs);
+}
 
 const MAX_RETRIES = 10;
 let result;
@@ -103,7 +107,11 @@ for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       continue;
     }
 
-    failWithError(err?.message ?? String(err));
+    const details = err?.error?.moderation_details;
+    const detailSuffix = details != null
+      ? `\n\nModeration stage: ${details.moderation_stage}\nCategories: ${(details.categories ?? []).join(", ")}`
+      : "";
+    failWithError((err?.message ?? String(err)) + detailSuffix);
   }
 }
 
