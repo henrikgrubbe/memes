@@ -42,8 +42,15 @@ function retryDelayMs(err) {
   return null;
 }
 
-function postComment(body) {
-  exec(`gh api repos/${REPO}/issues/${ISSUE_NUMBER}/comments -X POST -f body=${JSON.stringify(body)}`);
+function postSlack(data) {
+  if (SLACK_WEBHOOK_URL == null) {
+    console.log("No SLACK_WEBHOOK_URL set — skipping Slack notification.");
+    return;
+  }
+  const tmpFile = `/tmp/slack-payload-${ISSUE_NUMBER}.json`;
+  fs.writeFileSync(tmpFile, JSON.stringify(data));
+  exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmpFile} ${SLACK_WEBHOOK_URL}`);
+  fs.unlinkSync(tmpFile);
 }
 
 function postSlack(data) {
@@ -51,7 +58,10 @@ function postSlack(data) {
     console.log("No SLACK_WEBHOOK_URL set — skipping Slack notification.");
     return;
   }
-  exec(`curl -s -X POST -H 'Content-Type: application/json' -d ${JSON.stringify(JSON.stringify(data))} ${SLACK_WEBHOOK_URL}`);
+  const tmpFile = `/tmp/slack-payload-${ISSUE_NUMBER}.json`;
+  fs.writeFileSync(tmpFile, JSON.stringify(data));
+  exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmpFile} ${SLACK_WEBHOOK_URL}`);
+  fs.unlinkSync(tmpFile);
 }
 
 function failWithError(message, closeIssue = false) {
