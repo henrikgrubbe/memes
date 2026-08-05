@@ -113,7 +113,7 @@ async function generateWithOpenAI() {
       const result = await openai.images.generate({
         model: "gpt-image-2",
         prompt,
-        size: "1536x1024",
+        size: "1024x1024",
         quality: "low",
         output_format: "jpeg",
       });
@@ -145,7 +145,7 @@ async function generateWithOpenAI() {
 }
 
 async function generateWithXai() {
-  const result = await xai.images.generate({ model: "grok-imagine-image-quality", prompt });
+  const result = await xai.images.generate({ model: "grok-imagine-image-speed", prompt });
   const url = result.data?.[0]?.url;
   if (url == null) { throw new Error("xAI returned no image URL."); }
   exec(`curl -sL -o ${JSON.stringify(outFile)} ${JSON.stringify(url)}`);
