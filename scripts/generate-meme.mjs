@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // generate-meme.mjs
 // Called by GitHub Actions on issue open.
-// Reads issue context from env vars, generates a JPEG meme, commits + pushes, closes issue.
+// Reads issue context from env vars, generates a JPEG meme, commits + pushes, closes issue,
+// and posts the result (or any error) directly to Slack.
 
 import { execSync } from "child_process";
 import fs from "fs";
@@ -12,7 +13,7 @@ import OpenAI from "openai";
 const REPO_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const MEMES_DIR = path.join(REPO_ROOT, "memes");
 
-const { OPENAI_API_KEY, ISSUE_NUMBER, ISSUE_TITLE, REPO } = process.env;
+const { OPENAI_API_KEY, ISSUE_NUMBER, ISSUE_TITLE, ISSUE_BODY, REPO, SLACK_WEBHOOK_URL } = process.env;
 
 if (!OPENAI_API_KEY) { console.error("Missing OPENAI_API_KEY"); process.exit(1); }
 if (!ISSUE_NUMBER)   { console.error("Missing ISSUE_NUMBER");   process.exit(1); }
@@ -22,23 +23,6 @@ const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 function exec(cmd) {
   return execSync(cmd, { encoding: "utf8", cwd: REPO_ROOT });
 }
-
-fs.mkdirSync(MEMES_DIR, { recursive: true });
-
-const outFile = path.join(MEMES_DIR, `${ISSUE_NUMBER}.jpg`);
-if (fs.existsSync(outFile)) {
-  console.log(`memes/${ISSUE_NUMBER}.jpg already exists — skipping.`);
-  process.exit(0);
-}
-function postComment(body) {
-  exec(`gh api repos/${REPO}/issues/${ISSUE_NUMBER}/comments -X POST -f body=${JSON.stringify(body)}`);
-}
-
-const issueTitle = ISSUE_TITLE ?? "";
-const prompt = `Make a slightly unhinged meme. Favor existing well-known meme-templates if any relevant ones exist.
-Extra context for the meme: ${issueTitle}.`.slice(0, 4000);
-
-console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${issueTitle}`);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -57,6 +41,42 @@ function retryDelayMs(err) {
   }
   return null;
 }
+
+function postComment(body) {
+  exec(`gh api repos/${REPO}/issues/${ISSUE_NUMBER}/comments -X POST -f body=${JSON.stringify(body)}`);
+}
+
+function postSlack(payload) {
+  if (SLACK_WEBHOOK_URL == null) {
+    console.log("No SLACK_WEBHOOK_URL set — skipping Slack notification.");
+    return;
+  }
+  exec(`curl -s -X POST -H 'Content-Type: application/json' -d ${JSON.stringify(JSON.stringify(payload))} ${SLACK_WEBHOOK_URL}`);
+}
+
+function failWithError(message) {
+  console.error("Meme generation failed:", message);
+  postComment(`❌ Meme generation failed.\n\n\`\`\`\n${message}\n\`\`\``);
+  postSlack({
+    text: `❌ Failed to generate meme for "${issueTitle}" (requested by ${requester})\n\`\`\`${message}\`\`\``,
+  });
+  process.exit(1);
+}
+
+fs.mkdirSync(MEMES_DIR, { recursive: true });
+
+const outFile = path.join(MEMES_DIR, `${ISSUE_NUMBER}.jpg`);
+if (fs.existsSync(outFile)) {
+  console.log(`memes/${ISSUE_NUMBER}.jpg already exists — skipping.`);
+  process.exit(0);
+}
+
+const issueTitle = ISSUE_TITLE ?? "";
+const requester = ISSUE_BODY ?? "unknown";
+const prompt = `Make a slightly unhinged meme. Favor existing well-known meme-templates if any relevant ones exist.
+Extra context for the meme: ${issueTitle}.`.slice(0, 4000);
+
+console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${issueTitle}`);
 
 const MAX_RETRIES = 5;
 let result;
@@ -80,19 +100,13 @@ for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       continue;
     }
 
-    const message = err?.message ?? String(err);
-    console.error("Image generation failed:", message);
-    postComment(`❌ Meme generation failed.\n\n\`\`\`\n${message}\n\`\`\``);
-    process.exit(1);
+    failWithError(err?.message ?? String(err));
   }
 }
 
 const b64 = result.data?.[0]?.b64_json;
 if (b64 == null) {
-  const errorMsg = "No image data returned from API.";
-  console.error(errorMsg);
-  postComment(`❌ Meme generation failed.\n\n\`\`\`\n${errorMsg}\n\`\`\``);
-  process.exit(1);
+  failWithError("No image data returned from API.");
 }
 
 fs.writeFileSync(outFile, Buffer.from(b64, "base64"));
@@ -112,3 +126,21 @@ console.log(`Pushed.`);
 exec(`gh api repos/${REPO}/issues/${ISSUE_NUMBER}/comments -X POST -f body='🎉 Meme generated and committed to [memes/${ISSUE_NUMBER}.jpg](../blob/main/memes/${ISSUE_NUMBER}.jpg)'`);
 exec(`gh api repos/${REPO}/issues/${ISSUE_NUMBER} -X PATCH -f state=closed`);
 console.log(`Closed issue #${ISSUE_NUMBER}.`);
+
+// Post meme to Slack
+const imageUrl = `https://raw.githubusercontent.com/${REPO}/refs/heads/main/memes/${ISSUE_NUMBER}.jpg`;
+postSlack({
+  blocks: [
+    {
+      type: "image",
+      title: { type: "plain_text", text: issueTitle },
+      image_url: imageUrl,
+      alt_text: issueTitle,
+    },
+    {
+      type: "context",
+      elements: [{ type: "mrkdwn", text: `Requested by ${requester}` }],
+    },
+  ],
+});
+console.log("Posted to Slack.");
