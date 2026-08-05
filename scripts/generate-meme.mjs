@@ -54,9 +54,12 @@ function postSlack(data) {
   exec(`curl -s -X POST -H 'Content-Type: application/json' -d ${JSON.stringify(JSON.stringify(data))} ${SLACK_WEBHOOK_URL}`);
 }
 
-function failWithError(message) {
+function failWithError(message, closeIssue = false) {
   console.error("Meme generation failed:", message);
   postComment(`❌ Meme generation failed.\n\n\`\`\`\n${message}\n\`\`\``);
+  if (closeIssue) {
+    exec(`gh api repos/${REPO}/issues/${ISSUE_NUMBER} -X PATCH -f state=closed -f state_reason=not_planned`);
+  }
   postSlack({ status: "failure", image_url: "", title: issueTitle, requester, error: message });
   process.exit(1);
 }
@@ -107,11 +110,12 @@ for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       continue;
     }
 
+    const isModerationBlock = err?.error?.code === "moderation_blocked";
     const details = err?.error?.moderation_details;
     const detailSuffix = details != null
       ? `\n\nModeration stage: ${details.moderation_stage}\nCategories: ${(details.categories ?? []).join(", ")}`
       : "";
-    failWithError((err?.message ?? String(err)) + detailSuffix);
+    failWithError((err?.message ?? String(err)) + detailSuffix, isModerationBlock);
   }
 }
 
