@@ -35,9 +35,8 @@ function postComment(body) {
 }
 
 const issueTitle = ISSUE_TITLE ?? "";
-const issueBody = process.env.ISSUE_BODY ?? "";
 const prompt = `Make a slightly unhinged meme. Favor existing well-known meme-templates if any relevant ones exist.
-Extra context for the meme: ${issueTitle}. ${issueBody}`.slice(0, 4000);
+Extra context for the meme: ${issueTitle}.`.slice(0, 4000);
 
 console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${issueTitle}`);
 
