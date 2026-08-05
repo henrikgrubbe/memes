@@ -31,9 +31,9 @@ if (fs.existsSync(outFile)) {
   process.exit(0);
 }
 const prompt = `Make a slightly unhinged meme. Favor existing well-known meme-templates if any relevant ones exist.
-Extra context for the meme: ${title}.`.slice(0, 4000);
+Extra context for the meme: ${ISSUE_TITLE}.`.slice(0, 4000);
 
-console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${title}`);
+console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}`);
 
 const result = await openai.images.generate({
   model: "gpt-image-2",
