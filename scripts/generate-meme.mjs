@@ -145,7 +145,7 @@ async function generateWithOpenAI() {
 }
 
 async function generateWithXai() {
-  const result = await xai.images.generate({ model: "grok-imagine-image-speed", prompt });
+  const result = await xai.images.generate({ model: "grok-imagine-image", prompt });
   const url = result.data?.[0]?.url;
   if (url == null) { throw new Error("xAI returned no image URL."); }
   exec(`curl -sL -o ${JSON.stringify(outFile)} ${JSON.stringify(url)}`);
