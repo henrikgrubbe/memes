@@ -164,6 +164,7 @@ console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${issueTitle}`);
 await applyJitter();
 
 let imageProvider = "OpenAI";
+const providerHistory = [];
 const preferXai = xai != null && Math.random() < 0.5;
 
 if (preferXai) {
@@ -171,8 +172,10 @@ if (preferXai) {
   try {
     await generateWithXai();
     imageProvider = "xAI";
+    providerHistory.push("xAI ✅");
   } catch (xaiErr) {
     console.log(`xAI failed (${xaiErr?.message}) — falling back to OpenAI…`);
+    providerHistory.push(`xAI ❌ (${xaiErr?.message ?? String(xaiErr)})`);
   }
 }
 
@@ -180,12 +183,15 @@ if (imageProvider === "OpenAI") {
   try {
     const imageBytes = await generateWithOpenAI();
     fs.writeFileSync(outFile, imageBytes);
+    providerHistory.push("OpenAI ✅");
   } catch (err) {
     if (err.isModerationBlock === true && xai != null && !preferXai) {
+      providerHistory.push(`OpenAI ❌ (moderation blocked)`);
       console.log("OpenAI moderation blocked — falling back to xAI…");
       try {
         await generateWithXai();
         imageProvider = "xAI";
+        providerHistory.push("xAI ✅");
       } catch (xaiErr) {
         fail(`xAI fallback also failed: ${xaiErr?.message ?? String(xaiErr)}`);
       }
@@ -216,7 +222,15 @@ for (let attempt = 1; ; attempt++) {
 console.log("Pushed.");
 
 const providerNote = twist != null ? ` _(${imageProvider} · ${twist})_` : ` _(${imageProvider})_`;
-exec(`gh issue comment ${ISSUE_NUMBER} --repo ${REPO} --body "🎉 Meme generated and committed to [memes/${ISSUE_NUMBER}.jpg](../blob/main/memes/${ISSUE_NUMBER}.jpg)${providerNote}"`);
+const successComment = [
+  `🎉 Meme generated and committed to [memes/${ISSUE_NUMBER}.jpg](../blob/main/memes/${ISSUE_NUMBER}.jpg)${providerNote}`,
+  ``,
+  `**Prompt:** \`${prompt}\``,
+  ``,
+  `**Provider attempts:**`,
+  ...providerHistory.map((entry) => `- ${entry}`),
+].join("\n");
+postComment(successComment);
 exec(`gh api repos/${REPO}/issues/${ISSUE_NUMBER} -X PATCH -f state=closed`);
 console.log(`Closed issue #${ISSUE_NUMBER}.`);
 
