@@ -75,8 +75,7 @@ if (fs.existsSync(outFile)) {
 
 const issueTitle = ISSUE_TITLE ?? "";
 const requester = ISSUE_BODY ?? "unknown";
-const prompt = `Make a meme. Favor existing meme-templates if you think that makes sense.
-Actual context for the meme: ${issueTitle}.`.slice(0, 4000);
+const prompt = `Make a meme from this prompt: ${issueTitle}.`.slice(0, 4000);
 
 console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${issueTitle}`);
 
