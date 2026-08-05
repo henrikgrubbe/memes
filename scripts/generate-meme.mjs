@@ -30,21 +30,40 @@ if (fs.existsSync(outFile)) {
   console.log(`memes/${ISSUE_NUMBER}.jpg already exists — skipping.`);
   process.exit(0);
 }
+function postComment(body) {
+  exec(`gh api repos/${REPO}/issues/${ISSUE_NUMBER}/comments -X POST -f body=${JSON.stringify(body)}`);
+}
+
+const issueTitle = ISSUE_TITLE ?? "";
+const issueBody = process.env.ISSUE_BODY ?? "";
 const prompt = `Make a slightly unhinged meme. Favor existing well-known meme-templates if any relevant ones exist.
-Extra context for the meme: ${ISSUE_TITLE}.`.slice(0, 4000);
+Extra context for the meme: ${issueTitle}. ${issueBody}`.slice(0, 4000);
 
-console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}`);
+console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${issueTitle}`);
 
-const result = await openai.images.generate({
-  model: "gpt-image-2",
-  prompt,
-  size: "1536x1024",
-  quality: "low",
-  output_format: "jpeg",
-});
+let result;
+try {
+  result = await openai.images.generate({
+    model: "gpt-image-2",
+    prompt,
+    size: "1536x1024",
+    quality: "low",
+    output_format: "jpeg",
+  });
+} catch (err) {
+  const message = err?.message ?? String(err);
+  console.error("Image generation failed:", message);
+  postComment(`❌ Meme generation failed.\n\n\`\`\`\n${message}\n\`\`\``);
+  process.exit(1);
+}
 
 const b64 = result.data?.[0]?.b64_json;
-if (!b64) { console.error("No image data returned"); process.exit(1); }
+if (b64 == null) {
+  const errorMsg = "No image data returned from API.";
+  console.error(errorMsg);
+  postComment(`❌ Meme generation failed.\n\n\`\`\`\n${errorMsg}\n\`\`\``);
+  process.exit(1);
+}
 
 fs.writeFileSync(outFile, Buffer.from(b64, "base64"));
 console.log(`Saved: memes/${ISSUE_NUMBER}.jpg`);
