@@ -64,6 +64,7 @@ function postComment(body) {
 }
 
 function postSlack(data) {
+return;
   if (SLACK_WEBHOOK_URL == null) {
     console.log("No SLACK_WEBHOOK_URL — skipping Slack notification.");
     return;
