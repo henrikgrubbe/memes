@@ -46,20 +46,18 @@ function postComment(body) {
   exec(`gh api repos/${REPO}/issues/${ISSUE_NUMBER}/comments -X POST -f body=${JSON.stringify(body)}`);
 }
 
-function postSlack(payload) {
+function postSlack(data) {
   if (SLACK_WEBHOOK_URL == null) {
     console.log("No SLACK_WEBHOOK_URL set — skipping Slack notification.");
     return;
   }
-  exec(`curl -s -X POST -H 'Content-Type: application/json' -d ${JSON.stringify(JSON.stringify(payload))} ${SLACK_WEBHOOK_URL}`);
+  exec(`curl -s -X POST -H 'Content-Type: application/json' -d ${JSON.stringify(JSON.stringify(data))} ${SLACK_WEBHOOK_URL}`);
 }
 
 function failWithError(message) {
   console.error("Meme generation failed:", message);
   postComment(`❌ Meme generation failed.\n\n\`\`\`\n${message}\n\`\`\``);
-  postSlack({
-    text: `❌ Failed to generate meme for "${issueTitle}" (requested by ${requester})\n\`\`\`${message}\`\`\``,
-  });
+  postSlack({ status: "failure", image_url: "", title: issueTitle, requester, error: message });
   process.exit(1);
 }
 
@@ -129,18 +127,5 @@ console.log(`Closed issue #${ISSUE_NUMBER}.`);
 
 // Post meme to Slack
 const imageUrl = `https://raw.githubusercontent.com/${REPO}/refs/heads/main/memes/${ISSUE_NUMBER}.jpg`;
-postSlack({
-  blocks: [
-    {
-      type: "image",
-      title: { type: "plain_text", text: issueTitle },
-      image_url: imageUrl,
-      alt_text: issueTitle,
-    },
-    {
-      type: "context",
-      elements: [{ type: "mrkdwn", text: `Requested by ${requester}` }],
-    },
-  ],
-});
+postSlack({ status: "success", image_url: imageUrl, title: issueTitle, requester, error: "" });
 console.log("Posted to Slack.");
