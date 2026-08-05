@@ -2,7 +2,7 @@ name: Generate meme for issue
 
 on:
   issues:
-    types: [opened]
+    types: [opened, labeled, unlabeled]
 
 jobs:
   generate-meme:
