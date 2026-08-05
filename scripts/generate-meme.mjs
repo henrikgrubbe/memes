@@ -71,12 +71,17 @@ if (fs.existsSync(outFile)) {
 
 const issueTitle = ISSUE_TITLE ?? "";
 const requester = ISSUE_BODY ?? "unknown";
-const prompt = `Make a slightly unhinged meme. Favor existing well-known meme-templates if any relevant ones exist.
-Extra context for the meme: ${issueTitle}.`.slice(0, 4000);
+const prompt = `Make a meme. Favor existing meme-templates if you think that makes sense.
+Actual context for the meme: ${issueTitle}.`.slice(0, 4000);
 
 console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${issueTitle}`);
 
-const MAX_RETRIES = 5;
+// Spread concurrent jobs randomly across a 60s window to avoid thundering-herd on the rate limit
+const jitterMs = Math.floor(Math.random() * 60_000);
+console.log(`Waiting ${(jitterMs / 1000).toFixed(1)}s (jitter) before first attempt…`);
+await sleep(jitterMs);
+
+const MAX_RETRIES = 10;
 let result;
 for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
   try {
