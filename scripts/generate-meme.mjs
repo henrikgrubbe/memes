@@ -64,7 +64,6 @@ function postComment(body) {
 }
 
 function postSlack(data) {
-return;
   if (SLACK_WEBHOOK_URL == null) {
     console.log("No SLACK_WEBHOOK_URL — skipping Slack notification.");
     return;
@@ -158,7 +157,7 @@ fs.mkdirSync(MEMES_DIR, { recursive: true });
 
 if (fs.existsSync(outFile)) {
   console.log(`memes/${ISSUE_NUMBER}.jpg already exists — skipping.`);
-  //process.exit(0);
+  process.exit(0);
 }
 
 console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${issueTitle}`);
