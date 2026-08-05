@@ -76,3 +76,90 @@ if (fs.existsSync(outFile)) {
 const issueTitle = ISSUE_TITLE ?? "";
 const requester = ISSUE_BODY ?? "unknown";
 const prompt = `Make a meme. Favor existing meme-templates if you think that makes sense.
+Actual context for the meme: ${issueTitle}.`.slice(0, 4000);
+
+console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${issueTitle}`);
+
+// Scale jitter to the number of currently-running workflow jobs (capped at 10)
+const runsJson = exec(`gh api repos/${REPO}/actions/runs --jq '.workflow_runs | map(select(.status == "in_progress")) | length'`).trim();
+const concurrentRuns = Math.min(parseInt(runsJson, 10) || 1, 10);
+const jitterMs = concurrentRuns <= 1 ? 0 : Math.floor(Math.random() * concurrentRuns * 13_000);
+if (jitterMs > 0) {
+  console.log(`${concurrentRuns} concurrent runs — waiting ${(jitterMs / 1000).toFixed(1)}s (jitter) before first attempt…`);
+  await sleep(jitterMs);
+}
+
+const MAX_RETRIES = 10;
+let result;
+for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  try {
+    result = await openai.images.generate({
+      model: "gpt-image-2",
+      prompt,
+      size: "1536x1024",
+      quality: "low",
+      output_format: "jpeg",
+    });
+    break;
+  } catch (err) {
+    const isRateLimit = err?.status === 429;
+    const isModerationBlock = err?.error?.code === "moderation_blocked";
+    const delayMs = isRateLimit ? retryDelayMs(err) : null;
+
+    if (isRateLimit && delayMs != null && attempt < MAX_RETRIES) {
+      console.log(`Rate limited — waiting ${delayMs / 1000}s before retry (attempt ${attempt}/${MAX_RETRIES})…`);
+      await sleep(delayMs);
+      continue;
+    }
+
+    if (isModerationBlock && xai != null) {
+      console.log("OpenAI moderation blocked — falling back to xAI…");
+      try {
+        const xaiResult = await xai.images.generate({
+          model: "grok-imagine-image-quality",
+          prompt,
+        });
+        const xaiUrl = xaiResult.data?.[0]?.url;
+        if (xaiUrl == null) { failWithError("xAI returned no image URL.", false); }
+        exec(`curl -sL -o ${JSON.stringify(outFile)} ${JSON.stringify(xaiUrl)}`);
+        result = { _fromXai: true };
+      } catch (xaiErr) {
+        failWithError(`xAI fallback also failed: ${xaiErr?.message ?? String(xaiErr)}`, false);
+      }
+      break;
+    }
+
+    const details = err?.error?.moderation_details;
+    const detailSuffix = details != null
+      ? `\n\nModeration stage: ${details.moderation_stage}\nCategories: ${(details.categories ?? []).join(", ")}`
+      : "";
+    failWithError((err?.message ?? String(err)) + detailSuffix, isModerationBlock);
+  }
+}
+
+if (result._fromXai !== true) {
+  const b64 = result.data?.[0]?.b64_json;
+  if (b64 == null) { failWithError("No image data returned from API.", false); }
+  fs.writeFileSync(outFile, Buffer.from(b64, "base64"));
+}
+console.log(`Saved: memes/${ISSUE_NUMBER}.jpg`);
+
+// Configure git identity for Actions
+exec(`git config user.name "github-actions[bot]"`);
+exec(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
+
+// Commit + push
+exec(`git add "memes/${ISSUE_NUMBER}.jpg"`);
+exec(`git commit -m "Add meme for issue #${ISSUE_NUMBER}"`);
+exec(`git push origin HEAD`);
+console.log(`Pushed.`);
+
+// Comment + close issue
+exec(`gh api repos/${REPO}/issues/${ISSUE_NUMBER}/comments -X POST -f body='🎉 Meme generated and committed to [memes/${ISSUE_NUMBER}.jpg](../blob/main/memes/${ISSUE_NUMBER}.jpg)'`);
+exec(`gh api repos/${REPO}/issues/${ISSUE_NUMBER} -X PATCH -f state=closed`);
+console.log(`Closed issue #${ISSUE_NUMBER}.`);
+
+// Post meme to Slack
+const imageUrl = `https://raw.githubusercontent.com/${REPO}/refs/heads/main/memes/${ISSUE_NUMBER}.jpg`;
+postSlack({ status: "success", image_url: imageUrl, title: issueTitle, requester, error: "" });
+console.log("Posted to Slack.");
