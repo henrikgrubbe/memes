@@ -41,20 +41,51 @@ Extra context for the meme: ${issueTitle}. ${issueBody}`.slice(0, 4000);
 
 console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${issueTitle}`);
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelayMs(err) {
+  // Honour the Retry-After header if present (value is in seconds)
+  const retryAfterSec = err?.headers?.["retry-after"];
+  if (retryAfterSec != null) {
+    return (parseInt(retryAfterSec, 10) + 1) * 1000;
+  }
+  // Fall back to parsing "Please try again in Xs" from the error message
+  const match = (err?.message ?? "").match(/try again in (\d+(?:\.\d+)?)s/i);
+  if (match != null) {
+    return (parseFloat(match[1]) + 1) * 1000;
+  }
+  return null;
+}
+
+const MAX_RETRIES = 5;
 let result;
-try {
-  result = await openai.images.generate({
-    model: "gpt-image-2",
-    prompt,
-    size: "1536x1024",
-    quality: "low",
-    output_format: "jpeg",
-  });
-} catch (err) {
-  const message = err?.message ?? String(err);
-  console.error("Image generation failed:", message);
-  postComment(`❌ Meme generation failed.\n\n\`\`\`\n${message}\n\`\`\``);
-  process.exit(1);
+for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  try {
+    result = await openai.images.generate({
+      model: "gpt-image-2",
+      prompt,
+      size: "1536x1024",
+      quality: "low",
+      output_format: "jpeg",
+    });
+    break;
+  } catch (err) {
+    const isRateLimit = err?.status === 429;
+    const delayMs = isRateLimit ? retryDelayMs(err) : null;
+
+    if (isRateLimit && delayMs != null && attempt < MAX_RETRIES) {
+      console.log(`Rate limited — waiting ${delayMs / 1000}s before retry (attempt ${attempt}/${MAX_RETRIES})…`);
+      await sleep(delayMs);
+      continue;
+    }
+
+    const message = err?.message ?? String(err);
+    console.error("Image generation failed:", message);
+    postComment(`❌ Meme generation failed.\n\n\`\`\`\n${message}\n\`\`\``);
+    process.exit(1);
+  }
 }
 
 const b64 = result.data?.[0]?.b64_json;
