@@ -12,11 +12,7 @@ import OpenAI from "openai";
 const REPO_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const MEMES_DIR = path.join(REPO_ROOT, "memes");
 
-const STYLE_PROMPT = `
-Bold internet meme format. Large impact-font style captions (top and bottom text where appropriate).
-Funny, slightly unhinged, internet humor style. Roast tone but keep it playful.
-No hate speech, no sexual content, no real private/personal data.
-`.trim();
+const STYLE_PROMPT = `Make it slightly unhinged. Favor existing well known meme templates if relevant.`.trim();
 
 const { OPENAI_API_KEY, ISSUE_NUMBER, ISSUE_TITLE, REPO } = process.env;
 
