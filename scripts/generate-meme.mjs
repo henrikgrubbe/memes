@@ -130,7 +130,24 @@ exec(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
 // Commit + push
 exec(`git add "memes/${ISSUE_NUMBER}.jpg"`);
 exec(`git commit -m "Add meme for issue #${ISSUE_NUMBER}"`);
-exec(`git push origin HEAD`);
+let pushed = false;
+for (let pushAttempt = 1; pushAttempt <= 5; pushAttempt++) {
+  try {
+    exec(`git pull --rebase origin HEAD`);
+    exec(`git push origin HEAD`);
+    pushed = true;
+    break;
+  } catch (pushErr) {
+    if (pushAttempt < 5) {
+      const pushJitter = Math.floor(Math.random() * 10_000) + 2_000;
+      console.log(`Push failed, retrying in ${(pushJitter / 1000).toFixed(1)}s (attempt ${pushAttempt}/5)…`);
+      await sleep(pushJitter);
+    }
+  }
+}
+if (!pushed) {
+  failWithError("Failed to push after 5 attempts — another job may be conflicting.");
+}
 console.log(`Pushed.`);
 
 // Comment + close issue
