@@ -12,18 +12,12 @@ import OpenAI from "openai";
 const REPO_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const MEMES_DIR = path.join(REPO_ROOT, "memes");
 
-const STYLE_PROMPT = `Make it slightly unhinged. Favor existing well known meme templates if relevant.`.trim();
-
 const { OPENAI_API_KEY, ISSUE_NUMBER, ISSUE_TITLE, REPO } = process.env;
 
 if (!OPENAI_API_KEY) { console.error("Missing OPENAI_API_KEY"); process.exit(1); }
 if (!ISSUE_NUMBER)   { console.error("Missing ISSUE_NUMBER");   process.exit(1); }
 
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
-
-function stripTrigger(text) {
-  return (text || "").replace(/^\s*meme\b\s*/i, "").trim();
-}
 
 function exec(cmd) {
   return execSync(cmd, { encoding: "utf8", cwd: REPO_ROOT });
@@ -36,13 +30,8 @@ if (fs.existsSync(outFile)) {
   console.log(`memes/${ISSUE_NUMBER}.jpg already exists — skipping.`);
   process.exit(0);
 }
-
-const title = stripTrigger(ISSUE_TITLE);
-
-const prompt = `${STYLE_PROMPT}
-
-Context for this meme:
-Title: ${title}`.slice(0, 4000);
+const prompt = `Make a slightly unhinged meme. Favor existing well-known meme-templates if any relevant ones exist.
+Extra context for the meme: ${title}.`.slice(0, 4000);
 
 console.log(`Generating meme for issue #${ISSUE_NUMBER}: ${title}`);
 
