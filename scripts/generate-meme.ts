@@ -4,6 +4,8 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import OpenAI from "openai";
+import { Duration, Effect, Ref, Schedule } from "effect";
+import { ModerationBlockedError, ProviderError, RateLimitExhaustedError } from "./errors.js";
 
 const MODERATION_FALLBACK    = "xAI";
 const MAX_RETRIES            = 10;
@@ -209,47 +211,83 @@ function buildProviders(env: Env): Providers {
   return Object.fromEntries(
     PROVIDER_CONFIGS.map(({ name, envKey, model, baseURL, params }) => {
       const client = new OpenAI({ apiKey: env[envKey], ...(baseURL != null ? { baseURL } : {}) });
-      return [name, (prompt: string) => callWithRetry(client, model, params ?? {}, prompt)];
+      return [name, (prompt: string) => Effect.runPromise(callWithRetry(client, model, params ?? {}, prompt))];
     }),
   );
 }
 
-async function callWithRetry(
+// Internal: a 429 where we successfully parsed the retry delay.
+// Not exported — only meaningful within callWithRetry.
+class RateLimitRetryableError {
+  readonly _tag = "RateLimitRetryableError";
+  constructor(readonly delayMs: number) {}
+}
+
+type CallError = ModerationBlockedError | RateLimitRetryableError | ProviderError;
+
+function classifyApiError(err: unknown, model: string): CallError {
+  const apiErr = err as ApiError;
+
+  if (apiErr?.error?.code === "moderation_blocked") {
+    const details = apiErr?.error?.moderation_details;
+    const extra   = details != null
+      ? `\nModeration stage: ${details.moderation_stage}\nCategories: ${(details.categories ?? []).join(", ")}`
+      : "";
+    return new ModerationBlockedError(model, (apiErr?.message ?? String(err)) + extra);
+  }
+
+  if (apiErr?.status === 429) {
+    const delayMs = parseRetryDelayMs(apiErr);
+    if (delayMs != null) { return new RateLimitRetryableError(delayMs); }
+    console.warn(`Rate limited but could not parse retry delay - giving up.`);
+  }
+
+  return new ProviderError(model, apiErr?.message ?? String(err));
+}
+
+function callWithRetry(
   client: OpenAI,
   model: string,
   params: Record<string, string>,
   prompt: string,
-  rateLimitHits = 0,
-): Promise<{ buffer: Buffer; rateLimitHits: number }> {
-  let result;
-  try {
-    result = await client.images.generate({ model, prompt, response_format: "b64_json", ...params });
-  } catch (err: unknown) {
-    const apiErr = err as ApiError;
+): Effect.Effect<{ buffer: Buffer; rateLimitHits: number }, ModerationBlockedError | RateLimitExhaustedError | ProviderError> {
+  return Effect.gen(function* () {
+    const rateLimitHitsRef = yield* Ref.make(0);
 
-    if (apiErr?.error?.code === "moderation_blocked") {
-      const details = apiErr?.error?.moderation_details;
-      const extra   = details != null
-        ? `\nModeration stage: ${details.moderation_stage}\nCategories: ${(details.categories ?? []).join(", ")}`
-        : "";
-      throw new ModerationError((apiErr?.message ?? String(apiErr)) + extra);
-    }
+    // A single attempt: call the API and classify any thrown error into a typed failure.
+    // tapError runs the side effect (log + sleep) before Effect.retry re-runs the attempt.
+    const attempt = Effect.tryPromise({
+      try:   () => client.images.generate({ model, prompt, response_format: "b64_json", ...params }),
+      catch: (err) => classifyApiError(err, model),
+    }).pipe(
+      Effect.flatMap((result) => {
+        const b64 = result.data?.[0]?.b64_json;
+        if (b64 == null) { return Effect.fail(new ProviderError(model, "No image data returned")); }
+        return Effect.succeed(Buffer.from(b64, "base64"));
+      }),
+      Effect.tapError((e) => {
+        if (e._tag !== "RateLimitRetryableError") { return Effect.void; }
+        return Effect.gen(function* () {
+          const hits = yield* Ref.updateAndGet(rateLimitHitsRef, (n) => n + 1);
+          console.log(`Rate limited - retrying in ${e.delayMs / 1000}s (attempt ${hits}/${MAX_RETRIES})...`);
+          yield* Effect.sleep(Duration.millis(e.delayMs));
+        });
+      }),
+    );
 
-    const delayMs = apiErr?.status === 429 ? parseRetryDelayMs(apiErr) : null;
-    if (delayMs == null) {
-      if (apiErr?.status === 429) { console.warn(`Rate limited but could not parse retry delay - giving up.`); }
-      throw err;
-    }
-    if (rateLimitHits + 1 >= MAX_RETRIES) { throw err; }
+    // Only retry RateLimitRetryableError — let ModerationBlockedError and ProviderError pass through immediately.
+    const retryPolicy = Schedule.recurWhile((e: CallError) => e._tag === "RateLimitRetryableError").pipe(
+      Schedule.intersect(Schedule.recurs(MAX_RETRIES - 1)),
+    );
 
-    console.log(`Rate limited - retrying in ${delayMs / 1000}s (attempt ${rateLimitHits + 1}/${MAX_RETRIES})...`);
-    await sleep(delayMs);
-    return callWithRetry(client, model, params, prompt, rateLimitHits + 1);
-  }
+    // After retries are exhausted, the final error is still RateLimitRetryableError — promote it.
+    const buffer = yield* Effect.retry(attempt, retryPolicy).pipe(
+      Effect.mapError((e) => e._tag === "RateLimitRetryableError" ? new RateLimitExhaustedError(model, MAX_RETRIES) : e),
+    );
 
-  const b64 = result.data?.[0]?.b64_json;
-  if (b64 == null) { throw new Error(`No image data returned from ${model}.`); }
-  return { buffer: Buffer.from(b64, "base64"), rateLimitHits };
+    const rateLimitHits = yield* Ref.get(rateLimitHitsRef);
+    return { buffer, rateLimitHits };
+  });
 }
 
 function parseRetryDelayMs(err: ApiError): number | null {
@@ -328,9 +366,9 @@ async function tryProvider(ctx: Ctx, name: string, prompt: string): Promise<Prov
     }))
     .catch((err: unknown) => ({
       ok:           false as const,
-      isModeration: err instanceof ModerationError,
+      isModeration: err instanceof ModerationError || (err != null && typeof err === "object" && "_tag" in err && (err as { _tag: string })._tag === "ModerationBlockedError"),
       buffer:       null,
-      entries:      [{ provider: name, status: "failed" as const, message: err instanceof Error ? err.message : String(err) }],
+      entries:      [{ provider: name, status: "failed" as const, message: (err != null && typeof err === "object" && "message" in err) ? String((err as { message: unknown }).message) : String(err) }],
     }));
 }
 

@@ -1,6 +1,7 @@
 {
   "type": "module",
   "dependencies": {
+    "effect": "^3.22.1",
     "openai": "^7.4.0"
   },
   "devDependencies": {
