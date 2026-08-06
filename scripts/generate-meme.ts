@@ -324,15 +324,19 @@ function generateImage(prompt: string): Effect.Effect<{ buffer: Buffer; history:
   });
 }
 
+function withTmpFile<R>(ext: string, content: string, use: (tmpPath: string) => Effect.Effect<void, never, R>): Effect.Effect<void, never, R> {
+  const acquire = Effect.sync(() => { const p = path.join(os.tmpdir(), `tmp-${crypto.randomUUID()}.${ext}`); fs.writeFileSync(p, content); return p; });
+  const release = (p: string) => Effect.sync(() => { try { fs.unlinkSync(p); } catch {} });
+  return Effect.acquireUseRelease(acquire, use, release);
+}
+
 function postComment(body: string): Effect.Effect<void, never, ExecService | ConfigService> {
   return Effect.gen(function* () {
     const exec   = yield* ExecService;
     const config = yield* ConfigService;
-    const tmp    = path.join(os.tmpdir(), `gh-comment-${crypto.randomUUID()}.txt`);
-    fs.writeFileSync(tmp, body);
-    try {
-      yield* exec(`gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${tmp}`).pipe(Effect.catchAll(() => Effect.void));
-    } finally { try { fs.unlinkSync(tmp); } catch {} }
+    yield* withTmpFile("txt", body, (tmp) =>
+      exec(`gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${tmp}`).pipe(Effect.catchAll(() => Effect.void)),
+    );
   });
 }
 
@@ -340,11 +344,9 @@ function postSlack(data: SlackPayload): Effect.Effect<void, never, ExecService |
   return Effect.gen(function* () {
     const exec   = yield* ExecService;
     const config = yield* ConfigService;
-    const tmp    = path.join(os.tmpdir(), `slack-payload-${crypto.randomUUID()}.json`);
-    fs.writeFileSync(tmp, JSON.stringify(data));
-    try {
-      yield* exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${config.slackWebhookUrl}'`).pipe(Effect.catchAll(() => Effect.void));
-    } finally { try { fs.unlinkSync(tmp); } catch {} }
+    yield* withTmpFile("json", JSON.stringify(data), (tmp) =>
+      exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${config.slackWebhookUrl}'`).pipe(Effect.catchAll(() => Effect.void)),
+    );
   });
 }
 
@@ -411,41 +413,39 @@ function buildSuccessComment({ memeId, provider, history, prompt, twist, request
 }
 
 const program = Effect.gen(function* () {
-  const config = yield* ConfigService;
+  const config     = yield* ConfigService;
+  const repoRoot   = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+  const memesDir   = path.join(repoRoot, "memes");
+  const memeId     = crypto.randomUUID();
+  const outFile    = path.join(memesDir, `${memeId}.jpg`);
+  const twist      = pickRandomTwist();
+  const fullPrompt = `Make a meme: ${config.memePrompt}.${twist != null ? ` ${twist}` : ""}`;
+  if (fullPrompt.length > 4000) { yield* Effect.logWarning(`Prompt truncated from ${fullPrompt.length} to 4000 characters.`); }
+  const prompt = fullPrompt.slice(0, 4000);
+  fs.mkdirSync(memesDir, { recursive: true });
 
-  yield* Effect.gen(function* () {
-    const repoRoot   = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-    const memesDir   = path.join(repoRoot, "memes");
-    const memeId   = crypto.randomUUID();
-    const outFile  = path.join(memesDir, `${memeId}.jpg`);
-    const twist    = pickRandomTwist();
-    const fullPrompt = `Make a meme: ${config.memePrompt}.${twist != null ? ` ${twist}` : ""}`;
-    if (fullPrompt.length > 4000) { yield* Effect.logWarning(`Prompt truncated from ${fullPrompt.length} to 4000 characters.`); }
-    const prompt = fullPrompt.slice(0, 4000);
-    yield* Effect.sync(() => fs.mkdirSync(memesDir, { recursive: true }));
-
-    yield* Effect.log(`Starting generation for issue #${config.issueNumber}: "${config.memePrompt}"`);
-    yield* waitForJitter();
-    const { buffer, history } = yield* generateImage(prompt);
-    yield* Effect.sync(() => fs.writeFileSync(outFile, buffer));
-    yield* Effect.log(`Image saved: ${outFile}`);
-    yield* commitAndPush(memeId);
-    yield* notifySuccess({ memeId, history, prompt, twist });
-    yield* Effect.log("Done.");
-  }).pipe(
-    Effect.catchAll((e) => Effect.gen(function* () {
-      yield* Effect.logError(`Fatal: ${e.message}`);
-      yield* postComment(`❌ Meme generation failed.\n\n\`\`\`\n${e.message}\n\`\`\``).pipe(Effect.catchAll(() => Effect.void));
-      yield* postSlack({ status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, error: e.message }).pipe(Effect.catchAll(() => Effect.void));
-      if (e._tag === "DoubleModerationError") {
-        const exec = yield* ExecService;
-        yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`).pipe(Effect.catchAll(() => Effect.void));
-      }
-      // Die (not fail) so the outer tapError doesn't double-log this
-      return yield* Effect.die("failure-handled");
-    })),
-  );
-});
+  yield* Effect.log(`Starting generation for issue #${config.issueNumber}: "${config.memePrompt}"`);
+  yield* waitForJitter();
+  const { buffer, history } = yield* generateImage(prompt);
+  fs.writeFileSync(outFile, buffer);
+  yield* Effect.log(`Image saved: ${outFile}`);
+  yield* commitAndPush(memeId);
+  yield* notifySuccess({ memeId, history, prompt, twist });
+  yield* Effect.log("Done.");
+}).pipe(
+  Effect.catchAll((e) => Effect.gen(function* () {
+    const config = yield* ConfigService;
+    yield* Effect.logError(`Fatal: ${e.message}`);
+    yield* postComment(`❌ Meme generation failed.\n\n\`\`\`\n${e.message}\n\`\`\``).pipe(Effect.catchAll(() => Effect.void));
+    yield* postSlack({ status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, error: e.message }).pipe(Effect.catchAll(() => Effect.void));
+    if (e._tag === "DoubleModerationError") {
+      const exec = yield* ExecService;
+      yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`).pipe(Effect.catchAll(() => Effect.void));
+    }
+    // Die (not fail) so the outer tapError doesn't double-log this
+    return yield* Effect.die("failure-handled");
+  })),
+);
 
 const AppLayer = Layer.mergeAll(
   ConfigLayer,
