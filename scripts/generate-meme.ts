@@ -269,7 +269,7 @@ function waitForJitter(): Effect.Effect<void, never, ExecService | ConfigService
     const config = yield* ConfigService;
     const runsJson = yield* exec(`gh api repos/${config.repo}/actions/runs --jq '.workflow_runs | map(select(.status == "in_progress")) | length'`).pipe(
       Effect.map((s) => s.trim()),
-      Effect.catchAll(() => Effect.succeed("1")),
+      Effect.orElseSucceed(() => "1"),
     );
     const concurrentRuns = Math.min(isNaN(parseInt(runsJson, 10)) ? 1 : parseInt(runsJson, 10), 10);
     const jitterMs       = concurrentRuns <= 1 ? 0 : Math.floor(Math.random() * concurrentRuns * 13_000);
@@ -330,15 +330,14 @@ function withTmpFile<R>(ext: string, content: string, use: (tmpPath: string) => 
   return Effect.acquireUseRelease(acquire, use, release);
 }
 
-function postComment(body: string): Effect.Effect<void, never, ExecService | ConfigService> {
-  return Effect.gen(function* () {
-    const exec   = yield* ExecService;
-    const config = yield* ConfigService;
-    yield* withTmpFile("txt", body, (tmp) =>
-      exec(`gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${tmp}`).pipe(Effect.catchAll(() => Effect.void)),
-    );
-  });
-}
+const postComment = (body: string) =>
+    Effect.gen(function* () {
+        const exec = yield* ExecService;
+        const config = yield* ConfigService;
+        return yield* withTmpFile("txt", body, (tmp) =>
+            exec(`gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${tmp}`).pipe(Effect.catchAll(() => Effect.void)),
+        );
+    });
 
 function postSlack(data: SlackPayload): Effect.Effect<void, never, ExecService | ConfigService> {
   return Effect.gen(function* () {
@@ -384,11 +383,11 @@ function notifySuccess({ memeId, history, prompt, twist }: { memeId: string; his
     const config   = yield* ConfigService;
     const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
     const params   = { memeId, provider, history, prompt, twist, requester: config.requester, channel: config.channel, slackLink: config.slackLink };
-    yield* postComment(buildSuccessComment(params)).pipe(Effect.catchAll(() => Effect.void));
+    yield* postComment(buildSuccessComment(params));
     yield* (yield* ExecService)(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.catchAll(() => Effect.void));
     yield* Effect.log(`Issue #${config.issueNumber} closed.`);
     const imageUrl = `https://raw.githubusercontent.com/${config.repo}/refs/heads/main/memes/${memeId}.jpg`;
-    yield* postSlack({ status: "success", image_url: imageUrl, title: config.memePrompt, requester: config.requester, error: "", provider }).pipe(Effect.catchAll(() => Effect.void));
+    yield* postSlack({ status: "success", image_url: imageUrl, title: config.memePrompt, requester: config.requester, error: "", provider });
   });
 }
 
@@ -436,8 +435,8 @@ const program = Effect.gen(function* () {
   Effect.catchAll((e) => Effect.gen(function* () {
     const config = yield* ConfigService;
     yield* Effect.logError(`Fatal: ${e.message}`);
-    yield* postComment(`❌ Meme generation failed.\n\n\`\`\`\n${e.message}\n\`\`\``).pipe(Effect.catchAll(() => Effect.void));
-    yield* postSlack({ status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, error: e.message }).pipe(Effect.catchAll(() => Effect.void));
+    yield* postComment(`❌ Meme generation failed.\n\n\`\`\`\n${e.message}\n\`\`\``);
+    yield* postSlack({ status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, error: e.message });
     if (e._tag === "DoubleModerationError") {
       const exec = yield* ExecService;
       yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`).pipe(Effect.catchAll(() => Effect.void));
