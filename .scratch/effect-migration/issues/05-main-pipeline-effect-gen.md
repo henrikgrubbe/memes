@@ -4,13 +4,13 @@
 
 **Blocked by:** 03 - Convert `callWithRetry` to Effect + Schedule, 04 - Add `ConfigService` Layer.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `main()` is replaced by an `Effect.gen` pipeline: `readConfig` -> `waitForJitter` -> `generateImage` -> `saveImage` -> `commitAndPush` -> `notifySuccess`
-- [ ] `fail()` and `failAndClose()` are deleted
-- [ ] A single `catchAll` handles all failure paths: logs the error, posts a GitHub comment, posts to Slack, and closes the issue when the error is a double-moderation failure
-- [ ] `AppLayer` is composed from `ConfigLayer` and the existing exec/providers setup (not yet full Layers - that is ticket 06)
-- [ ] Entry point: `Effect.runPromise(Effect.provide(program, AppLayer)).catch(() => process.exit(1))`
-- [ ] `console.log`, `console.warn`, `console.error` replaced with `Effect.log`, `Effect.logWarning`, `Effect.logError`
-- [ ] The script's external behavior (GitHub issue comments, Slack payload, git commits, exit codes) is identical to the current implementation
-- [ ] The GitHub Actions workflow runs successfully end-to-end
+- [x] `main()` is replaced by an `Effect.gen` pipeline: config -> `waitForJitter` -> `generateImage` -> saveImage -> `commitAndPush` -> `notifySuccess`
+- [x] `fail()` and `failAndClose()` are deleted
+- [x] A single `catchAll` handles all failure paths: logs the error, posts a GitHub comment, posts to Slack, and closes the issue when the error is a double-moderation failure
+- [x] `AppLayer` is composed from `ConfigLayer` and the existing exec/providers setup (not yet full Layers - that is ticket 06)
+- [x] Entry point: `Effect.runPromise(Effect.provide(program, AppLayer)).catch(() => process.exit(1))`
+- [x] `console.log`, `console.warn`, `console.error` replaced with `Effect.log`, `Effect.logWarning`, `Effect.logError`
+- [x] The script's external behavior (GitHub issue comments, Slack payload, git commits, exit codes) is identical to the current implementation
+- [x] The GitHub Actions workflow runs successfully end-to-end

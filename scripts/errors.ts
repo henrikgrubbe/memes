@@ -49,6 +49,12 @@ export class PushFailedError {
   get message() { return `Failed to push after ${this.attempts} attempts`; }
 }
 
+export class DoubleModerationError {
+  readonly _tag = "DoubleModerationError";
+  constructor(readonly fallbackProvider: string) {}
+  get message() { return `Both primary and fallback provider (${this.fallbackProvider}) were blocked by moderation`; }
+}
+
 export class ProviderError {
   readonly _tag = "ProviderError";
   constructor(

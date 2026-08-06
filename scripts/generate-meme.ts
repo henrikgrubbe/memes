@@ -4,8 +4,8 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import OpenAI from "openai";
-import { Cause, Context, Duration, Effect, Exit, Layer, Ref, Schedule } from "effect";
-import { EnvMissingError, IssueBodyMissingFieldError, ModerationBlockedError, ProviderError, RateLimitExhaustedError } from "./errors.js";
+import { Context, Duration, Effect, Layer, Ref, Schedule } from "effect";
+import { DoubleModerationError, EnvMissingError, IssueBodyMissingFieldError, ModerationBlockedError, ProviderError, PushFailedError, RateLimitExhaustedError } from "./errors.js";
 
 const MODERATION_FALLBACK    = "xAI";
 const MAX_RETRIES            = 10;
@@ -122,33 +122,6 @@ interface ApiError {
       categories?:      string[];
     };
   };
-}
-
-async function main() {
-  const configExit = await Effect.runPromiseExit(buildConfig());
-  if (Exit.isFailure(configExit)) {
-    const failure = Cause.failureOption(configExit.cause);
-    console.error(failure._tag === "Some" ? failure.value.message : "Unknown startup error");
-    process.exit(1);
-  }
-  const config = configExit.value;
-
-  const repoRoot = computeRepoRoot();
-  const exec     = makeExec(repoRoot);
-  const ctx      = buildCtx(config, exec);
-
-  const memesDir = path.join(repoRoot, "memes");
-  const memeId   = crypto.randomUUID();
-  const outFile  = path.join(memesDir, `${memeId}.jpg`);
-  const twist    = pickRandomTwist();
-  const prompt   = buildPrompt(ctx.memePrompt, twist);
-  fs.mkdirSync(memesDir, { recursive: true });
-
-  const history = await generateAndSave(ctx, prompt, outFile);
-
-  commitAndPush(ctx, memeId);
-  notifySuccess(ctx, { memeId, history, prompt, twist });
-  console.log("Done.");
 }
 
 function buildConfig(): Effect.Effect<Config, EnvMissingError | IssueBodyMissingFieldError> {
@@ -317,60 +290,47 @@ function parseRetryDelayMs(err: ApiError): number | null {
   return match != null ? parseFloat(match[1]) * 1000 + RETRY_DELAY_PADDING_MS : null;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function pickRandomTwist(): string | null {
   return Math.random() < 0.4 ? RANDOM_TWISTS[Math.floor(Math.random() * RANDOM_TWISTS.length)] : null;
 }
 
-function buildPrompt(memePrompt: string, twist: string | null): string {
-  const full = `Make a meme: ${memePrompt}.${twist != null ? ` ${twist}` : ""}`;
-  if (full.length > 4000) { console.warn(`Prompt truncated from ${full.length} to 4000 characters.`); }
-  return full.slice(0, 4000);
+function waitForJitter(ctx: Ctx): Effect.Effect<void, never> {
+  return Effect.gen(function* () {
+    const runsJson = yield* Effect.sync(() => {
+      try { return ctx.exec(`gh api repos/${ctx.repo}/actions/runs --jq '.workflow_runs | map(select(.status == "in_progress")) | length'`).trim(); }
+      catch { return "1"; }
+    });
+    const concurrentRuns = Math.min(isNaN(parseInt(runsJson, 10)) ? 1 : parseInt(runsJson, 10), 10);
+    const jitterMs       = concurrentRuns <= 1 ? 0 : Math.floor(Math.random() * concurrentRuns * 13_000);
+    if (jitterMs > 0) {
+      yield* Effect.log(`${concurrentRuns} concurrent runs - waiting ${(jitterMs / 1000).toFixed(1)}s before first attempt...`);
+      yield* Effect.sleep(Duration.millis(jitterMs));
+    }
+  });
 }
 
-async function generateAndSave(ctx: Ctx, prompt: string, outFile: string): Promise<HistoryEntry[]> {
-  console.log(`Starting generation for issue #${ctx.issueNumber}: "${ctx.memePrompt}"`);
-  await waitForJitter(ctx);
+function generateImage(ctx: Ctx, prompt: string): Effect.Effect<{ buffer: Buffer; history: HistoryEntry[] }, ProviderError | RateLimitExhaustedError | DoubleModerationError> {
+  return Effect.gen(function* () {
+    const candidates = PROVIDER_CONFIGS.map((c) => c.name).filter((n) => n !== MODERATION_FALLBACK);
+    const primary    = candidates[Math.floor(Math.random() * candidates.length)];
+    yield* Effect.log(`Randomly selected ${primary} as primary provider...`);
 
-  const { buffer, history } = await generateImage(ctx, prompt);
-  fs.writeFileSync(outFile, buffer);
-  console.log(`Image saved: ${outFile}`);
-  return history;
-}
+    const primaryResult = yield* Effect.promise(() => tryProvider(ctx, primary, prompt));
+    if (primaryResult.ok) {
+      return { buffer: primaryResult.buffer, history: primaryResult.entries };
+    }
+    if (!primaryResult.isModeration) {
+      return yield* Effect.fail(new ProviderError(primary, `${primary} failed`));
+    }
 
-async function waitForJitter(ctx: Ctx): Promise<void> {
-  const runsJson       = ctx.exec(`gh api repos/${ctx.repo}/actions/runs --jq '.workflow_runs | map(select(.status == "in_progress")) | length'`).trim();
-  const concurrentRuns = Math.min(isNaN(parseInt(runsJson, 10)) ? 1 : parseInt(runsJson, 10), 10);
-  const jitterMs       = concurrentRuns <= 1 ? 0 : Math.floor(Math.random() * concurrentRuns * 13_000);
-  if (jitterMs > 0) {
-    console.log(`${concurrentRuns} concurrent runs - waiting ${(jitterMs / 1000).toFixed(1)}s before first attempt...`);
-    await sleep(jitterMs);
-  }
-}
+    yield* Effect.log(`Moderation block - falling back to ${MODERATION_FALLBACK}...`);
+    const fallbackResult = yield* Effect.promise(() => tryProvider(ctx, MODERATION_FALLBACK, prompt));
+    if (!fallbackResult.ok) {
+      return yield* Effect.fail(new DoubleModerationError(MODERATION_FALLBACK));
+    }
 
-async function generateImage(ctx: Ctx, prompt: string): Promise<{ buffer: Buffer; history: HistoryEntry[] }> {
-  const candidates = PROVIDER_CONFIGS.map((c) => c.name).filter((n) => n !== MODERATION_FALLBACK);
-  const primary    = candidates[Math.floor(Math.random() * candidates.length)];
-  console.log(`Randomly selected ${primary} as primary provider...`);
-
-  const primaryResult = await tryProvider(ctx, primary, prompt);
-  if (primaryResult.ok) {
-    return { buffer: primaryResult.buffer, history: primaryResult.entries };
-  }
-  if (!primaryResult.isModeration) {
-    return fail(ctx, `${primary} failed.`);
-  }
-
-  console.log(`Moderation block - falling back to ${MODERATION_FALLBACK}...`);
-  const fallbackResult = await tryProvider(ctx, MODERATION_FALLBACK, prompt);
-  if (!fallbackResult.ok) {
-    return failAndClose(ctx, `${MODERATION_FALLBACK} fallback also failed.`);
-  }
-
-  return { buffer: fallbackResult.buffer, history: [...primaryResult.entries, ...fallbackResult.entries] };
+    return { buffer: fallbackResult.buffer, history: [...primaryResult.entries, ...fallbackResult.entries] };
+  });
 }
 
 async function tryProvider(ctx: Ctx, name: string, prompt: string): Promise<ProviderResult> {
@@ -399,62 +359,54 @@ function withTmpFile(tmpPath: string, content: string, fn: () => void) {
 function postComment(ctx: Ctx, body: string) {
   const tmp = path.join(os.tmpdir(), `gh-comment-${crypto.randomUUID()}.txt`);
   withTmpFile(tmp, body, () => ctx.exec(`gh issue comment ${ctx.issueNumber} --repo ${ctx.repo} --body-file ${tmp}`));
-  console.log(`Posted comment to issue #${ctx.issueNumber}.`);
 }
 
 function postSlack(ctx: Ctx, data: SlackPayload) {
   const tmp = path.join(os.tmpdir(), `slack-payload-${crypto.randomUUID()}.json`);
   withTmpFile(tmp, JSON.stringify(data), () => ctx.exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${ctx.slackWebhookUrl}'`));
-  console.log(`Posted to Slack (status: ${data.status}).`);
 }
 
-function fail(ctx: Ctx, message: string): never {
-  postFailure(ctx, message);
-  process.exit(1);
+// Internal: a single failed push attempt — used only within commitAndPush retry loop
+class PushAttemptError { readonly _tag = "PushAttemptError" as const; }
+
+function commitAndPush(ctx: Ctx, memeId: string): Effect.Effect<void, PushFailedError> {
+  return Effect.gen(function* () {
+    yield* Effect.try({
+      try: () => {
+        ctx.exec(`git config user.name "github-actions[bot]"`);
+        ctx.exec(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
+        ctx.exec(`git add "memes/${memeId}.jpg"`);
+        ctx.exec(`git commit -m "Add meme for issue #${ctx.issueNumber} (${memeId})"`);
+      },
+      catch: () => new PushFailedError(0),
+    });
+    yield* Effect.log(`Committed memes/${memeId}.jpg`);
+
+    const pushAttempt = Effect.try({
+      try:   () => { ctx.exec(`git pull --rebase origin main`); ctx.exec(`git push origin HEAD`); },
+      catch: () => new PushAttemptError(),
+    });
+
+    yield* Effect.retry(
+      pushAttempt.pipe(Effect.tapError(() => Effect.log("Push failed - retrying..."))),
+      Schedule.recurs(MAX_PUSH_RETRIES - 1),
+    ).pipe(
+      Effect.tap(() => Effect.log(`Pushed memes/${memeId}.jpg`)),
+      Effect.mapError(() => new PushFailedError(MAX_PUSH_RETRIES)),
+    );
+  });
 }
 
-function failAndClose(ctx: Ctx, message: string): never {
-  postFailure(ctx, message);
-  ctx.exec(`gh api repos/${ctx.repo}/issues/${ctx.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`);
-  process.exit(1);
-}
-
-function postFailure(ctx: Ctx, message: string) {
-  console.error("Fatal:", message);
-  postComment(ctx, `❌ Meme generation failed.\n\n\`\`\`\n${message}\n\`\`\``);
-  postSlack(ctx, { status: "failure", image_url: "", title: ctx.memePrompt, requester: ctx.requester, error: message });
-}
-
-function commitAndPush(ctx: Ctx, memeId: string) {
-  ctx.exec(`git config user.name "github-actions[bot]"`);
-  ctx.exec(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
-  ctx.exec(`git add "memes/${memeId}.jpg"`);
-  ctx.exec(`git commit -m "Add meme for issue #${ctx.issueNumber} (${memeId})"`);
-  console.log(`Committed memes/${memeId}.jpg`);
-  pushWithRetry(ctx, memeId);
-}
-
-function pushWithRetry(ctx: Ctx, memeId: string, attempt = 1) {
-  try {
-    ctx.exec(`git pull --rebase origin main`);
-    ctx.exec(`git push origin HEAD`);
-    console.log(`Pushed memes/${memeId}.jpg`);
-  } catch {
-    if (attempt >= MAX_PUSH_RETRIES) { fail(ctx, `Failed to push after ${MAX_PUSH_RETRIES} attempts.`); }
-    console.log(`Push attempt ${attempt} failed - retrying...`);
-    pushWithRetry(ctx, memeId, attempt + 1);
-  }
-}
-
-function notifySuccess(ctx: Ctx, { memeId, history, prompt, twist }: { memeId: string; history: HistoryEntry[]; prompt: string; twist: string | null }) {
-  const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
-  const params   = { memeId, provider, history, prompt, twist, requester: ctx.requester, channel: ctx.channel, slackLink: ctx.slackLink };
-  postComment(ctx, buildSuccessComment(params));
-  ctx.exec(`gh api repos/${ctx.repo}/issues/${ctx.issueNumber} -X PATCH -f state=closed`);
-  console.log(`Issue #${ctx.issueNumber} closed.`);
-
-  const imageUrl = `https://raw.githubusercontent.com/${ctx.repo}/refs/heads/main/memes/${memeId}.jpg`;
-  postSlack(ctx, { status: "success", image_url: imageUrl, title: ctx.memePrompt, requester: ctx.requester, error: "", provider });
+function notifySuccess(ctx: Ctx, { memeId, history, prompt, twist }: { memeId: string; history: HistoryEntry[]; prompt: string; twist: string | null }): Effect.Effect<void, never> {
+  return Effect.gen(function* () {
+    const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
+    const params   = { memeId, provider, history, prompt, twist, requester: ctx.requester, channel: ctx.channel, slackLink: ctx.slackLink };
+    yield* Effect.sync(() => { try { postComment(ctx, buildSuccessComment(params)); } catch {} });
+    yield* Effect.sync(() => { try { ctx.exec(`gh api repos/${ctx.repo}/issues/${ctx.issueNumber} -X PATCH -f state=closed`); } catch {} });
+    yield* Effect.log(`Issue #${ctx.issueNumber} closed.`);
+    const imageUrl = `https://raw.githubusercontent.com/${ctx.repo}/refs/heads/main/memes/${memeId}.jpg`;
+    yield* Effect.sync(() => { try { postSlack(ctx, { status: "success", image_url: imageUrl, title: ctx.memePrompt, requester: ctx.requester, error: "", provider }); } catch {} });
+  });
 }
 
 function buildSuccessComment({ memeId, provider, history, prompt, twist, requester, channel, slackLink }: SuccessCommentParams): string {
@@ -477,4 +429,56 @@ function buildSuccessComment({ memeId, provider, history, prompt, twist, request
   ].join("\n");
 }
 
-main();
+const program = Effect.gen(function* () {
+  const config   = yield* ConfigService;
+  const repoRoot = computeRepoRoot();
+  const exec     = makeExec(repoRoot);
+  const ctx      = buildCtx(config, exec);
+
+  yield* Effect.gen(function* () {
+    const memesDir = path.join(repoRoot, "memes");
+    const memeId   = crypto.randomUUID();
+    const outFile  = path.join(memesDir, `${memeId}.jpg`);
+    const twist    = pickRandomTwist();
+    const fullPrompt = `Make a meme: ${ctx.memePrompt}.${twist != null ? ` ${twist}` : ""}`;
+    if (fullPrompt.length > 4000) { yield* Effect.logWarning(`Prompt truncated from ${fullPrompt.length} to 4000 characters.`); }
+    const prompt = fullPrompt.slice(0, 4000);
+    yield* Effect.sync(() => fs.mkdirSync(memesDir, { recursive: true }));
+
+    yield* Effect.log(`Starting generation for issue #${ctx.issueNumber}: "${ctx.memePrompt}"`);
+    yield* waitForJitter(ctx);
+    const { buffer, history } = yield* generateImage(ctx, prompt);
+    yield* Effect.sync(() => fs.writeFileSync(outFile, buffer));
+    yield* Effect.log(`Image saved: ${outFile}`);
+    yield* commitAndPush(ctx, memeId);
+    yield* notifySuccess(ctx, { memeId, history, prompt, twist });
+    yield* Effect.log("Done.");
+  }).pipe(
+    Effect.catchAll((e) => Effect.gen(function* () {
+      yield* Effect.logError(`Fatal: ${e.message}`);
+      yield* Effect.sync(() => {
+        try {
+          postComment(ctx, `❌ Meme generation failed.\n\n\`\`\`\n${e.message}\n\`\`\``);
+          postSlack(ctx, { status: "failure", image_url: "", title: ctx.memePrompt, requester: ctx.requester, error: e.message });
+        } catch { /* notification failure must not hide the real error */ }
+        try {
+          if (e._tag === "DoubleModerationError") {
+            ctx.exec(`gh api repos/${ctx.repo}/issues/${ctx.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`);
+          }
+        } catch {}
+      });
+      // Die (not fail) so the outer tapError doesn't double-log this
+      return yield* Effect.die("failure-handled");
+    })),
+  );
+});
+
+const AppLayer = ConfigLayer;
+
+Effect.runPromise(
+  Effect.provide(program, AppLayer).pipe(
+    // Config errors (EnvMissingError, IssueBodyMissingFieldError) are typed failures
+    // that escape the inner catchAll — log them before exiting
+    Effect.tapError((e) => Effect.logError(e.message)),
+  ),
+).catch(() => process.exit(1));
