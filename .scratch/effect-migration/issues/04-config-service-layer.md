@@ -4,12 +4,12 @@
 
 **Blocked by:** 02 - Add typed error classes.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `ConfigService` Context.Tag defined, holding all config fields currently in `Ctx` (issue number, repo, Slack URL, meme prompt, channel, Slack link)
-- [ ] `ConfigLayer` builds the service by reading and validating env vars and parsing the issue body
-- [ ] Missing env vars yield `EnvMissingError` with the missing key
-- [ ] Missing issue-body fields yield `IssueBodyMissingFieldError` with the field name
-- [ ] `process.exit(1)` is removed from `readEnv` and `buildCtx`
-- [ ] `parseIssueBody` remains a pure function and is unchanged
-- [ ] The script's startup behavior (which error is logged and when the process exits) is identical to the current implementation
+- [x] `ConfigService` Context.Tag defined, holding all config fields currently in `Ctx` (issue number, repo, Slack URL, meme prompt, channel, Slack link)
+- [x] `ConfigLayer` builds the service by reading and validating env vars and parsing the issue body
+- [x] Missing env vars yield `EnvMissingError` with the missing key
+- [x] Missing issue-body fields yield `IssueBodyMissingFieldError` with the field name
+- [x] `process.exit(1)` is removed from `readEnv` and `buildCtx`
+- [x] `parseIssueBody` remains a pure function and is unchanged
+- [x] The script's startup behavior (which error is logged and when the process exits) is identical to the current implementation

@@ -4,8 +4,8 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import OpenAI from "openai";
-import { Duration, Effect, Ref, Schedule } from "effect";
-import { ModerationBlockedError, ProviderError, RateLimitExhaustedError } from "./errors.js";
+import { Cause, Context, Duration, Effect, Exit, Layer, Ref, Schedule } from "effect";
+import { EnvMissingError, IssueBodyMissingFieldError, ModerationBlockedError, ProviderError, RateLimitExhaustedError } from "./errors.js";
 
 const MODERATION_FALLBACK    = "xAI";
 const MAX_RETRIES            = 10;
@@ -52,13 +52,18 @@ class ModerationError extends Error {
   }
 }
 
-interface Env {
-  ISSUE_NUMBER:      string;
-  ISSUE_BODY:        string;
-  REPO:              string;
-  SLACK_WEBHOOK_URL: string;
-  [key: string]:     string;
+interface Config {
+  issueNumber:     string;
+  repo:            string;
+  slackWebhookUrl: string;
+  requester:       string;
+  memePrompt:      string;
+  channel:         string;
+  slackLink:       string;
+  providerApiKeys: Record<string, string>;
 }
+
+class ConfigService extends Context.Tag("ConfigService")<ConfigService, Config>() {}
 
 type Exec      = (cmd: string) => string;
 type Providers = Record<string, (prompt: string) => Promise<{ buffer: Buffer; rateLimitHits: number }>>;
@@ -120,10 +125,17 @@ interface ApiError {
 }
 
 async function main() {
-  const env      = readEnv();
+  const configExit = await Effect.runPromiseExit(buildConfig());
+  if (Exit.isFailure(configExit)) {
+    const failure = Cause.failureOption(configExit.cause);
+    console.error(failure._tag === "Some" ? failure.value.message : "Unknown startup error");
+    process.exit(1);
+  }
+  const config = configExit.value;
+
   const repoRoot = computeRepoRoot();
   const exec     = makeExec(repoRoot);
-  const ctx      = buildCtx(env, exec);
+  const ctx      = buildCtx(config, exec);
 
   const memesDir = path.join(repoRoot, "memes");
   const memeId   = crypto.randomUUID();
@@ -139,22 +151,35 @@ async function main() {
   console.log("Done.");
 }
 
-function readEnv(): Env {
-  const requireEnv = (key: string) => {
-    const val = process.env[key];
-    if (val == null) { console.error(`Missing ${key}`); process.exit(1); }
-    return val;
-  };
+function buildConfig(): Effect.Effect<Config, EnvMissingError | IssueBodyMissingFieldError> {
+  return Effect.gen(function* () {
+    const readEnvVar = (key: string): Effect.Effect<string, EnvMissingError> => {
+      const val = process.env[key];
+      return val != null ? Effect.succeed(val) : Effect.fail(new EnvMissingError(key));
+    };
 
-  const providerKeys = Object.fromEntries(PROVIDER_CONFIGS.map(({ envKey }) => [envKey, requireEnv(envKey)]));
-  return {
-    ...providerKeys,
-    ISSUE_NUMBER:      requireEnv("ISSUE_NUMBER"),
-    ISSUE_BODY:        requireEnv("ISSUE_BODY"),
-    REPO:              requireEnv("REPO"),
-    SLACK_WEBHOOK_URL: requireEnv("SLACK_WEBHOOK_URL"),
-  };
+    const providerApiKeys = yield* Effect.all(
+      Object.fromEntries(PROVIDER_CONFIGS.map(({ envKey }) => [envKey, readEnvVar(envKey)])),
+    );
+    const issueNumber = yield* readEnvVar("ISSUE_NUMBER");
+    const issueBody   = yield* readEnvVar("ISSUE_BODY");
+    const repo        = yield* readEnvVar("REPO");
+    const slackUrl    = yield* readEnvVar("SLACK_WEBHOOK_URL");
+
+    const fields       = parseIssueBody(issueBody);
+    const requireField = (key: string, label: string): Effect.Effect<string, IssueBodyMissingFieldError> =>
+      fields[key] != null ? Effect.succeed(fields[key]) : Effect.fail(new IssueBodyMissingFieldError(label));
+
+    const requester  = yield* requireField("sender",  "Sender");
+    const memePrompt = yield* requireField("message", "Message");
+    const channel    = yield* requireField("channel", "Channel");
+    const slackLink  = yield* requireField("link",    "Link");
+
+    return { issueNumber, repo, slackWebhookUrl: slackUrl, requester, memePrompt, channel, slackLink, providerApiKeys };
+  });
 }
+
+const ConfigLayer = Layer.effect(ConfigService, buildConfig());
 
 function computeRepoRoot(): string {
   return path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -164,23 +189,17 @@ function makeExec(repoRoot: string): Exec {
   return (cmd) => execSync(cmd, { encoding: "utf8", cwd: repoRoot });
 }
 
-function buildCtx(env: Env, exec: Exec): Ctx {
-  const fields = parseIssueBody(env.ISSUE_BODY);
-  const requireField = (key: string, label: string) => {
-    if (fields[key] == null) { console.error(`Issue body missing required field: ${label}`); process.exit(1); }
-    return fields[key];
-  };
-
+function buildCtx(config: Config, exec: Exec): Ctx {
   return {
-    issueNumber:     env.ISSUE_NUMBER,
-    repo:            env.REPO,
-    slackWebhookUrl: env.SLACK_WEBHOOK_URL,
-    requester:       requireField("sender",  "Sender"),
-    memePrompt:      requireField("message", "Message"),
-    channel:         requireField("channel", "Channel"),
-    slackLink:       requireField("link",    "Link"),
+    issueNumber:     config.issueNumber,
+    repo:            config.repo,
+    slackWebhookUrl: config.slackWebhookUrl,
+    requester:       config.requester,
+    memePrompt:      config.memePrompt,
+    channel:         config.channel,
+    slackLink:       config.slackLink,
     exec,
-    providers: buildProviders(env),
+    providers:       buildProviders(config.providerApiKeys),
   };
 }
 
@@ -207,10 +226,10 @@ function parseIssueBody(body: string): Record<string, string> {
   return result;
 }
 
-function buildProviders(env: Env): Providers {
+function buildProviders(apiKeys: Record<string, string>): Providers {
   return Object.fromEntries(
     PROVIDER_CONFIGS.map(({ name, envKey, model, baseURL, params }) => {
-      const client = new OpenAI({ apiKey: env[envKey], ...(baseURL != null ? { baseURL } : {}) });
+      const client = new OpenAI({ apiKey: apiKeys[envKey], ...(baseURL != null ? { baseURL } : {}) });
       return [name, (prompt: string) => Effect.runPromise(callWithRetry(client, model, params ?? {}, prompt))];
     }),
   );
