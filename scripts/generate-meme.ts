@@ -4,8 +4,8 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import OpenAI from "openai";
-import { Context, Duration, Effect, Layer, Ref, Schedule } from "effect";
-import { DoubleModerationError, EnvMissingError, IssueBodyMissingFieldError, ModerationBlockedError, ProviderError, PushFailedError, RateLimitExhaustedError } from "./errors.js";
+import { Context, Duration, Effect, Either, Layer, Ref, Schedule } from "effect";
+import { DoubleModerationError, EnvMissingError, ExecError, IssueBodyMissingFieldError, ModerationBlockedError, ProviderError, PushFailedError, RateLimitExhaustedError } from "./errors.js";
 
 const MODERATION_FALLBACK    = "xAI";
 const MAX_RETRIES            = 10;
@@ -45,13 +45,6 @@ if (!PROVIDER_CONFIGS.some((c) => c.name === MODERATION_FALLBACK)) {
   process.exit(1);
 }
 
-class ModerationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ModerationError";
-  }
-}
-
 interface Config {
   issueNumber:     string;
   repo:            string;
@@ -65,30 +58,16 @@ interface Config {
 
 class ConfigService extends Context.Tag("ConfigService")<ConfigService, Config>() {}
 
-type Exec      = (cmd: string) => string;
-type Providers = Record<string, (prompt: string) => Promise<{ buffer: Buffer; rateLimitHits: number }>>;
+type ProviderFn = (prompt: string) => Effect.Effect<{ buffer: Buffer; rateLimitHits: number }, ModerationBlockedError | RateLimitExhaustedError | ProviderError>;
 
-interface Ctx {
-  issueNumber:     string;
-  repo:            string;
-  slackWebhookUrl: string;
-  requester:       string;
-  memePrompt:      string;
-  channel:         string;
-  slackLink:       string;
-  exec:            Exec;
-  providers:       Providers;
-}
+class ExecService extends Context.Tag("ExecService")<ExecService, (cmd: string) => Effect.Effect<string, ExecError>>() {}
+class ProvidersService extends Context.Tag("ProvidersService")<ProvidersService, Record<string, ProviderFn>>() {}
 
 interface HistoryEntry {
   provider: string;
   status:   "success" | "rate-limited" | "failed";
   message?: string;
 }
-
-type ProviderResult =
-  | { ok: true;  buffer: Buffer; entries: HistoryEntry[] }
-  | { ok: false; isModeration: boolean; buffer: null; entries: HistoryEntry[] };
 
 interface SuccessCommentParams {
   memeId:    string;
@@ -154,27 +133,26 @@ function buildConfig(): Effect.Effect<Config, EnvMissingError | IssueBodyMissing
 
 const ConfigLayer = Layer.effect(ConfigService, buildConfig());
 
-function computeRepoRoot(): string {
-  return path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-}
+const ExecLayer = Layer.sync(ExecService, () => {
+  const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+  return (cmd: string) => Effect.try({
+    try:   () => execSync(cmd, { encoding: "utf8", cwd: repoRoot }),
+    catch: (e) => new ExecError(cmd, String(e)),
+  });
+});
 
-function makeExec(repoRoot: string): Exec {
-  return (cmd) => execSync(cmd, { encoding: "utf8", cwd: repoRoot });
-}
-
-function buildCtx(config: Config, exec: Exec): Ctx {
-  return {
-    issueNumber:     config.issueNumber,
-    repo:            config.repo,
-    slackWebhookUrl: config.slackWebhookUrl,
-    requester:       config.requester,
-    memePrompt:      config.memePrompt,
-    channel:         config.channel,
-    slackLink:       config.slackLink,
-    exec,
-    providers:       buildProviders(config.providerApiKeys),
-  };
-}
+const ProvidersLayer = Layer.effect(
+  ProvidersService,
+  Effect.gen(function* () {
+    const config = yield* ConfigService;
+    return Object.fromEntries(
+      PROVIDER_CONFIGS.map(({ name, envKey, model, baseURL, params }) => {
+        const client = new OpenAI({ apiKey: config.providerApiKeys[envKey], ...(baseURL != null ? { baseURL } : {}) });
+        return [name, (prompt: string) => callWithRetry(client, model, params ?? {}, prompt)];
+      }),
+    );
+  }),
+);
 
 function parseIssueBody(body: string): Record<string, string> {
   // Only lines whose left-hand side matches a known field name start a new field;
@@ -197,15 +175,6 @@ function parseIssueBody(body: string): Record<string, string> {
   }
 
   return result;
-}
-
-function buildProviders(apiKeys: Record<string, string>): Providers {
-  return Object.fromEntries(
-    PROVIDER_CONFIGS.map(({ name, envKey, model, baseURL, params }) => {
-      const client = new OpenAI({ apiKey: apiKeys[envKey], ...(baseURL != null ? { baseURL } : {}) });
-      return [name, (prompt: string) => Effect.runPromise(callWithRetry(client, model, params ?? {}, prompt))];
-    }),
-  );
 }
 
 // Internal: a 429 where we successfully parsed the retry delay.
@@ -294,12 +263,14 @@ function pickRandomTwist(): string | null {
   return Math.random() < 0.4 ? RANDOM_TWISTS[Math.floor(Math.random() * RANDOM_TWISTS.length)] : null;
 }
 
-function waitForJitter(ctx: Ctx): Effect.Effect<void, never> {
+function waitForJitter(): Effect.Effect<void, never, ExecService | ConfigService> {
   return Effect.gen(function* () {
-    const runsJson = yield* Effect.sync(() => {
-      try { return ctx.exec(`gh api repos/${ctx.repo}/actions/runs --jq '.workflow_runs | map(select(.status == "in_progress")) | length'`).trim(); }
-      catch { return "1"; }
-    });
+    const exec   = yield* ExecService;
+    const config = yield* ConfigService;
+    const runsJson = yield* exec(`gh api repos/${config.repo}/actions/runs --jq '.workflow_runs | map(select(.status == "in_progress")) | length'`).pipe(
+      Effect.map((s) => s.trim()),
+      Effect.catchAll(() => Effect.succeed("1")),
+    );
     const concurrentRuns = Math.min(isNaN(parseInt(runsJson, 10)) ? 1 : parseInt(runsJson, 10), 10);
     const jitterMs       = concurrentRuns <= 1 ? 0 : Math.floor(Math.random() * concurrentRuns * 13_000);
     if (jitterMs > 0) {
@@ -309,83 +280,92 @@ function waitForJitter(ctx: Ctx): Effect.Effect<void, never> {
   });
 }
 
-function generateImage(ctx: Ctx, prompt: string): Effect.Effect<{ buffer: Buffer; history: HistoryEntry[] }, ProviderError | RateLimitExhaustedError | DoubleModerationError> {
+function generateImage(prompt: string): Effect.Effect<{ buffer: Buffer; history: HistoryEntry[] }, ProviderError | RateLimitExhaustedError | DoubleModerationError, ProvidersService> {
   return Effect.gen(function* () {
+    const providers  = yield* ProvidersService;
     const candidates = PROVIDER_CONFIGS.map((c) => c.name).filter((n) => n !== MODERATION_FALLBACK);
     const primary    = candidates[Math.floor(Math.random() * candidates.length)];
     yield* Effect.log(`Randomly selected ${primary} as primary provider...`);
 
-    const primaryResult = yield* Effect.promise(() => tryProvider(ctx, primary, prompt));
-    if (primaryResult.ok) {
-      return { buffer: primaryResult.buffer, history: primaryResult.entries };
+    const primaryResult = yield* providers[primary](prompt).pipe(Effect.either);
+    if (Either.isRight(primaryResult)) {
+      const { buffer, rateLimitHits } = primaryResult.right;
+      return {
+        buffer,
+        history: [
+          ...Array.from({ length: rateLimitHits }, (): HistoryEntry => ({ provider: primary, status: "rate-limited" })),
+          { provider: primary, status: "success" as const },
+        ],
+      };
     }
-    if (!primaryResult.isModeration) {
-      return yield* Effect.fail(new ProviderError(primary, `${primary} failed`));
+
+    const primaryErr = primaryResult.left;
+    if (primaryErr._tag !== "ModerationBlockedError") {
+      return yield* Effect.fail(primaryErr);
     }
 
     yield* Effect.log(`Moderation block - falling back to ${MODERATION_FALLBACK}...`);
-    const fallbackResult = yield* Effect.promise(() => tryProvider(ctx, MODERATION_FALLBACK, prompt));
-    if (!fallbackResult.ok) {
-      return yield* Effect.fail(new DoubleModerationError(MODERATION_FALLBACK));
+    const primaryEntry: HistoryEntry = { provider: primary, status: "failed", message: primaryErr.message };
+
+    const fallbackResult = yield* providers[MODERATION_FALLBACK](prompt).pipe(Effect.either);
+    if (Either.isRight(fallbackResult)) {
+      const { buffer, rateLimitHits } = fallbackResult.right;
+      return {
+        buffer,
+        history: [
+          primaryEntry,
+          ...Array.from({ length: rateLimitHits }, (): HistoryEntry => ({ provider: MODERATION_FALLBACK, status: "rate-limited" })),
+          { provider: MODERATION_FALLBACK, status: "success" as const },
+        ],
+      };
     }
 
-    return { buffer: fallbackResult.buffer, history: [...primaryResult.entries, ...fallbackResult.entries] };
+    return yield* Effect.fail(new DoubleModerationError(MODERATION_FALLBACK));
   });
 }
 
-async function tryProvider(ctx: Ctx, name: string, prompt: string): Promise<ProviderResult> {
-  return ctx.providers[name](prompt)
-    .then(({ buffer, rateLimitHits }) => ({
-      ok:      true as const,
-      buffer,
-      entries: [
-        ...Array.from({ length: rateLimitHits }, (): HistoryEntry => ({ provider: name, status: "rate-limited" })),
-        { provider: name, status: "success" as const },
-      ],
-    }))
-    .catch((err: unknown) => ({
-      ok:           false as const,
-      isModeration: err instanceof ModerationError || (err != null && typeof err === "object" && "_tag" in err && (err as { _tag: string })._tag === "ModerationBlockedError"),
-      buffer:       null,
-      entries:      [{ provider: name, status: "failed" as const, message: (err != null && typeof err === "object" && "message" in err) ? String((err as { message: unknown }).message) : String(err) }],
-    }));
+function postComment(body: string): Effect.Effect<void, never, ExecService | ConfigService> {
+  return Effect.gen(function* () {
+    const exec   = yield* ExecService;
+    const config = yield* ConfigService;
+    const tmp    = path.join(os.tmpdir(), `gh-comment-${crypto.randomUUID()}.txt`);
+    fs.writeFileSync(tmp, body);
+    try {
+      yield* exec(`gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${tmp}`).pipe(Effect.catchAll(() => Effect.void));
+    } finally { try { fs.unlinkSync(tmp); } catch {} }
+  });
 }
 
-function withTmpFile(tmpPath: string, content: string, fn: () => void) {
-  fs.writeFileSync(tmpPath, content);
-  try { fn(); } finally { fs.unlinkSync(tmpPath); }
-}
-
-function postComment(ctx: Ctx, body: string) {
-  const tmp = path.join(os.tmpdir(), `gh-comment-${crypto.randomUUID()}.txt`);
-  withTmpFile(tmp, body, () => ctx.exec(`gh issue comment ${ctx.issueNumber} --repo ${ctx.repo} --body-file ${tmp}`));
-}
-
-function postSlack(ctx: Ctx, data: SlackPayload) {
-  const tmp = path.join(os.tmpdir(), `slack-payload-${crypto.randomUUID()}.json`);
-  withTmpFile(tmp, JSON.stringify(data), () => ctx.exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${ctx.slackWebhookUrl}'`));
+function postSlack(data: SlackPayload): Effect.Effect<void, never, ExecService | ConfigService> {
+  return Effect.gen(function* () {
+    const exec   = yield* ExecService;
+    const config = yield* ConfigService;
+    const tmp    = path.join(os.tmpdir(), `slack-payload-${crypto.randomUUID()}.json`);
+    fs.writeFileSync(tmp, JSON.stringify(data));
+    try {
+      yield* exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${config.slackWebhookUrl}'`).pipe(Effect.catchAll(() => Effect.void));
+    } finally { try { fs.unlinkSync(tmp); } catch {} }
+  });
 }
 
 // Internal: a single failed push attempt — used only within commitAndPush retry loop
 class PushAttemptError { readonly _tag = "PushAttemptError" as const; }
 
-function commitAndPush(ctx: Ctx, memeId: string): Effect.Effect<void, PushFailedError> {
+function commitAndPush(memeId: string): Effect.Effect<void, PushFailedError, ExecService | ConfigService> {
   return Effect.gen(function* () {
-    yield* Effect.try({
-      try: () => {
-        ctx.exec(`git config user.name "github-actions[bot]"`);
-        ctx.exec(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
-        ctx.exec(`git add "memes/${memeId}.jpg"`);
-        ctx.exec(`git commit -m "Add meme for issue #${ctx.issueNumber} (${memeId})"`);
-      },
-      catch: () => new PushFailedError(0),
-    });
+    const exec   = yield* ExecService;
+    const config = yield* ConfigService;
+
+    yield* exec(`git config user.name "github-actions[bot]"`).pipe(Effect.mapError(() => new PushFailedError(0)));
+    yield* exec(`git config user.email "github-actions[bot]@users.noreply.github.com"`).pipe(Effect.mapError(() => new PushFailedError(0)));
+    yield* exec(`git add "memes/${memeId}.jpg"`).pipe(Effect.mapError(() => new PushFailedError(0)));
+    yield* exec(`git commit -m "Add meme for issue #${config.issueNumber} (${memeId})"`).pipe(Effect.mapError(() => new PushFailedError(0)));
     yield* Effect.log(`Committed memes/${memeId}.jpg`);
 
-    const pushAttempt = Effect.try({
-      try:   () => { ctx.exec(`git pull --rebase origin main`); ctx.exec(`git push origin HEAD`); },
-      catch: () => new PushAttemptError(),
-    });
+    const pushAttempt = exec(`git pull --rebase origin main`).pipe(
+      Effect.flatMap(() => exec(`git push origin HEAD`)),
+      Effect.mapError(() => new PushAttemptError()),
+    );
 
     yield* Effect.retry(
       pushAttempt.pipe(Effect.tapError(() => Effect.log("Push failed - retrying..."))),
@@ -397,15 +377,16 @@ function commitAndPush(ctx: Ctx, memeId: string): Effect.Effect<void, PushFailed
   });
 }
 
-function notifySuccess(ctx: Ctx, { memeId, history, prompt, twist }: { memeId: string; history: HistoryEntry[]; prompt: string; twist: string | null }): Effect.Effect<void, never> {
+function notifySuccess({ memeId, history, prompt, twist }: { memeId: string; history: HistoryEntry[]; prompt: string; twist: string | null }): Effect.Effect<void, never, ExecService | ConfigService> {
   return Effect.gen(function* () {
+    const config   = yield* ConfigService;
     const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
-    const params   = { memeId, provider, history, prompt, twist, requester: ctx.requester, channel: ctx.channel, slackLink: ctx.slackLink };
-    yield* Effect.sync(() => { try { postComment(ctx, buildSuccessComment(params)); } catch {} });
-    yield* Effect.sync(() => { try { ctx.exec(`gh api repos/${ctx.repo}/issues/${ctx.issueNumber} -X PATCH -f state=closed`); } catch {} });
-    yield* Effect.log(`Issue #${ctx.issueNumber} closed.`);
-    const imageUrl = `https://raw.githubusercontent.com/${ctx.repo}/refs/heads/main/memes/${memeId}.jpg`;
-    yield* Effect.sync(() => { try { postSlack(ctx, { status: "success", image_url: imageUrl, title: ctx.memePrompt, requester: ctx.requester, error: "", provider }); } catch {} });
+    const params   = { memeId, provider, history, prompt, twist, requester: config.requester, channel: config.channel, slackLink: config.slackLink };
+    yield* postComment(buildSuccessComment(params)).pipe(Effect.catchAll(() => Effect.void));
+    yield* (yield* ExecService)(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.catchAll(() => Effect.void));
+    yield* Effect.log(`Issue #${config.issueNumber} closed.`);
+    const imageUrl = `https://raw.githubusercontent.com/${config.repo}/refs/heads/main/memes/${memeId}.jpg`;
+    yield* postSlack({ status: "success", image_url: imageUrl, title: config.memePrompt, requester: config.requester, error: "", provider }).pipe(Effect.catchAll(() => Effect.void));
   });
 }
 
@@ -430,50 +411,47 @@ function buildSuccessComment({ memeId, provider, history, prompt, twist, request
 }
 
 const program = Effect.gen(function* () {
-  const config   = yield* ConfigService;
-  const repoRoot = computeRepoRoot();
-  const exec     = makeExec(repoRoot);
-  const ctx      = buildCtx(config, exec);
+  const config = yield* ConfigService;
 
   yield* Effect.gen(function* () {
-    const memesDir = path.join(repoRoot, "memes");
+    const repoRoot   = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+    const memesDir   = path.join(repoRoot, "memes");
     const memeId   = crypto.randomUUID();
     const outFile  = path.join(memesDir, `${memeId}.jpg`);
     const twist    = pickRandomTwist();
-    const fullPrompt = `Make a meme: ${ctx.memePrompt}.${twist != null ? ` ${twist}` : ""}`;
+    const fullPrompt = `Make a meme: ${config.memePrompt}.${twist != null ? ` ${twist}` : ""}`;
     if (fullPrompt.length > 4000) { yield* Effect.logWarning(`Prompt truncated from ${fullPrompt.length} to 4000 characters.`); }
     const prompt = fullPrompt.slice(0, 4000);
     yield* Effect.sync(() => fs.mkdirSync(memesDir, { recursive: true }));
 
-    yield* Effect.log(`Starting generation for issue #${ctx.issueNumber}: "${ctx.memePrompt}"`);
-    yield* waitForJitter(ctx);
-    const { buffer, history } = yield* generateImage(ctx, prompt);
+    yield* Effect.log(`Starting generation for issue #${config.issueNumber}: "${config.memePrompt}"`);
+    yield* waitForJitter();
+    const { buffer, history } = yield* generateImage(prompt);
     yield* Effect.sync(() => fs.writeFileSync(outFile, buffer));
     yield* Effect.log(`Image saved: ${outFile}`);
-    yield* commitAndPush(ctx, memeId);
-    yield* notifySuccess(ctx, { memeId, history, prompt, twist });
+    yield* commitAndPush(memeId);
+    yield* notifySuccess({ memeId, history, prompt, twist });
     yield* Effect.log("Done.");
   }).pipe(
     Effect.catchAll((e) => Effect.gen(function* () {
       yield* Effect.logError(`Fatal: ${e.message}`);
-      yield* Effect.sync(() => {
-        try {
-          postComment(ctx, `❌ Meme generation failed.\n\n\`\`\`\n${e.message}\n\`\`\``);
-          postSlack(ctx, { status: "failure", image_url: "", title: ctx.memePrompt, requester: ctx.requester, error: e.message });
-        } catch { /* notification failure must not hide the real error */ }
-        try {
-          if (e._tag === "DoubleModerationError") {
-            ctx.exec(`gh api repos/${ctx.repo}/issues/${ctx.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`);
-          }
-        } catch {}
-      });
+      yield* postComment(`❌ Meme generation failed.\n\n\`\`\`\n${e.message}\n\`\`\``).pipe(Effect.catchAll(() => Effect.void));
+      yield* postSlack({ status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, error: e.message }).pipe(Effect.catchAll(() => Effect.void));
+      if (e._tag === "DoubleModerationError") {
+        const exec = yield* ExecService;
+        yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`).pipe(Effect.catchAll(() => Effect.void));
+      }
       // Die (not fail) so the outer tapError doesn't double-log this
       return yield* Effect.die("failure-handled");
     })),
   );
 });
 
-const AppLayer = ConfigLayer;
+const AppLayer = Layer.mergeAll(
+  ConfigLayer,
+  ExecLayer,
+  ProvidersLayer.pipe(Layer.provide(ConfigLayer)),
+);
 
 Effect.runPromise(
   Effect.provide(program, AppLayer).pipe(
