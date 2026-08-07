@@ -15,7 +15,7 @@ export interface ProviderConfig {
 }
 
 export const PROVIDER_CONFIGS: ProviderConfig[] = [
-    {name: "OpenAI", envKey: "OPENAI_API_KEY", model: "gpt-image-2",       params: {size: "1024x1024", quality: "low"}},
+    {name: "OpenAI", envKey: "OPENAI_API_KEY", model: "gpt-image-2", params: {size: "1024x1024", quality: "low", output_format: "jpeg"}},
     {name: "xAI",    envKey: "XAI_API_KEY",    model: "grok-imagine-image", baseURL: "https://api.x.ai/v1"},
 ];
 
@@ -100,18 +100,10 @@ export function callWithRetry(
             catch: (err) => classifyApiError(err, model),
         }).pipe(
             Effect.flatMap((result) => {
-                const item = result.data?.[0];
-                if (item?.b64_json != null) {
-                    return Effect.succeed(Buffer.from(item.b64_json, "base64"));
-                }
-                if (item?.url != null) {
-                    const url = item.url;
-                    return Effect.tryPromise({
-                        try:   () => fetch(url).then((r) => r.arrayBuffer()).then((ab) => Buffer.from(ab)),
-                        catch: (err) => new ProviderError(model, `Failed to download image: ${String(err)}`),
-                    });
-                }
-                return Effect.fail(new ProviderError(model, "No image data returned"));
+                const b64 = result.data?.[0]?.b64_json;
+                return b64 != null
+                    ? Effect.succeed(Buffer.from(b64, "base64"))
+                    : Effect.fail(new ProviderError(model, "No image data returned"));
             }),
             Effect.tapError((e) => {
                 if (e._tag !== "RateLimitRetryableError") { return Effect.void; }
