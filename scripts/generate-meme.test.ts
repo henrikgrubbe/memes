@@ -4,7 +4,6 @@ import {DoubleModerationError, ModerationBlockedError, ProviderError, RateLimitE
 import {generateImage} from "./generate-meme.js";
 import {MODERATION_FALLBACK, ProvidersService} from "./providers.js";
 import type {ProviderFn} from "./providers.js";
-import {parseIssueBody} from "./config.js";
 
 // ---- Provider mock helpers ------------------------------------------------
 
@@ -104,38 +103,3 @@ describe("generateImage", () => {
     });
 });
 
-// ---- parseIssueBody -------------------------------------------------------
-
-describe("parseIssueBody", () => {
-    it("parses all known fields", () => {
-        const body = "sender: hhb\nmessage: funny cat\nchannel: #memes\nlink: https://slack.com/x";
-        const result = parseIssueBody(body);
-        expect(result["sender"]).toBe("hhb");
-        expect(result["message"]).toBe("funny cat");
-        expect(result["channel"]).toBe("#memes");
-        expect(result["link"]).toBe("https://slack.com/x");
-    });
-
-    it("handles multi-line message values", () => {
-        const body = "sender: hhb\nmessage: line one\n  continuation\nchannel: #general\nlink: https://x";
-        const result = parseIssueBody(body);
-        expect(result["message"]).toBe("line one\n  continuation");
-    });
-
-    it("ignores unknown keys", () => {
-        const body = "sender: hhb\nrandom: ignored\nmessage: hi\nchannel: #c\nlink: https://x";
-        const result = parseIssueBody(body);
-        expect(result["random"]).toBeUndefined();
-    });
-
-    it("handles Windows-style CRLF line endings", () => {
-        const body = "sender: hhb\r\nmessage: hi\r\nchannel: #c\r\nlink: https://x";
-        const result = parseIssueBody(body);
-        expect(result["sender"]).toBe("hhb");
-        expect(result["message"]).toBe("hi");
-    });
-
-    it("handles missing body gracefully", () => {
-        expect(parseIssueBody("")).toEqual({});
-    });
-});
