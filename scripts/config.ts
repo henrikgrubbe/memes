@@ -1,5 +1,5 @@
 import {Config, Context, Effect, Layer} from "effect";
-import {EnvMissingError, IssueBodyMissingFieldError} from "./errors.js";
+import {IssueBodyMissingFieldError} from "./errors.js";
 
 export interface AppConfig {
     issueNumber:     string;
@@ -12,11 +12,6 @@ export interface AppConfig {
 }
 
 export class AppConfigService extends Context.Tag("AppConfigService")<AppConfigService, AppConfig>() {}
-
-export const readEnv = (key: string): Effect.Effect<string, EnvMissingError> =>
-    Config.string(key).pipe(
-        Effect.mapError(() => new EnvMissingError(key)),
-    );
 
 export function parseIssueBody(body: string): Record<string, string> {
     const knownFields = new Set(["sender", "message", "channel", "link"]);
@@ -37,10 +32,10 @@ export function parseIssueBody(body: string): Record<string, string> {
 }
 
 export const AppConfigLayer = Layer.effect(AppConfigService, Effect.gen(function* () {
-    const repo            = yield* readEnv("REPO");
-    const slackWebhookUrl = yield* readEnv("SLACK_WEBHOOK_URL");
-    const issueNumber     = yield* readEnv("ISSUE_NUMBER");
-    const issueBody       = yield* readEnv("ISSUE_BODY");
+    const repo            = yield* Config.string("REPO");
+    const slackWebhookUrl = yield* Config.string("SLACK_WEBHOOK_URL");
+    const issueNumber     = yield* Config.string("ISSUE_NUMBER");
+    const issueBody       = yield* Config.string("ISSUE_BODY");
 
     const fields       = parseIssueBody(issueBody);
     const requireField = (key: string): Effect.Effect<string, IssueBodyMissingFieldError> =>

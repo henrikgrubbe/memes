@@ -4,12 +4,6 @@
  * function's failure modes explicit in its return type signature.
  */
 
-export class EnvMissingError {
-  readonly _tag = "EnvMissingError";
-  constructor(readonly key: string) {}
-  get message() { return `Missing environment variable: ${this.key}`; }
-}
-
 export class IssueBodyMissingFieldError {
   readonly _tag = "IssueBodyMissingFieldError";
   constructor(readonly field: string) {}

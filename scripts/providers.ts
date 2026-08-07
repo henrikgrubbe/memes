@@ -1,7 +1,6 @@
 import OpenAI from "openai";
-import {Context, Duration, Effect, Layer, Ref, Schedule} from "effect";
+import {Config, Context, Duration, Effect, Layer, Ref, Schedule} from "effect";
 import {ModerationBlockedError, ProviderError, RateLimitExhaustedError} from "./errors.js";
-import {readEnv} from "./config.js";
 
 export const MODERATION_FALLBACK    = "xAI";
 export const MAX_RETRIES            = 10;
@@ -32,7 +31,7 @@ export const ProvidersLayer = Layer.effect(ProvidersService, Effect.gen(function
 
     return Object.fromEntries(
         yield* Effect.all(PROVIDER_CONFIGS.map(({name, envKey, model, baseURL, params}) =>
-            readEnv(envKey).pipe(
+                Config.string(envKey).pipe(
                 Effect.map((apiKey) => {
                     const client = new OpenAI({apiKey, ...(baseURL != null ? {baseURL} : {})});
                     const fn: ProviderFn = (prompt) => callWithRetry(client, model, params ?? {}, prompt);
