@@ -36,11 +36,6 @@ const PROVIDER_CONFIGS = [
     {name: "xAI", envKey: "XAI_API_KEY", model: "grok-imagine-image", baseURL: "https://api.x.ai/v1"},
 ];
 
-if (!PROVIDER_CONFIGS.some(({name}) => name === MODERATION_FALLBACK)) {
-    console.error(`MODERATION_FALLBACK "${MODERATION_FALLBACK}" does not match any provider in PROVIDER_CONFIGS.`);
-    process.exit(1);
-}
-
 // ---- Types ----------------------------------------------------------------
 
 interface AppConfig {
@@ -116,6 +111,10 @@ const AppConfigLayer = Layer.effect(AppConfigService, Effect.gen(function* () {
     const providerApiKeys = yield* Effect.all(
         Object.fromEntries(PROVIDER_CONFIGS.map(({envKey}) => [envKey, readEnv(envKey)])),
     );
+
+    if (!PROVIDER_CONFIGS.some(({name}) => name === MODERATION_FALLBACK)) {
+        return yield* Effect.fail(new EnvMissingError(`MODERATION_FALLBACK "${MODERATION_FALLBACK}" does not match any configured provider`));
+    }
 
     return {issueNumber, repo, slackWebhookUrl, requester, memePrompt, channel, slackLink, providerApiKeys};
 }));
