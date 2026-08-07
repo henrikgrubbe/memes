@@ -30,4 +30,4 @@ jobs:
           REPO: ${{ github.repository }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
-        run: node scripts/generate-meme.mjs
+        run: npx tsx scripts/generate-meme.ts
