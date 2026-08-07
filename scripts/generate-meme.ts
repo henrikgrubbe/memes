@@ -97,7 +97,7 @@ function waitForJitter(): Effect.Effect<void, never, CommandExecutor.CommandExec
     });
 }
 
-function generateImage(prompt: string): Effect.Effect<{
+export function generateImage(prompt: string): Effect.Effect<{
     buffer: Buffer;
     history: HistoryEntry[];
 }, DoubleModerationError | ProviderError | RateLimitExhaustedError, ProvidersService> {
@@ -272,8 +272,12 @@ const AppLayer = Layer.mergeAll(
     NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
 );
 
-Effect.runPromise(
-    Effect.provide(program, AppLayer).pipe(
-        Effect.tapError((e) => Effect.logError(e.message)),
-    ),
-).catch(() => process.exit(1));
+import {fileURLToPath} from "url";
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+    Effect.runPromise(
+        Effect.provide(program, AppLayer).pipe(
+            Effect.tapError((e) => Effect.logError(e.message)),
+        ),
+    ).catch(() => process.exit(1));
+}

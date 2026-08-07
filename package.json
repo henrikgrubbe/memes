@@ -1,7 +1,9 @@
 {
   "type": "module",
   "scripts": {
-    "prepare": "effect-tsgo patch --typescript --no-oxlint"
+    "prepare": "effect-tsgo patch --typescript --no-oxlint",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@effect/platform": "^0.97.1",
@@ -13,7 +15,9 @@
     "@effect/tsgo": "0.33.0",
     "@types/node": "^26.1.2",
     "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^4.1.10",
     "tsx": "^4.23.9",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }
