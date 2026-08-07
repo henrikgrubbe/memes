@@ -1,11 +1,18 @@
 {
   "type": "module",
+  "scripts": {
+    "prepare": "effect-tsgo patch --typescript --no-oxlint"
+  },
   "dependencies": {
+    "@effect/platform": "^0.97.1",
+    "@effect/platform-node": "^0.108.1",
     "effect": "^3.22.1",
     "openai": "^7.4.0"
   },
   "devDependencies": {
+    "@effect/tsgo": "0.33.0",
     "@types/node": "^26.1.2",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.23.9",
     "typescript": "^7.0.2"
   }
