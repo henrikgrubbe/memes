@@ -23,7 +23,7 @@
           "globalDate": "warning",
           "globalDateInEffect": "warning",
           "globalFetch": "warning",
-          "globalFetchInEffect": "warning",
+          "globalFetchInEffect": "off",
           "globalRandom": "warning",
           "globalRandomInEffect": "warning",
           "globalTimers": "warning",

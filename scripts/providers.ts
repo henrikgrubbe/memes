@@ -96,14 +96,22 @@ export function callWithRetry(
         const rateLimitHitsRef = yield* Ref.make(0);
 
         const attempt = Effect.tryPromise({
-            try:   () => client.images.generate({model, prompt, response_format: "b64_json", ...params}),
+            try:   () => client.images.generate({model, prompt, ...params}),
             catch: (err) => classifyApiError(err, model),
         }).pipe(
             Effect.flatMap((result) => {
-                const b64 = result.data?.[0]?.b64_json;
-                return b64 != null
-                    ? Effect.succeed(Buffer.from(b64, "base64"))
-                    : Effect.fail(new ProviderError(model, "No image data returned"));
+                const item = result.data?.[0];
+                if (item?.b64_json != null) {
+                    return Effect.succeed(Buffer.from(item.b64_json, "base64"));
+                }
+                if (item?.url != null) {
+                    const url = item.url;
+                    return Effect.tryPromise({
+                        try:   () => fetch(url).then((r) => r.arrayBuffer()).then((ab) => Buffer.from(ab)),
+                        catch: (err) => new ProviderError(model, `Failed to download image: ${String(err)}`),
+                    });
+                }
+                return Effect.fail(new ProviderError(model, "No image data returned"));
             }),
             Effect.tapError((e) => {
                 if (e._tag !== "RateLimitRetryableError") { return Effect.void; }
