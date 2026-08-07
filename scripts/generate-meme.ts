@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import {Command, CommandExecutor, FileSystem, Path} from "@effect/platform";
 import {NodeCommandExecutor, NodeFileSystem, NodePath} from "@effect/platform-node";
 import {Config, Context, Duration, Effect, Either, Layer, Random, Ref, Schedule} from "effect";
+import * as Schema from "effect/Schema";
 import {
     DoubleModerationError,
     EnvMissingError,
@@ -55,14 +56,15 @@ interface HistoryEntry {
     message?: string;
 }
 
-interface SlackPayload {
-    status: "success" | "failure";
-    image_url: string;
-    title: string;
-    requester: string;
-    error: string;
-    provider?: string;
-}
+const SlackPayload = Schema.Struct({
+    status:    Schema.Union(Schema.Literal("success"), Schema.Literal("failure")),
+    image_url: Schema.String,
+    title:     Schema.String,
+    requester: Schema.String,
+    error:     Schema.String,
+    provider:  Schema.optional(Schema.String),
+});
+type SlackPayload = Schema.Schema.Type<typeof SlackPayload>;
 
 interface SuccessCommentParams {
     memeId: string; provider: string; history: HistoryEntry[];
@@ -88,7 +90,7 @@ interface ApiError {
 class AppConfigService extends Context.Tag("AppConfigService")<AppConfigService, AppConfig>() {}
 class ProvidersService extends Context.Tag("ProvidersService")<ProvidersService, Record<string, ProviderFn>>() {}
 
-const readEnv = (key: string): Effect.Effect<string, EnvMissingError> =>
+const readEnv = (key: string) =>
     Config.string(key).pipe(
         Effect.mapError(() => new EnvMissingError(key)),
     );
@@ -358,7 +360,8 @@ const postComment = (body: string): Effect.Effect<void, never, CommandExecutor.C
 const postSlack = (data: SlackPayload): Effect.Effect<void, never, CommandExecutor.CommandExecutor | AppConfigService | FileSystem.FileSystem> =>
     Effect.gen(function* () {
         const config = yield* AppConfigService;
-        yield* withTmpFile("json", JSON.stringify(data), (tmp) =>
+        const json = yield* Schema.encode(Schema.parseJson(SlackPayload))(data).pipe(Effect.orDie);
+        yield* withTmpFile("json", json, (tmp) =>
             exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${config.slackWebhookUrl}'`).pipe(Effect.catchAll(() => Effect.void)),
         );
     });
