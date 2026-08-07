@@ -1,23 +1,12 @@
-import OpenAI from "openai";
 import {Command, CommandExecutor, FileSystem, Path} from "@effect/platform";
 import {NodeCommandExecutor, NodeFileSystem, NodePath} from "@effect/platform-node";
-import {Config, Context, Duration, Effect, Either, Layer, Random, Ref, Schedule} from "effect";
+import {Duration, Effect, Either, Layer, Random, Schedule} from "effect";
 import * as Schema from "effect/Schema";
-import {
-    DoubleModerationError,
-    EnvMissingError,
-    ExecError,
-    IssueBodyMissingFieldError,
-    ModerationBlockedError,
-    ProviderError,
-    PushFailedError,
-    RateLimitExhaustedError
-} from "./errors.js";
+import {DoubleModerationError, ExecError, ProviderError, PushFailedError, RateLimitExhaustedError} from "./errors.js";
+import {AppConfigService, AppConfigLayer} from "./config.js";
+import {MODERATION_FALLBACK, PROVIDER_CONFIGS, ProvidersService, ProvidersLayer} from "./providers.js";
 
-const MODERATION_FALLBACK = "xAI";
-const MAX_RETRIES = 10;
 const MAX_PUSH_RETRIES = 5;
-const RETRY_DELAY_PADDING_MS = 1_000;
 const RANDOM_TWISTS = [
     "Make it extremely dramatic.",
     "Use a medieval art style.",
@@ -32,27 +21,12 @@ const RANDOM_TWISTS = [
     "Set it in the 1950s.",
     "Make it look like a children's book illustration.",
 ];
-const PROVIDER_CONFIGS = [
-    {name: "OpenAI", envKey: "OPENAI_API_KEY", model: "gpt-image-2", params: {size: "1024x1024", quality: "low"}},
-    {name: "xAI", envKey: "XAI_API_KEY", model: "grok-imagine-image", baseURL: "https://api.x.ai/v1"},
-];
 
 // ---- Types ----------------------------------------------------------------
 
-interface AppConfig {
-    issueNumber: string;
-    repo: string;
-    slackWebhookUrl: string;
-    requester: string;
-    memePrompt: string;
-    channel: string;
-    slackLink: string;
-    providerApiKeys: Record<string, string>;
-}
-
 interface HistoryEntry {
     provider: string;
-    status: "success" | "rate-limited" | "failed";
+    status:   "success" | "rate-limited" | "failed";
     message?: string;
 }
 
@@ -71,85 +45,7 @@ interface SuccessCommentParams {
     prompt: string; twist: string | null; requester: string; channel: string; slackLink: string;
 }
 
-type ProviderResult = { buffer: Buffer; rateLimitHits: number };
-type ProviderFn = (prompt: string) => Effect.Effect<ProviderResult, ModerationBlockedError | RateLimitExhaustedError | ProviderError>;
-
-// OpenAI error shape for catch-clause narrowing
-interface ApiError {
-    status?: number;
-    message?: string;
-    headers?: Record<string, string>;
-    error?: {
-        code?: string;
-        moderation_details?: { moderation_stage: string; categories?: string[] };
-    };
-}
-
-// ---- Services -------------------------------------------------------------
-
-class AppConfigService extends Context.Tag("AppConfigService")<AppConfigService, AppConfig>() {}
-class ProvidersService extends Context.Tag("ProvidersService")<ProvidersService, Record<string, ProviderFn>>() {}
-
-const readEnv = (key: string) =>
-    Config.string(key).pipe(
-        Effect.mapError(() => new EnvMissingError(key)),
-    );
-
-const AppConfigLayer = Layer.effect(AppConfigService, Effect.gen(function* () {
-    const repo           = yield* readEnv("REPO");
-    const slackWebhookUrl = yield* readEnv("SLACK_WEBHOOK_URL");
-    const issueNumber    = yield* readEnv("ISSUE_NUMBER");
-    const issueBody      = yield* readEnv("ISSUE_BODY");
-
-    const fields       = parseIssueBody(issueBody);
-    const requireField = (key: string): Effect.Effect<string, IssueBodyMissingFieldError> =>
-        fields[key] != null ? Effect.succeed(fields[key]) : Effect.fail(new IssueBodyMissingFieldError(key));
-
-    const requester  = yield* requireField("sender");
-    const memePrompt = yield* requireField("message");
-    const channel    = yield* requireField("channel");
-    const slackLink  = yield* requireField("link");
-
-    const providerApiKeys = yield* Effect.all(
-        Object.fromEntries(PROVIDER_CONFIGS.map(({envKey}) => [envKey, readEnv(envKey)])),
-    );
-
-    if (!PROVIDER_CONFIGS.some(({name}) => name === MODERATION_FALLBACK)) {
-        return yield* Effect.fail(new EnvMissingError(`MODERATION_FALLBACK "${MODERATION_FALLBACK}" does not match any configured provider`));
-    }
-
-    return {issueNumber, repo, slackWebhookUrl, requester, memePrompt, channel, slackLink, providerApiKeys};
-}));
-
-const ProvidersLayer = Layer.effect(ProvidersService, Effect.gen(function* () {
-    const config = yield* AppConfigService;
-    return Object.fromEntries(
-        PROVIDER_CONFIGS.map(({name, envKey, model, baseURL, params}) => {
-            const client = new OpenAI({apiKey: config.providerApiKeys[envKey], ...(baseURL != null ? {baseURL} : {})});
-            return [name, (prompt: string) => callWithRetry(client, model, params ?? {}, prompt)];
-        }),
-    ) as Record<string, ProviderFn>;
-}));
-
 // ---- Helpers --------------------------------------------------------------
-
-function parseIssueBody(body: string): Record<string, string> {
-    const knownFields = new Set(["sender", "message", "channel", "link"]);
-    const result: Record<string, string> = {};
-    let currentKey: string | null = null;
-    for (const rawLine of (body ?? "").split("\n")) {
-        const line = rawLine.replace(/\r$/, "");
-        const sep = line.indexOf(": ");
-        const potentialKey = sep !== -1 ? line.slice(0, sep).trim().toLowerCase() : null;
-        if (potentialKey != null && knownFields.has(potentialKey)) {
-            currentKey = potentialKey;
-            result[currentKey] = line.slice(sep + 2).trim();
-        } else if (currentKey != null && line.trim() !== "") {
-            result[currentKey] += "\n" + line;
-        }
-    }
-    return result;
-}
 
 // Runs a shell command, returns trimmed stdout.
 const exec = (cmd: string): Effect.Effect<string, ExecError, CommandExecutor.CommandExecutor> =>
@@ -184,80 +80,6 @@ const pickRandomTwist = (): Effect.Effect<string | null> =>
         return RANDOM_TWISTS[yield* Random.nextIntBetween(0, RANDOM_TWISTS.length)];
     });
 
-// ---- callWithRetry --------------------------------------------------------
-
-// Internal: a 429 where we successfully parsed the retry delay.
-class RateLimitRetryableError {
-    readonly _tag = "RateLimitRetryableError";
-    constructor(readonly delayMs: number) {}
-}
-
-type CallError = ModerationBlockedError | RateLimitRetryableError | ProviderError;
-
-function classifyApiError(err: unknown, model: string): CallError {
-    const apiErr = err as ApiError;
-    if (apiErr?.error?.code === "moderation_blocked") {
-        const details = apiErr?.error?.moderation_details;
-        const extra = details != null
-            ? `\nModeration stage: ${details.moderation_stage}\nCategories: ${(details.categories ?? []).join(", ")}`
-            : "";
-        return new ModerationBlockedError(model, (apiErr?.message ?? String(err)) + extra);
-    }
-    if (apiErr?.status === 429) {
-        const delayMs = parseRetryDelayMs(apiErr);
-        if (delayMs != null) { return new RateLimitRetryableError(delayMs); }
-    }
-    return new ProviderError(model, apiErr?.message ?? String(err));
-}
-
-function parseRetryDelayMs(err: ApiError): number | null {
-    const fromHeader = parseInt(err?.headers?.["retry-after"] ?? "", 10);
-    if (!isNaN(fromHeader)) { return fromHeader * 1000 + RETRY_DELAY_PADDING_MS; }
-    const match = (err?.message ?? "").match(/try again in (\d+(?:\.\d+)?)s/i);
-    return match != null ? parseFloat(match[1]) * 1000 + RETRY_DELAY_PADDING_MS : null;
-}
-
-function callWithRetry(
-    client: OpenAI,
-    model: string,
-    params: Record<string, string>,
-    prompt: string,
-): Effect.Effect<ProviderResult, ModerationBlockedError | RateLimitExhaustedError | ProviderError> {
-    return Effect.gen(function* () {
-        const rateLimitHitsRef = yield* Ref.make(0);
-
-        const attempt = Effect.tryPromise({
-            try: () => client.images.generate({model, prompt, response_format: "b64_json", ...params}),
-            catch: (err) => classifyApiError(err, model),
-        }).pipe(
-            Effect.flatMap((result) => {
-                const b64 = result.data?.[0]?.b64_json;
-                return b64 != null
-                    ? Effect.succeed(Buffer.from(b64, "base64"))
-                    : Effect.fail(new ProviderError(model, "No image data returned"));
-            }),
-            Effect.tapError((e) => {
-                if (e._tag !== "RateLimitRetryableError") { return Effect.void; }
-                return Effect.gen(function* () {
-                    const hits = yield* Ref.updateAndGet(rateLimitHitsRef, (n) => n + 1);
-                    yield* Effect.log(`Rate limited - retrying in ${e.delayMs / 1000}s (attempt ${hits}/${MAX_RETRIES})...`);
-                    yield* Effect.sleep(Duration.millis(e.delayMs));
-                });
-            }),
-        );
-
-        const retryPolicy = Schedule.recurWhile((e: CallError) => e._tag === "RateLimitRetryableError").pipe(
-            Schedule.intersect(Schedule.recurs(MAX_RETRIES - 1)),
-        );
-
-        const buffer = yield* Effect.retry(attempt, retryPolicy).pipe(
-            Effect.mapError((e) => e._tag === "RateLimitRetryableError" ? new RateLimitExhaustedError(model, MAX_RETRIES) : e),
-        );
-
-        return {buffer, rateLimitHits: yield* Ref.get(rateLimitHitsRef)};
-    });
-}
-
 // ---- Pipeline steps -------------------------------------------------------
 
 function waitForJitter(): Effect.Effect<void, never, CommandExecutor.CommandExecutor | AppConfigService> {
@@ -278,7 +100,7 @@ function waitForJitter(): Effect.Effect<void, never, CommandExecutor.CommandExec
 function generateImage(prompt: string): Effect.Effect<{
     buffer: Buffer;
     history: HistoryEntry[];
-}, ProviderError | RateLimitExhaustedError | DoubleModerationError, ProvidersService> {
+}, DoubleModerationError | ProviderError | RateLimitExhaustedError, ProvidersService> {
     return Effect.gen(function* () {
         const providers  = yield* ProvidersService;
         const candidates = PROVIDER_CONFIGS.map((c) => c.name).filter((n) => n !== MODERATION_FALLBACK);
@@ -360,7 +182,7 @@ const postComment = (body: string): Effect.Effect<void, never, CommandExecutor.C
 const postSlack = (data: SlackPayload): Effect.Effect<void, never, CommandExecutor.CommandExecutor | AppConfigService | FileSystem.FileSystem> =>
     Effect.gen(function* () {
         const config = yield* AppConfigService;
-        const json = yield* Schema.encode(Schema.parseJson(SlackPayload))(data).pipe(Effect.orDie);
+        const json   = yield* Schema.encode(Schema.parseJson(SlackPayload))(data).pipe(Effect.orDie);
         yield* withTmpFile("json", json, (tmp) =>
             exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${config.slackWebhookUrl}'`).pipe(Effect.catchAll(() => Effect.void)),
         );
@@ -430,7 +252,7 @@ const program = Effect.gen(function* () {
 }).pipe(
     Effect.catchAll((e) => Effect.gen(function* () {
         const config = yield* AppConfigService;
-        const msg    = e instanceof Error || (e != null && typeof e === "object" && "message" in e) ? String((e as {message: unknown}).message) : String(e);
+        const msg    = e != null && typeof e === "object" && "message" in e ? String((e as {message: unknown}).message) : String(e);
         const tag    = e != null && typeof e === "object" && "_tag" in e ? (e as {_tag: string})._tag : "";
         yield* Effect.logError(`Fatal: ${msg}`);
         yield* postComment(`❌ Meme generation failed.\n\n\`\`\`\n${msg}\n\`\`\``);
@@ -446,7 +268,7 @@ const AppLayer = Layer.mergeAll(
     AppConfigLayer,
     NodePath.layer,
     NodeFileSystem.layer,
-    ProvidersLayer.pipe(Layer.provide(AppConfigLayer)),
+    ProvidersLayer,
     NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
 );
 
