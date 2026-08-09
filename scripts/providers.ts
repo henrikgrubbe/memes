@@ -163,6 +163,7 @@ export function callWithRetry(
 
         // Schedule owns all timing and logging.
         // intersect output is [CallError, number]; `n` is the 0-indexed retry count from recurs.
+        // Schedule.jittered adds ±20% randomisation so concurrent rate-limited jobs don't retry in lockstep.
         const retryPolicy = Schedule.recurWhile((e: CallError) => e._tag === "RateLimitRetryableError").pipe(
             Schedule.intersect(Schedule.recurs(MAX_RETRIES - 1)),
             Schedule.addDelayEffect(([e, n]: [CallError, number]) => {
@@ -173,6 +174,7 @@ export function callWithRetry(
                     Effect.as(Duration.millis(e.delayMs)),
                 );
             }),
+            Schedule.jittered,
         );
 
         const buffer = yield* Effect.retry(attempt, retryPolicy).pipe(
