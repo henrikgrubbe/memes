@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import {Config, Context, Duration, Effect, Layer, Random, Ref, Schedule} from "effect";
-import {DoubleModerationError, ModerationBlockedError, ProviderError, RateLimitExhaustedError} from "./errors.js";
+import {DoubleModerationError, ModerationBlockedError, ProviderError, RateLimitError} from "./errors.js";
 
 export const MODERATION_FALLBACK    = "xAI";
 export const MAX_RETRIES            = 10;
@@ -31,10 +31,10 @@ export interface HistoryEntry {
 // Deep interface: callers ask for an image; provider selection, retry, and
 // moderation fallback are entirely behind the seam.
 
-export type ProviderFn = (prompt: string) => Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, ModerationBlockedError | RateLimitExhaustedError | ProviderError>;
+export type ProviderFn = (prompt: string) => Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, ModerationBlockedError | RateLimitError | ProviderError>;
 
 export interface ProvidersService {
-    generateWithFallback(prompt: string): Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, DoubleModerationError | ProviderError | RateLimitExhaustedError>;
+    generateWithFallback(prompt: string): Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, DoubleModerationError | ProviderError | RateLimitError>;
 }
 
 export class ProvidersServiceTag extends Context.Tag("ProvidersService")<ProvidersServiceTag, ProvidersService>() {}
@@ -74,7 +74,7 @@ const CANDIDATES = PROVIDER_CONFIGS.map((c) => c.name).filter((n) => n !== MODER
 function generateWithFallback(
     providers: Record<string, ProviderFn>,
     prompt: string,
-): Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, DoubleModerationError | ProviderError | RateLimitExhaustedError> {
+): Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, DoubleModerationError | ProviderError | RateLimitError> {
     return Effect.gen(function* () {
         const primary = yield* Random.choice(CANDIDATES);
         yield* Effect.log(`Randomly selected ${primary} as primary provider...`);
@@ -144,7 +144,7 @@ export function callWithRetry(
     model: string,
     params: Record<string, string>,
     prompt: string,
-): Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, ModerationBlockedError | RateLimitExhaustedError | ProviderError> {
+): Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, ModerationBlockedError | RateLimitError | ProviderError> {
     return Effect.gen(function* () {
         const rateLimitHitsRef = yield* Ref.make(0);
 
@@ -178,7 +178,7 @@ export function callWithRetry(
         );
 
         const buffer = yield* Effect.retry(attempt, retryPolicy).pipe(
-            Effect.mapError((e) => e._tag === "RateLimitRetryableError" ? new RateLimitExhaustedError({provider: model, attempts: MAX_RETRIES}) : e),
+            Effect.mapError((e) => e._tag === "RateLimitRetryableError" ? new RateLimitError({provider: model, attempts: MAX_RETRIES}) : e),
         );
 
         const rateLimitHits = yield* Ref.get(rateLimitHitsRef);

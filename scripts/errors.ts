@@ -13,7 +13,7 @@ export class ModerationBlockedError extends Data.TaggedError("ModerationBlockedE
     get message() { return `${this.provider} blocked by moderation: ${this.detail}`; }
 }
 
-export class RateLimitExhaustedError extends Data.TaggedError("RateLimitExhaustedError")<{
+export class RateLimitError extends Data.TaggedError("RateLimitError")<{
     readonly provider: string;
     readonly attempts: number;
 }> {

@@ -3,7 +3,7 @@ import * as TestClock from "effect/TestClock";
 import * as TestContext from "effect/TestContext";
 import type OpenAI from "openai";
 import {describe, expect, it} from "vitest";
-import {ModerationBlockedError, ProviderError, RateLimitExhaustedError} from "./errors.js";
+import {ModerationBlockedError, ProviderError, RateLimitError} from "./errors.js";
 import {callWithRetry, MAX_RETRIES} from "./providers.js";
 
 const PROVIDER = "test-provider";
@@ -88,7 +88,7 @@ describe("callWithRetry", () => {
         }
     });
 
-    it(`fails with RateLimitExhaustedError after ${MAX_RETRIES} rate-limit retries`, async () => {
+    it(`fails with RateLimitError after ${MAX_RETRIES} rate-limit retries`, async () => {
         const responses = Array.from({length: MAX_RETRIES + 1}, rl);
         const client    = makeClient(responses);
         const test      = Effect.gen(function* () {
@@ -105,7 +105,7 @@ describe("callWithRetry", () => {
             expect(Exit.isFailure(inner)).toBe(true);
             if (Exit.isFailure(inner)) {
                 // @ts-expect-error accessing .error on Cause.Fail
-                expect(inner.cause.error).toBeInstanceOf(RateLimitExhaustedError);
+                expect(inner.cause.error).toBeInstanceOf(RateLimitError);
                 // @ts-expect-error accessing .error on Cause.Fail
                 expect(inner.cause.error.attempts).toBe(MAX_RETRIES);
             }

@@ -1,6 +1,6 @@
 import {Effect, Exit, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {DoubleModerationError, ModerationBlockedError, ProviderError, RateLimitExhaustedError} from "./errors.js";
+import {DoubleModerationError, ModerationBlockedError, ProviderError, RateLimitError} from "./errors.js";
 import {generateImage} from "./generate-meme.js";
 import {MODERATION_FALLBACK, makeProvidersLayer, ProvidersServiceTag} from "./providers.js";
 import type {ProviderFn} from "./providers.js";
@@ -13,7 +13,7 @@ const successRlFn = (provider: string, hits: number): ProviderFn => (_) => Effec
     {provider, status: "success"},
 ]});
 const modFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ModerationBlockedError({provider, detail: "blocked"}));
-const rlFn        = (provider: string): ProviderFn => (_) => Effect.fail(new RateLimitExhaustedError({provider, attempts: 10}));
+const rlFn        = (provider: string): ProviderFn => (_) => Effect.fail(new RateLimitError({provider, attempts: 10}));
 const errFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ProviderError({provider, detail: "error"}));
 
 // Since only 1 non-fallback candidate (OpenAI), primary is always "OpenAI".
@@ -77,7 +77,7 @@ describe("generateImage", () => {
         }
     });
 
-    it("propagates RateLimitExhaustedError from primary (not a moderation block)", async () => {
+    it("propagates RateLimitError from primary (not a moderation block)", async () => {
         const exit = await run(
             generateImage("make a meme"),
             makeProvidersLayer({[PRIMARY]: rlFn(PRIMARY), [MODERATION_FALLBACK]: successFn()}),
@@ -85,7 +85,7 @@ describe("generateImage", () => {
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
             // @ts-expect-error accessing .error on Cause.Fail
-            expect(exit.cause.error).toBeInstanceOf(RateLimitExhaustedError);
+            expect(exit.cause.error).toBeInstanceOf(RateLimitError);
         }
     });
 
