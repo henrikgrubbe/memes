@@ -4,56 +4,44 @@
  * function's failure modes explicit in its return type signature.
  */
 
-export class IssueBodyMissingFieldError {
-  readonly _tag = "IssueBodyMissingFieldError";
-  constructor(readonly field: string) {}
-  get message() { return `Issue body missing required field: ${this.field}`; }
+import {Data} from "effect";
+
+export class ModerationBlockedError extends Data.TaggedError("ModerationBlockedError")<{
+    readonly provider: string;
+    readonly detail:   string;
+}> {
+    get message() { return `${this.provider} blocked by moderation: ${this.detail}`; }
 }
 
-export class ModerationBlockedError {
-  readonly _tag = "ModerationBlockedError";
-  constructor(
-    readonly provider: string,
-    readonly detail:   string,
-  ) {}
-  get message() { return `${this.provider} blocked by moderation: ${this.detail}`; }
+export class RateLimitExhaustedError extends Data.TaggedError("RateLimitExhaustedError")<{
+    readonly provider: string;
+    readonly attempts: number;
+}> {
+    get message() { return `${this.provider} rate-limit retries exhausted after ${this.attempts} attempts`; }
 }
 
-export class RateLimitExhaustedError {
-  readonly _tag = "RateLimitExhaustedError";
-  constructor(
-    readonly provider: string,
-    readonly attempts: number,
-  ) {}
-  get message() { return `${this.provider} rate-limit retries exhausted after ${this.attempts} attempts`; }
+export class ExecError extends Data.TaggedError("ExecError")<{
+    readonly cmd:    string;
+    readonly detail: string;
+}> {
+    get message() { return `Command failed: ${this.cmd}\n${this.detail}`; }
 }
 
-export class ExecError {
-  readonly _tag = "ExecError";
-  constructor(
-    readonly cmd:    string,
-    readonly detail: string,
-  ) {}
-  get message() { return `Command failed: ${this.cmd}\n${this.detail}`; }
+export class PushFailedError extends Data.TaggedError("PushFailedError")<{
+    readonly attempts: number;
+}> {
+    get message() { return `Failed to push after ${this.attempts} attempts`; }
 }
 
-export class PushFailedError {
-  readonly _tag = "PushFailedError";
-  constructor(readonly attempts: number) {}
-  get message() { return `Failed to push after ${this.attempts} attempts`; }
+export class DoubleModerationError extends Data.TaggedError("DoubleModerationError")<{
+    readonly fallbackProvider: string;
+}> {
+    get message() { return `Both primary and fallback provider (${this.fallbackProvider}) were blocked by moderation`; }
 }
 
-export class DoubleModerationError {
-  readonly _tag = "DoubleModerationError";
-  constructor(readonly fallbackProvider: string) {}
-  get message() { return `Both primary and fallback provider (${this.fallbackProvider}) were blocked by moderation`; }
-}
-
-export class ProviderError {
-  readonly _tag = "ProviderError";
-  constructor(
-    readonly provider: string,
-    readonly detail:   string,
-  ) {}
-  get message() { return `${this.provider} failed: ${this.detail}`; }
+export class ProviderError extends Data.TaggedError("ProviderError")<{
+    readonly provider: string;
+    readonly detail:   string;
+}> {
+    get message() { return `${this.provider} failed: ${this.detail}`; }
 }

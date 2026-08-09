@@ -42,7 +42,7 @@ describe("parseIssueBody", () => {
         }
     });
 
-    it("fails with IssueBodyMissingFieldError for empty body", async () => {
+    it("fails with ParseError for empty body", async () => {
         const exit = await run("");
         expect(Exit.isFailure(exit)).toBe(true);
     });
@@ -93,7 +93,7 @@ describe("parseIssueBody", () => {
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
             // @ts-expect-error accessing .error on Cause.Fail
-            expect(exit.cause.error._tag).toBe("IssueBodyMissingFieldError");
+            expect(exit.cause.error._tag).toBe("ParseError");
         }
     });
 

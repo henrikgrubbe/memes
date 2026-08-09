@@ -1,6 +1,6 @@
 import OpenAI from "openai";
-import {Config, Context, Duration, Effect, Layer, Ref, Schedule} from "effect";
-import {ModerationBlockedError, ProviderError, RateLimitExhaustedError} from "./errors.js";
+import {Config, Context, Duration, Effect, Layer, Random, Ref, Schedule} from "effect";
+import {DoubleModerationError, ModerationBlockedError, ProviderError, RateLimitExhaustedError} from "./errors.js";
 
 export const MODERATION_FALLBACK    = "xAI";
 export const MAX_RETRIES            = 10;
@@ -19,19 +19,40 @@ export const PROVIDER_CONFIGS: ProviderConfig[] = [
     {name: "xAI",    envKey: "XAI_API_KEY",    model: "grok-imagine-image", baseURL: "https://api.x.ai/v1", params: {response_format: "b64_json"}},
 ];
 
-export type ProviderResult = { buffer: Buffer; rateLimitHits: number };
-export type ProviderFn = (prompt: string) => Effect.Effect<ProviderResult, ModerationBlockedError | RateLimitExhaustedError | ProviderError>;
+// ---- HistoryEntry -----------------------------------------------------------
 
-export class ProvidersService extends Context.Tag("ProvidersService")<ProvidersService, Record<string, ProviderFn>>() {}
+export interface HistoryEntry {
+    provider: string;
+    status:   "success" | "rate-limited" | "failed";
+    message?: string;
+}
 
-export const ProvidersLayer = Layer.effect(ProvidersService, Effect.gen(function* () {
+// ---- ProvidersService -------------------------------------------------------
+// Deep interface: callers ask for an image; provider selection, retry, and
+// moderation fallback are entirely behind the seam.
+
+export type ProviderFn = (prompt: string) => Effect.Effect<{buffer: Buffer; rateLimitHits: number}, ModerationBlockedError | RateLimitExhaustedError | ProviderError>;
+
+export interface ProvidersService {
+    generateWithFallback(prompt: string): Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, DoubleModerationError | ProviderError | RateLimitExhaustedError>;
+}
+
+export class ProvidersServiceTag extends Context.Tag("ProvidersService")<ProvidersServiceTag, ProvidersService>() {}
+
+/** Test helper: build a Layer from a pre-constructed provider map (bypasses Config/API key loading). */
+export const makeProvidersLayer = (providerMap: Record<string, ProviderFn>): Layer.Layer<ProvidersServiceTag> =>
+    Layer.succeed(ProvidersServiceTag, {
+        generateWithFallback: (prompt) => generateWithFallback(providerMap, prompt),
+    });
+
+export const ProvidersLayer = Layer.effect(ProvidersServiceTag, Effect.gen(function* () {
     if (!PROVIDER_CONFIGS.some(({name}) => name === MODERATION_FALLBACK)) {
         return yield* Effect.die(`MODERATION_FALLBACK "${MODERATION_FALLBACK}" does not match any configured provider`);
     }
 
-    return Object.fromEntries(
+    const providerMap = Object.fromEntries(
         yield* Effect.all(PROVIDER_CONFIGS.map(({name, envKey, model, baseURL, params}) =>
-                Config.string(envKey).pipe(
+            Config.string(envKey).pipe(
                 Effect.map((apiKey) => {
                     const client = new OpenAI({apiKey, ...(baseURL != null ? {baseURL} : {})});
                     const fn: ProviderFn = (prompt) => callWithRetry(client, model, params ?? {}, prompt);
@@ -40,7 +61,52 @@ export const ProvidersLayer = Layer.effect(ProvidersService, Effect.gen(function
             ),
         )),
     );
+
+    return {
+        generateWithFallback: (prompt: string) => generateWithFallback(providerMap, prompt),
+    };
 }));
+
+// ---- generateWithFallback ---------------------------------------------------
+
+const CANDIDATES = PROVIDER_CONFIGS.map((c) => c.name).filter((n) => n !== MODERATION_FALLBACK);
+
+function generateWithFallback(
+    providers: Record<string, ProviderFn>,
+    prompt: string,
+): Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, DoubleModerationError | ProviderError | RateLimitExhaustedError> {
+    return Effect.gen(function* () {
+        const primary = yield* Random.choice(CANDIDATES);
+        yield* Effect.log(`Randomly selected ${primary} as primary provider...`);
+
+        return yield* providers[primary](prompt).pipe(
+            Effect.map(({buffer, rateLimitHits}) => ({
+                buffer,
+                history: [
+                    ...Array.from({length: rateLimitHits}, (): HistoryEntry => ({provider: primary, status: "rate-limited"})),
+                    {provider: primary, status: "success" as const},
+                ],
+            })),
+            Effect.catchTag("ModerationBlockedError", (primaryErr) => Effect.gen(function* () {
+                yield* Effect.log(`Moderation block on ${primary} - falling back to ${MODERATION_FALLBACK}...`);
+                const primaryEntry: HistoryEntry = {provider: primary, status: "failed", message: primaryErr.message};
+                return yield* providers[MODERATION_FALLBACK](prompt).pipe(
+                    Effect.map(({buffer, rateLimitHits}) => ({
+                        buffer,
+                        history: [
+                            primaryEntry,
+                            ...Array.from({length: rateLimitHits}, (): HistoryEntry => ({provider: MODERATION_FALLBACK, status: "rate-limited"})),
+                            {provider: MODERATION_FALLBACK, status: "success" as const},
+                        ],
+                    })),
+                    Effect.catchTag("ModerationBlockedError", () =>
+                        Effect.fail(new DoubleModerationError({fallbackProvider: MODERATION_FALLBACK})),
+                    ),
+                );
+            })),
+        );
+    });
+}
 
 // ---- callWithRetry internals ------------------------------------------------
 
@@ -70,13 +136,13 @@ function classifyApiError(err: unknown, model: string): CallError {
         const extra = details != null
             ? `\nModeration stage: ${details.moderation_stage}\nCategories: ${(details.categories ?? []).join(", ")}`
             : "";
-        return new ModerationBlockedError(model, (apiErr?.message ?? String(err)) + extra);
+        return new ModerationBlockedError({provider: model, detail: (apiErr?.message ?? String(err)) + extra});
     }
     if (apiErr?.status === 429) {
         const delayMs = parseRetryDelayMs(apiErr);
         if (delayMs != null) { return new RateLimitRetryableError(delayMs); }
     }
-    return new ProviderError(model, apiErr?.message ?? String(err));
+    return new ProviderError({provider: model, detail: apiErr?.message ?? String(err)});
 }
 
 function parseRetryDelayMs(err: ApiError): number | null {
@@ -91,7 +157,7 @@ export function callWithRetry(
     model: string,
     params: Record<string, string>,
     prompt: string,
-): Effect.Effect<ProviderResult, ModerationBlockedError | RateLimitExhaustedError | ProviderError> {
+): Effect.Effect<{buffer: Buffer; rateLimitHits: number}, ModerationBlockedError | RateLimitExhaustedError | ProviderError> {
     return Effect.gen(function* () {
         const rateLimitHitsRef = yield* Ref.make(0);
 
@@ -103,7 +169,7 @@ export function callWithRetry(
                 const b64 = result.data?.[0]?.b64_json;
                 return b64 != null
                     ? Effect.succeed(Buffer.from(b64, "base64"))
-                    : Effect.fail(new ProviderError(model, "No image data returned"));
+                    : Effect.fail(new ProviderError({provider: model, detail: "No image data returned"}));
             }),
             Effect.tapError((e) => {
                 if (e._tag !== "RateLimitRetryableError") { return Effect.void; }
@@ -120,7 +186,7 @@ export function callWithRetry(
         );
 
         const buffer = yield* Effect.retry(attempt, retryPolicy).pipe(
-            Effect.mapError((e) => e._tag === "RateLimitRetryableError" ? new RateLimitExhaustedError(model, MAX_RETRIES) : e),
+            Effect.mapError((e) => e._tag === "RateLimitRetryableError" ? new RateLimitExhaustedError({provider: model, attempts: MAX_RETRIES}) : e),
         );
 
         return {buffer, rateLimitHits: yield* Ref.get(rateLimitHitsRef)};

@@ -1,10 +1,10 @@
 import {Command, CommandExecutor, FileSystem, Path} from "@effect/platform";
 import {NodeCommandExecutor, NodeFileSystem, NodePath} from "@effect/platform-node";
-import {Duration, Effect, Either, Layer, Random, Schedule} from "effect";
+import {Duration, Effect, Layer, Random, Schedule} from "effect";
 import * as Schema from "effect/Schema";
-import {DoubleModerationError, ExecError, ProviderError, PushFailedError, RateLimitExhaustedError} from "./errors.js";
+import {DoubleModerationError, ExecError, PushFailedError} from "./errors.js";
 import {AppConfigService, AppConfigLayer} from "./config.js";
-import {MODERATION_FALLBACK, PROVIDER_CONFIGS, ProvidersService, ProvidersLayer} from "./providers.js";
+import {HistoryEntry, ProvidersServiceTag, ProvidersLayer} from "./providers.js";
 
 const MAX_PUSH_RETRIES = 5;
 const RANDOM_TWISTS = [
@@ -24,14 +24,8 @@ const RANDOM_TWISTS = [
 
 // ---- Types ----------------------------------------------------------------
 
-interface HistoryEntry {
-    provider: string;
-    status:   "success" | "rate-limited" | "failed";
-    message?: string;
-}
-
 const SlackPayload = Schema.Struct({
-    status:    Schema.Union(Schema.Literal("success"), Schema.Literal("failure")),
+    status:    Schema.Literal("success", "failure"),
     image_url: Schema.String,
     title:     Schema.String,
     requester: Schema.String,
@@ -51,7 +45,7 @@ interface SuccessCommentParams {
 const exec = (cmd: string): Effect.Effect<string, ExecError, CommandExecutor.CommandExecutor> =>
     Command.make("sh", "-c", cmd).pipe(
         Command.string,
-        Effect.mapError((e) => new ExecError(cmd, String(e))),
+        Effect.mapError((e) => new ExecError({cmd, detail: String(e)})),
         Effect.map((s) => s.trim()),
     );
 
@@ -63,21 +57,21 @@ function withTmpFile<R>(
 ): Effect.Effect<void, never, R | FileSystem.FileSystem> {
     return Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        yield* Effect.acquireUseRelease(
-            fs.makeTempFile({prefix: "meme-", suffix: `.${ext}`}).pipe(
-                Effect.tap((p) => fs.writeFileString(p, content)),
-                Effect.orElseSucceed(() => ""),
-            ),
-            (tmp) => tmp === "" ? Effect.void : use(tmp),
-            (tmp) => tmp === "" ? Effect.void : fs.remove(tmp).pipe(Effect.catchAll(() => Effect.void)),
+        const acquire = fs.makeTempFile({prefix: "meme-", suffix: `.${ext}`}).pipe(
+            Effect.tap((p) => fs.writeFileString(p, content)),
         );
+        yield* Effect.acquireUseRelease(
+            acquire,
+            use,
+            (tmp) => fs.remove(tmp).pipe(Effect.ignore),
+        ).pipe(Effect.ignore);
     });
 }
 
 const pickRandomTwist = (): Effect.Effect<string | null> =>
     Effect.gen(function* () {
         if ((yield* Random.next) >= 0.4) { return null; }
-        return RANDOM_TWISTS[yield* Random.nextIntBetween(0, RANDOM_TWISTS.length)];
+        return yield* Random.choice(RANDOM_TWISTS);
     });
 
 // ---- Pipeline steps -------------------------------------------------------
@@ -97,50 +91,8 @@ function waitForJitter(): Effect.Effect<void, never, CommandExecutor.CommandExec
     });
 }
 
-export function generateImage(prompt: string): Effect.Effect<{
-    buffer: Buffer;
-    history: HistoryEntry[];
-}, DoubleModerationError | ProviderError | RateLimitExhaustedError, ProvidersService> {
-    return Effect.gen(function* () {
-        const providers  = yield* ProvidersService;
-        const candidates = PROVIDER_CONFIGS.map((c) => c.name).filter((n) => n !== MODERATION_FALLBACK);
-        const primary    = candidates[yield* Random.nextIntBetween(0, candidates.length)];
-        yield* Effect.log(`Randomly selected ${primary} as primary provider...`);
-
-        const primaryResult = yield* providers[primary](prompt).pipe(Effect.either);
-        if (Either.isRight(primaryResult)) {
-            const {buffer, rateLimitHits} = primaryResult.right;
-            return {
-                buffer,
-                history: [
-                    ...Array.from({length: rateLimitHits}, (): HistoryEntry => ({provider: primary, status: "rate-limited"})),
-                    {provider: primary, status: "success" as const},
-                ],
-            };
-        }
-
-        const primaryErr = primaryResult.left;
-        if (primaryErr._tag !== "ModerationBlockedError") { return yield* Effect.fail(primaryErr); }
-
-        yield* Effect.log(`Moderation block - falling back to ${MODERATION_FALLBACK}...`);
-        const primaryEntry: HistoryEntry = {provider: primary, status: "failed", message: primaryErr.message};
-
-        const fallbackResult = yield* providers[MODERATION_FALLBACK](prompt).pipe(Effect.either);
-        if (Either.isRight(fallbackResult)) {
-            const {buffer, rateLimitHits} = fallbackResult.right;
-            return {
-                buffer,
-                history: [
-                    primaryEntry,
-                    ...Array.from({length: rateLimitHits}, (): HistoryEntry => ({provider: MODERATION_FALLBACK, status: "rate-limited"})),
-                    {provider: MODERATION_FALLBACK, status: "success" as const},
-                ],
-            };
-        }
-
-        return yield* Effect.fail(new DoubleModerationError(MODERATION_FALLBACK));
-    });
-}
+export const generateImage = (prompt: string) =>
+    ProvidersServiceTag.pipe(Effect.flatMap((p) => p.generateWithFallback(prompt)));
 
 // Internal: single failed push attempt — used only within commitAndPush retry loop.
 class PushAttemptError { readonly _tag = "PushAttemptError" as const; }
@@ -148,7 +100,7 @@ class PushAttemptError { readonly _tag = "PushAttemptError" as const; }
 function commitAndPush(memeId: string): Effect.Effect<void, PushFailedError, CommandExecutor.CommandExecutor | AppConfigService> {
     return Effect.gen(function* () {
         const config = yield* AppConfigService;
-        const run    = (cmd: string) => exec(cmd).pipe(Effect.mapError(() => new PushFailedError(0)));
+        const run    = (cmd: string) => exec(cmd).pipe(Effect.mapError(() => new PushFailedError({attempts: 0})));
 
         yield* run(`git config user.name "github-actions[bot]"`);
         yield* run(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
@@ -166,7 +118,7 @@ function commitAndPush(memeId: string): Effect.Effect<void, PushFailedError, Com
             Schedule.recurs(MAX_PUSH_RETRIES - 1),
         ).pipe(
             Effect.tap(() => Effect.log(`Pushed memes/${memeId}.jpg`)),
-            Effect.mapError(() => new PushFailedError(MAX_PUSH_RETRIES)),
+            Effect.mapError(() => new PushFailedError({attempts: MAX_PUSH_RETRIES})),
         );
     });
 }
@@ -175,7 +127,7 @@ const postComment = (body: string): Effect.Effect<void, never, CommandExecutor.C
     Effect.gen(function* () {
         const config = yield* AppConfigService;
         yield* withTmpFile("txt", body, (tmp) =>
-            exec(`gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${tmp}`).pipe(Effect.catchAll(() => Effect.void)),
+            exec(`gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${tmp}`).pipe(Effect.ignore),
         );
     });
 
@@ -184,7 +136,7 @@ const postSlack = (data: SlackPayload): Effect.Effect<void, never, CommandExecut
         const config = yield* AppConfigService;
         const json   = yield* Schema.encode(Schema.parseJson(SlackPayload))(data).pipe(Effect.orDie);
         yield* withTmpFile("json", json, (tmp) =>
-            exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${config.slackWebhookUrl}'`).pipe(Effect.catchAll(() => Effect.void)),
+            exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${config.slackWebhookUrl}'`).pipe(Effect.ignore),
         );
     });
 
@@ -196,7 +148,7 @@ function notifySuccess({memeId, history, prompt, twist}: {
         const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
         const params   = {memeId, provider, history, prompt, twist, requester: config.requester, channel: config.channel, slackLink: config.slackLink};
         yield* postComment(buildSuccessComment(params));
-        yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.catchAll(() => Effect.void));
+        yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.ignore);
         yield* Effect.log(`Issue #${config.issueNumber} closed.`);
         const imageUrl = `https://raw.githubusercontent.com/${config.repo}/refs/heads/main/memes/${memeId}.jpg`;
         yield* postSlack({status: "success", image_url: imageUrl, title: config.memePrompt, requester: config.requester, error: "", provider});
@@ -250,16 +202,19 @@ const program = Effect.gen(function* () {
     yield* notifySuccess({memeId, history, prompt, twist});
     yield* Effect.log("Done.");
 }).pipe(
+    Effect.catchTag("DoubleModerationError", (e) => Effect.gen(function* () {
+        const config = yield* AppConfigService;
+        yield* Effect.logError(`Fatal: ${e.message}`);
+        yield* postComment(`❌ Meme generation failed.\n\n\`\`\`\n${e.message}\n\`\`\``);
+        yield* postSlack({status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, error: e.message});
+        yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`).pipe(Effect.ignore);
+        return yield* Effect.die("failure-handled");
+    })),
     Effect.catchAll((e) => Effect.gen(function* () {
         const config = yield* AppConfigService;
-        const msg    = e != null && typeof e === "object" && "message" in e ? String((e as {message: unknown}).message) : String(e);
-        const tag    = e != null && typeof e === "object" && "_tag" in e ? (e as {_tag: string})._tag : "";
-        yield* Effect.logError(`Fatal: ${msg}`);
-        yield* postComment(`❌ Meme generation failed.\n\n\`\`\`\n${msg}\n\`\`\``);
-        yield* postSlack({status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, error: msg});
-        if (tag === "DoubleModerationError") {
-            yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`).pipe(Effect.catchAll(() => Effect.void));
-        }
+        yield* Effect.logError(`Fatal: ${e.message}`);
+        yield* postComment(`❌ Meme generation failed.\n\n\`\`\`\n${e.message}\n\`\`\``);
+        yield* postSlack({status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, error: e.message});
         return yield* Effect.die("failure-handled");
     })),
 );
