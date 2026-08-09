@@ -1,3 +1,4 @@
+import * as ConfigError from "effect/ConfigError";
 import {Config, Context, Effect, Layer, Schema} from "effect";
 
 export interface AppConfig {
@@ -17,7 +18,9 @@ export const AppConfigLayer = Layer.effect(AppConfigService, Effect.gen(function
     const issueNumber     = yield* Config.string("ISSUE_NUMBER");
     const issueBody       = yield* Config.string("ISSUE_BODY");
 
-    const fields = yield* parseIssueBody(issueBody);
+    const fields = yield* parseIssueBody(issueBody).pipe(
+        Effect.mapError((e) => ConfigError.InvalidData(["ISSUE_BODY"], e.message)),
+    );
 
     return {issueNumber, repo, slackWebhookUrl, requester: fields.sender, memePrompt: fields.message, channel: fields.channel, slackLink: fields.link};
 }));

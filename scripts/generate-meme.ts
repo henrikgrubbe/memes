@@ -1,10 +1,10 @@
 import {Command, CommandExecutor, FileSystem, Path} from "@effect/platform";
 import {NodeCommandExecutor, NodeFileSystem, NodePath} from "@effect/platform-node";
 import {Duration, Effect, Layer, Random, Schedule} from "effect";
-import * as Schema from "effect/Schema";
 import {DoubleModerationError, ExecError, PushFailedError} from "./errors.js";
 import {AppConfigService, AppConfigLayer} from "./config.js";
-import {HistoryEntry, ProvidersServiceTag, ProvidersLayer} from "./providers.js";
+import {ProvidersServiceTag, ProvidersLayer} from "./providers.js";
+import {NotifierServiceTag, NotifierLayer} from "./notifier.js";
 
 const MAX_PUSH_RETRIES = 5;
 const RANDOM_TWISTS = [
@@ -22,23 +22,6 @@ const RANDOM_TWISTS = [
     "Make it look like a children's book illustration.",
 ];
 
-// ---- Types ----------------------------------------------------------------
-
-const SlackPayload = Schema.Struct({
-    status:    Schema.Literal("success", "failure"),
-    image_url: Schema.String,
-    title:     Schema.String,
-    requester: Schema.String,
-    error:     Schema.String,
-    provider:  Schema.optional(Schema.String),
-});
-type SlackPayload = Schema.Schema.Type<typeof SlackPayload>;
-
-interface SuccessCommentParams {
-    memeId: string; provider: string; history: HistoryEntry[];
-    prompt: string; twist: string | null; requester: string; channel: string; slackLink: string;
-}
-
 // ---- Helpers --------------------------------------------------------------
 
 // Runs a shell command, returns trimmed stdout.
@@ -48,25 +31,6 @@ const exec = (cmd: string): Effect.Effect<string, ExecError, CommandExecutor.Com
         Effect.mapError((e) => new ExecError({cmd, detail: String(e)})),
         Effect.map((s) => s.trim()),
     );
-
-// Writes content to a tmp file, calls use(path), then cleans up.
-function withTmpFile<R>(
-    ext: string,
-    content: string,
-    use: (tmpPath: string) => Effect.Effect<void, never, R>,
-): Effect.Effect<void, never, R | FileSystem.FileSystem> {
-    return Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const acquire = fs.makeTempFile({prefix: "meme-", suffix: `.${ext}`}).pipe(
-            Effect.tap((p) => fs.writeFileString(p, content)),
-        );
-        yield* Effect.acquireUseRelease(
-            acquire,
-            use,
-            (tmp) => fs.remove(tmp).pipe(Effect.ignore),
-        ).pipe(Effect.ignore);
-    });
-}
 
 const pickRandomTwist = (): Effect.Effect<string | null> =>
     Effect.gen(function* () {
@@ -123,58 +87,6 @@ function commitAndPush(memeId: string): Effect.Effect<void, PushFailedError, Com
     });
 }
 
-const postComment = (body: string): Effect.Effect<void, never, CommandExecutor.CommandExecutor | AppConfigService | FileSystem.FileSystem> =>
-    Effect.gen(function* () {
-        const config = yield* AppConfigService;
-        yield* withTmpFile("txt", body, (tmp) =>
-            exec(`gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${tmp}`).pipe(Effect.ignore),
-        );
-    });
-
-const postSlack = (data: SlackPayload): Effect.Effect<void, never, CommandExecutor.CommandExecutor | AppConfigService | FileSystem.FileSystem> =>
-    Effect.gen(function* () {
-        const config = yield* AppConfigService;
-        const json   = yield* Schema.encode(Schema.parseJson(SlackPayload))(data).pipe(Effect.orDie);
-        yield* withTmpFile("json", json, (tmp) =>
-            exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${config.slackWebhookUrl}'`).pipe(Effect.ignore),
-        );
-    });
-
-function notifySuccess({memeId, history, prompt, twist}: {
-    memeId: string; history: HistoryEntry[]; prompt: string; twist: string | null;
-}): Effect.Effect<void, never, CommandExecutor.CommandExecutor | AppConfigService | FileSystem.FileSystem> {
-    return Effect.gen(function* () {
-        const config   = yield* AppConfigService;
-        const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
-        const params   = {memeId, provider, history, prompt, twist, requester: config.requester, channel: config.channel, slackLink: config.slackLink};
-        yield* postComment(buildSuccessComment(params));
-        yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.ignore);
-        yield* Effect.log(`Issue #${config.issueNumber} closed.`);
-        const imageUrl = `https://raw.githubusercontent.com/${config.repo}/refs/heads/main/memes/${memeId}.jpg`;
-        yield* postSlack({status: "success", image_url: imageUrl, title: config.memePrompt, requester: config.requester, error: "", provider});
-    });
-}
-
-function buildSuccessComment({memeId, provider, history, prompt, twist, requester, channel, slackLink}: SuccessCommentParams): string {
-    const providerNote  = ` _(${[provider, twist].filter((x) => x != null).join(" - ")})_`;
-    const promptDisplay = prompt.includes("`") ? `\`\`${prompt}\`\`` : `\`${prompt}\``;
-    return [
-        `🎉 Meme generated and committed to [memes/${memeId}.jpg](../blob/main/memes/${memeId}.jpg)${providerNote}`,
-        ``,
-        `**Requested by:** ${requester} in ${channel} - [View in Slack](${slackLink})`,
-        `**Prompt:** ${promptDisplay}`,
-        ``,
-        `**Provider attempts:**`,
-        ...history.map(({provider, status, message}) => {
-            switch (status) {
-                case "success":      return `- ${provider} ✅`;
-                case "rate-limited": return `- ${provider} ⏳ rate limited`;
-                default:             return `- ${provider} ❌ (${message})`;
-            }
-        }),
-    ].join("\n");
-}
-
 // ---- Program --------------------------------------------------------------
 
 const program = Effect.gen(function* () {
@@ -199,22 +111,18 @@ const program = Effect.gen(function* () {
     yield* fsys.writeFile(outFile, buffer);
     yield* Effect.log(`Image saved: ${outFile}`);
     yield* commitAndPush(memeId);
-    yield* notifySuccess({memeId, history, prompt, twist});
+    const notifier = yield* NotifierServiceTag;
+    yield* notifier.notifySuccess({memeId, history, prompt, twist});
     yield* Effect.log("Done.");
 }).pipe(
     Effect.catchTag("DoubleModerationError", (e) => Effect.gen(function* () {
-        const config = yield* AppConfigService;
         yield* Effect.logError(`Fatal: ${e.message}`);
-        yield* postComment(`❌ Meme generation failed.\n\n\`\`\`\n${e.message}\n\`\`\``);
-        yield* postSlack({status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, error: e.message});
-        yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`).pipe(Effect.ignore);
+        yield* NotifierServiceTag.pipe(Effect.flatMap((n) => n.notifyFailure(e.message, true)));
         return yield* Effect.die("failure-handled");
     })),
     Effect.catchAll((e) => Effect.gen(function* () {
-        const config = yield* AppConfigService;
         yield* Effect.logError(`Fatal: ${e.message}`);
-        yield* postComment(`❌ Meme generation failed.\n\n\`\`\`\n${e.message}\n\`\`\``);
-        yield* postSlack({status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, error: e.message});
+        yield* NotifierServiceTag.pipe(Effect.flatMap((n) => n.notifyFailure(e.message)));
         return yield* Effect.die("failure-handled");
     })),
 );
@@ -224,6 +132,7 @@ const AppLayer = Layer.mergeAll(
     NodePath.layer,
     NodeFileSystem.layer,
     ProvidersLayer,
+    NotifierLayer,
     NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
 );
 

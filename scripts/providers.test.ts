@@ -6,6 +6,9 @@ import {describe, expect, it} from "vitest";
 import {ModerationBlockedError, ProviderError, RateLimitExhaustedError} from "./errors.js";
 import {callWithRetry, MAX_RETRIES} from "./providers.js";
 
+const PROVIDER = "test-provider";
+const call = (client: OpenAI) => callWithRetry(PROVIDER, client, "m", {}, "prompt");
+
 // ---- Mock OpenAI client factory -------------------------------------------
 
 type ImageResponse = {data: Array<{b64_json?: string}>};
@@ -32,17 +35,16 @@ const runTC = <A, E>(effect: Effect.Effect<A, E, never>) =>
 
 describe("callWithRetry", () => {
     it("succeeds on first try", async () => {
-        const exit = await run(callWithRetry(makeClient([ok()]), "m", {}, "prompt"));
+        const exit = await run(call(makeClient([ok()])));
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
             expect(exit.value.buffer.toString("base64")).toBe("aGVsbG8=");
-            expect(exit.value.rateLimitHits).toBe(0);
+            expect(exit.value.history).toEqual([{provider: PROVIDER, status: "success"}]);
         }
     });
 
     it("returns ProviderError when response has no image data", async () => {
-        const client = makeClient([() => Promise.resolve({data: []})]);
-        const exit   = await run(callWithRetry(client, "m", {}, "prompt"));
+        const exit = await run(call(makeClient([() => Promise.resolve({data: []})])));
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
             expect(exit.cause._tag).toBe("Fail");
@@ -52,7 +54,7 @@ describe("callWithRetry", () => {
     });
 
     it("fails immediately with ModerationBlockedError on moderation block", async () => {
-        const exit = await run(callWithRetry(makeClient([mod()]), "m", {}, "prompt"));
+        const exit = await run(call(makeClient([mod()])));
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
             // @ts-expect-error accessing .error on Cause.Fail
@@ -61,7 +63,7 @@ describe("callWithRetry", () => {
     });
 
     it("fails immediately with ProviderError on generic server error", async () => {
-        const exit = await run(callWithRetry(makeClient([fail("internal error")]), "m", {}, "prompt"));
+        const exit = await run(call(makeClient([fail("internal error")])));
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
             // @ts-expect-error accessing .error on Cause.Fail
@@ -72,14 +74,17 @@ describe("callWithRetry", () => {
     it("retries after rate limit and succeeds", async () => {
         const client = makeClient([rl(), ok()]);
         const test   = Effect.gen(function* () {
-            const fiber = yield* Effect.fork(callWithRetry(client, "m", {}, "prompt"));
+            const fiber = yield* Effect.fork(call(client));
             yield* TestClock.adjust(Duration.seconds(2));
             return yield* Fiber.join(fiber);
         });
         const exit = await runTC(test);
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
-            expect(exit.value.rateLimitHits).toBe(1);
+            expect(exit.value.history).toEqual([
+                {provider: PROVIDER, status: "rate-limited"},
+                {provider: PROVIDER, status: "success"},
+            ]);
         }
     });
 
@@ -88,7 +93,7 @@ describe("callWithRetry", () => {
         const client    = makeClient(responses);
         const test      = Effect.gen(function* () {
             const fiber = yield* Effect.fork(
-                Effect.exit(callWithRetry(client, "m", {}, "prompt")),
+                Effect.exit(call(client)),
             );
             yield* TestClock.adjust(Duration.seconds(MAX_RETRIES * 2));
             return yield* Fiber.join(fiber);
@@ -117,7 +122,7 @@ describe("callWithRetry", () => {
                 },
             },
         } as unknown as OpenAI;
-        await run(callWithRetry(client, "dall-e-3", {size: "1024x1024", quality: "hd"}, "cat"));
+        await run(callWithRetry(PROVIDER, client, "dall-e-3", {size: "1024x1024", quality: "hd"}, "cat"));
         expect(capturedParams["size"]).toBe("1024x1024");
         expect(capturedParams["quality"]).toBe("hd");
         expect(capturedParams["model"]).toBe("dall-e-3");

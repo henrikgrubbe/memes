@@ -31,7 +31,7 @@ export interface HistoryEntry {
 // Deep interface: callers ask for an image; provider selection, retry, and
 // moderation fallback are entirely behind the seam.
 
-export type ProviderFn = (prompt: string) => Effect.Effect<{buffer: Buffer; rateLimitHits: number}, ModerationBlockedError | RateLimitExhaustedError | ProviderError>;
+export type ProviderFn = (prompt: string) => Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, ModerationBlockedError | RateLimitExhaustedError | ProviderError>;
 
 export interface ProvidersService {
     generateWithFallback(prompt: string): Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, DoubleModerationError | ProviderError | RateLimitExhaustedError>;
@@ -55,7 +55,7 @@ export const ProvidersLayer = Layer.effect(ProvidersServiceTag, Effect.gen(funct
             Config.string(envKey).pipe(
                 Effect.map((apiKey) => {
                     const client = new OpenAI({apiKey, ...(baseURL != null ? {baseURL} : {})});
-                    const fn: ProviderFn = (prompt) => callWithRetry(client, model, params ?? {}, prompt);
+                    const fn: ProviderFn = (prompt) => callWithRetry(name, client, model, params ?? {}, prompt);
                     return [name, fn] as const;
                 }),
             ),
@@ -80,25 +80,11 @@ function generateWithFallback(
         yield* Effect.log(`Randomly selected ${primary} as primary provider...`);
 
         return yield* providers[primary](prompt).pipe(
-            Effect.map(({buffer, rateLimitHits}) => ({
-                buffer,
-                history: [
-                    ...Array.from({length: rateLimitHits}, (): HistoryEntry => ({provider: primary, status: "rate-limited"})),
-                    {provider: primary, status: "success" as const},
-                ],
-            })),
             Effect.catchTag("ModerationBlockedError", (primaryErr) => Effect.gen(function* () {
                 yield* Effect.log(`Moderation block on ${primary} - falling back to ${MODERATION_FALLBACK}...`);
                 const primaryEntry: HistoryEntry = {provider: primary, status: "failed", message: primaryErr.message};
                 return yield* providers[MODERATION_FALLBACK](prompt).pipe(
-                    Effect.map(({buffer, rateLimitHits}) => ({
-                        buffer,
-                        history: [
-                            primaryEntry,
-                            ...Array.from({length: rateLimitHits}, (): HistoryEntry => ({provider: MODERATION_FALLBACK, status: "rate-limited"})),
-                            {provider: MODERATION_FALLBACK, status: "success" as const},
-                        ],
-                    })),
+                    Effect.map(({buffer, history}) => ({buffer, history: [primaryEntry, ...history]})),
                     Effect.catchTag("ModerationBlockedError", () =>
                         Effect.fail(new DoubleModerationError({fallbackProvider: MODERATION_FALLBACK})),
                     ),
@@ -153,11 +139,12 @@ function parseRetryDelayMs(err: ApiError): number | null {
 }
 
 export function callWithRetry(
+    providerName: string,
     client: OpenAI,
     model: string,
     params: Record<string, string>,
     prompt: string,
-): Effect.Effect<{buffer: Buffer; rateLimitHits: number}, ModerationBlockedError | RateLimitExhaustedError | ProviderError> {
+): Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, ModerationBlockedError | RateLimitExhaustedError | ProviderError> {
     return Effect.gen(function* () {
         const rateLimitHitsRef = yield* Ref.make(0);
 
@@ -189,6 +176,11 @@ export function callWithRetry(
             Effect.mapError((e) => e._tag === "RateLimitRetryableError" ? new RateLimitExhaustedError({provider: model, attempts: MAX_RETRIES}) : e),
         );
 
-        return {buffer, rateLimitHits: yield* Ref.get(rateLimitHitsRef)};
+        const rateLimitHits = yield* Ref.get(rateLimitHitsRef);
+        const history: HistoryEntry[] = [
+            ...Array.from({length: rateLimitHits}, (): HistoryEntry => ({provider: providerName, status: "rate-limited"})),
+            {provider: providerName, status: "success"},
+        ];
+        return {buffer, history};
     });
 }

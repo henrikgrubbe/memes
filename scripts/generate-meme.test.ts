@@ -7,8 +7,11 @@ import type {ProviderFn} from "./providers.js";
 
 // ---- Provider mock helpers ------------------------------------------------
 
-const successFn   = (): ProviderFn => (_) => Effect.succeed({buffer: Buffer.from("hello"), rateLimitHits: 0});
-const successRlFn = (hits: number): ProviderFn => (_) => Effect.succeed({buffer: Buffer.from("hello"), rateLimitHits: hits});
+const successFn   = (provider = PRIMARY): ProviderFn => (_) => Effect.succeed({buffer: Buffer.from("hello"), history: [{provider, status: "success"}]});
+const successRlFn = (provider: string, hits: number): ProviderFn => (_) => Effect.succeed({buffer: Buffer.from("hello"), history: [
+    ...Array.from({length: hits}, (): {provider: string; status: "rate-limited"} => ({provider, status: "rate-limited"})),
+    {provider, status: "success"},
+]});
 const modFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ModerationBlockedError({provider, detail: "blocked"}));
 const rlFn        = (provider: string): ProviderFn => (_) => Effect.fail(new RateLimitExhaustedError({provider, attempts: 10}));
 const errFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ProviderError({provider, detail: "error"}));
@@ -38,7 +41,7 @@ describe("generateImage", () => {
     it("records rate-limit hits in history when primary succeeds after rate limits", async () => {
         const exit = await run(
             generateImage("make a meme"),
-            makeProvidersLayer({[PRIMARY]: successRlFn(2), [MODERATION_FALLBACK]: successFn()}),
+            makeProvidersLayer({[PRIMARY]: successRlFn(PRIMARY, 2), [MODERATION_FALLBACK]: successFn()}),
         );
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
@@ -52,7 +55,7 @@ describe("generateImage", () => {
     it("falls back to fallback provider on moderation block", async () => {
         const exit = await run(
             generateImage("make a meme"),
-            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY), [MODERATION_FALLBACK]: successFn()}),
+            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY), [MODERATION_FALLBACK]: successFn(MODERATION_FALLBACK)}),
         );
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
