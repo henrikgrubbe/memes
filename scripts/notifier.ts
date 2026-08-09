@@ -115,5 +115,15 @@ const makeNotifier = (): NotifierService => ({
     }),
 });
 
-export const NotifierLayer: Layer.Layer<NotifierServiceTag> =
-    Layer.succeed(NotifierServiceTag, makeNotifier());
+export const NotifierLayer: Layer.Layer<NotifierServiceTag, never, CommandExecutor.CommandExecutor | AppConfigService | FileSystem.FileSystem> =
+    Layer.effect(
+        NotifierServiceTag,
+        Effect.gen(function* () {
+            // Yield deps here so the layer type accurately declares its requirements.
+            // The service methods close over these via context at runtime.
+            yield* CommandExecutor.CommandExecutor;
+            yield* AppConfigService;
+            yield* FileSystem.FileSystem;
+            return makeNotifier();
+        }),
+    );

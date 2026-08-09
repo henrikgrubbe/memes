@@ -148,6 +148,7 @@ export function callWithRetry(
     return Effect.gen(function* () {
         const rateLimitHitsRef = yield* Ref.make(0);
 
+        // attempt: pure — no side-effects in the error path
         const attempt = Effect.tryPromise({
             try:   () => client.images.generate({model, prompt, ...params}),
             catch: (err) => classifyApiError(err, model),
@@ -158,18 +159,20 @@ export function callWithRetry(
                     ? Effect.succeed(Buffer.from(b64, "base64"))
                     : Effect.fail(new ProviderError({provider: model, detail: "No image data returned"}));
             }),
-            Effect.tapError((e) => {
-                if (e._tag !== "RateLimitRetryableError") { return Effect.void; }
-                return Effect.gen(function* () {
-                    const hits = yield* Ref.updateAndGet(rateLimitHitsRef, (n) => n + 1);
-                    yield* Effect.log(`Rate limited - retrying in ${e.delayMs / 1000}s (attempt ${hits}/${MAX_RETRIES})...`);
-                    yield* Effect.sleep(Duration.millis(e.delayMs));
-                });
-            }),
         );
 
+        // Schedule owns all timing and logging.
+        // intersect output is [CallError, number]; `n` is the 0-indexed retry count from recurs.
         const retryPolicy = Schedule.recurWhile((e: CallError) => e._tag === "RateLimitRetryableError").pipe(
             Schedule.intersect(Schedule.recurs(MAX_RETRIES - 1)),
+            Schedule.addDelayEffect(([e, n]: [CallError, number]) => {
+                if (e._tag !== "RateLimitRetryableError") { return Effect.succeed(Duration.zero); }
+                const hit = n + 1;
+                return Ref.set(rateLimitHitsRef, hit).pipe(
+                    Effect.zipRight(Effect.log(`Rate limited - retrying in ${e.delayMs / 1000}s (attempt ${hit}/${MAX_RETRIES})...`)),
+                    Effect.as(Duration.millis(e.delayMs)),
+                );
+            }),
         );
 
         const buffer = yield* Effect.retry(attempt, retryPolicy).pipe(

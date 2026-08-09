@@ -1,12 +1,12 @@
 import {Command, CommandExecutor, FileSystem, Path} from "@effect/platform";
 import {NodeCommandExecutor, NodeFileSystem, NodePath} from "@effect/platform-node";
-import {Duration, Effect, Layer, Random, Schedule} from "effect";
-import {DoubleModerationError, ExecError, PushFailedError} from "./errors.js";
+import {Duration, Effect, Layer, Random} from "effect";
+import {DoubleModerationError, ExecError} from "./errors.js";
 import {AppConfigService, AppConfigLayer} from "./config.js";
 import {ProvidersServiceTag, ProvidersLayer} from "./providers.js";
 import {NotifierServiceTag, NotifierLayer} from "./notifier.js";
+import {GitServiceTag, GitLayer} from "./git.js";
 
-const MAX_PUSH_RETRIES = 5;
 const RANDOM_TWISTS = [
     "Make it extremely dramatic.",
     "Use a medieval art style.",
@@ -58,35 +58,6 @@ function waitForJitter(): Effect.Effect<void, never, CommandExecutor.CommandExec
 export const generateImage = (prompt: string) =>
     ProvidersServiceTag.pipe(Effect.flatMap((p) => p.generateWithFallback(prompt)));
 
-// Internal: single failed push attempt — used only within commitAndPush retry loop.
-class PushAttemptError { readonly _tag = "PushAttemptError" as const; }
-
-function commitAndPush(memeId: string): Effect.Effect<void, PushFailedError, CommandExecutor.CommandExecutor | AppConfigService> {
-    return Effect.gen(function* () {
-        const config = yield* AppConfigService;
-        const run    = (cmd: string) => exec(cmd).pipe(Effect.mapError(() => new PushFailedError({attempts: 0})));
-
-        yield* run(`git config user.name "github-actions[bot]"`);
-        yield* run(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
-        yield* run(`git add "memes/${memeId}.jpg"`);
-        yield* run(`git commit -m "Add meme for issue #${config.issueNumber} (${memeId})"`);
-        yield* Effect.log(`Committed memes/${memeId}.jpg`);
-
-        const pushAttempt = exec(`git pull --rebase origin main`).pipe(
-            Effect.flatMap(() => exec(`git push origin HEAD`)),
-            Effect.mapError(() => new PushAttemptError()),
-        );
-
-        yield* Effect.retry(
-            pushAttempt.pipe(Effect.tapError(() => Effect.log("Push failed - retrying..."))),
-            Schedule.recurs(MAX_PUSH_RETRIES - 1),
-        ).pipe(
-            Effect.tap(() => Effect.log(`Pushed memes/${memeId}.jpg`)),
-            Effect.mapError(() => new PushFailedError({attempts: MAX_PUSH_RETRIES})),
-        );
-    });
-}
-
 // ---- Program --------------------------------------------------------------
 
 const program = Effect.gen(function* () {
@@ -110,7 +81,8 @@ const program = Effect.gen(function* () {
     const {buffer, history} = yield* generateImage(prompt);
     yield* fsys.writeFile(outFile, buffer);
     yield* Effect.log(`Image saved: ${outFile}`);
-    yield* commitAndPush(memeId);
+    const git = yield* GitServiceTag;
+    yield* git.commitAndPush(memeId);
     const notifier = yield* NotifierServiceTag;
     yield* notifier.notifySuccess({memeId, history, prompt, twist});
     yield* Effect.log("Done.");
@@ -133,6 +105,7 @@ const AppLayer = Layer.mergeAll(
     NodeFileSystem.layer,
     ProvidersLayer,
     NotifierLayer,
+    GitLayer,
     NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
 );
 
