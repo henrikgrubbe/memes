@@ -13,10 +13,12 @@ export interface AppConfig {
 
 export class AppConfigService extends Context.Tag("AppConfigService")<AppConfigService, AppConfig>() {}
 export const AppConfigLayer = Layer.effect(AppConfigService, Effect.gen(function* () {
-    const repo            = yield* Config.string("REPO");
-    const slackWebhookUrl = yield* Config.string("SLACK_WEBHOOK_URL");
-    const issueNumber     = yield* Config.string("ISSUE_NUMBER");
-    const issueBody       = yield* Config.string("ISSUE_BODY");
+    const {repo, slackWebhookUrl, issueNumber, issueBody} = yield* Config.all({
+        repo:            Config.string("REPO"),
+        slackWebhookUrl: Config.string("SLACK_WEBHOOK_URL"),
+        issueNumber:     Config.string("ISSUE_NUMBER"),
+        issueBody:       Config.string("ISSUE_BODY"),
+    });
 
     const fields = yield* parseIssueBody(issueBody).pipe(
         Effect.mapError((e) => ConfigError.InvalidData(["ISSUE_BODY"], e.message)),

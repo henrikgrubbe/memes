@@ -20,13 +20,6 @@ export class RateLimitExhaustedError extends Data.TaggedError("RateLimitExhauste
     get message() { return `${this.provider} rate-limit retries exhausted after ${this.attempts} attempts`; }
 }
 
-export class ExecError extends Data.TaggedError("ExecError")<{
-    readonly cmd:    string;
-    readonly detail: string;
-}> {
-    get message() { return `Command failed: ${this.cmd}\n${this.detail}`; }
-}
-
 export class PushFailedError extends Data.TaggedError("PushFailedError")<{
     readonly attempts: number;
 }> {

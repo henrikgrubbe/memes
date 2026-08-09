@@ -1,6 +1,6 @@
 import {Command, CommandExecutor} from "@effect/platform";
 import {Context, Effect, Layer, Schedule} from "effect";
-import {ExecError, PushFailedError} from "./errors.js";
+import {PushFailedError} from "./errors.js";
 import {AppConfigService} from "./config.js";
 
 // ---- GitService -------------------------------------------------------------
@@ -30,10 +30,10 @@ const MAX_PUSH_RETRIES = 5;
 // Internal: single failed push attempt — sentinel for the push retry loop.
 class PushAttemptError { readonly _tag = "PushAttemptError" as const; }
 
-const exec = (cmd: string): Effect.Effect<string, ExecError, CommandExecutor.CommandExecutor> =>
+const exec = (cmd: string): Effect.Effect<string, PushFailedError, CommandExecutor.CommandExecutor> =>
     Command.make("sh", "-c", cmd).pipe(
         Command.string,
-        Effect.mapError((e) => new ExecError({cmd, detail: String(e)})),
+        Effect.mapError(() => new PushFailedError({attempts: 0})),
         Effect.map((s) => s.trim()),
     );
 
@@ -47,12 +47,11 @@ export const GitLayer: Layer.Layer<GitServiceTag, never, CommandExecutor.Command
                 commitAndPush: (memeId: string): Effect.Effect<void, PushFailedError, CommandExecutor.CommandExecutor | AppConfigService> =>
                     Effect.gen(function* () {
                         const config = yield* AppConfigService;
-                        const run    = (cmd: string) => exec(cmd).pipe(Effect.mapError(() => new PushFailedError({attempts: 0})));
 
-                        yield* run(`git config user.name "github-actions[bot]"`);
-                        yield* run(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
-                        yield* run(`git add "memes/${memeId}.jpg"`);
-                        yield* run(`git commit -m "Add meme for issue #${config.issueNumber} (${memeId})"`);
+                        yield* exec(`git config user.name "github-actions[bot]"`);
+                        yield* exec(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
+                        yield* exec(`git add "memes/${memeId}.jpg"`);
+                        yield* exec(`git commit -m "Add meme for issue #${config.issueNumber} (${memeId})"`);
                         yield* Effect.log(`Committed memes/${memeId}.jpg`);
 
                         const pushAttempt = exec(`git pull --rebase origin main`).pipe(

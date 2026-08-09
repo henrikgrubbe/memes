@@ -1,7 +1,6 @@
 import {Command, CommandExecutor, FileSystem} from "@effect/platform";
 import {Context, Effect, Layer} from "effect";
 import * as Schema from "effect/Schema";
-import {ExecError} from "./errors.js";
 import {AppConfigService} from "./config.js";
 import type {HistoryEntry} from "./providers.js";
 
@@ -39,10 +38,10 @@ export class NotifierServiceTag extends Context.Tag("NotifierService")<NotifierS
 
 type NotifierDeps = CommandExecutor.CommandExecutor | AppConfigService | FileSystem.FileSystem;
 
-const exec = (cmd: string): Effect.Effect<string, ExecError, CommandExecutor.CommandExecutor> =>
+const exec = (cmd: string): Effect.Effect<string, never, CommandExecutor.CommandExecutor> =>
     Command.make("sh", "-c", cmd).pipe(
         Command.string,
-        Effect.mapError((e) => new ExecError({cmd, detail: String(e)})),
+        Effect.orDie,
         Effect.map((s) => s.trim()),
     );
 
