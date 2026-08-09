@@ -1,7 +1,7 @@
-import {Command, CommandExecutor, FileSystem, Path} from "@effect/platform";
+import {FileSystem, Path} from "@effect/platform";
 import {NodeCommandExecutor, NodeFileSystem, NodePath} from "@effect/platform-node";
-import {Duration, Effect, Layer, Random} from "effect";
-import {DoubleModerationError, ExecError} from "./errors.js";
+import {Effect, Layer, Random} from "effect";
+import {DoubleModerationError} from "./errors.js";
 import {AppConfigService, AppConfigLayer} from "./config.js";
 import {ProvidersServiceTag, ProvidersLayer} from "./providers.js";
 import {NotifierServiceTag, NotifierLayer} from "./notifier.js";
@@ -24,14 +24,6 @@ const RANDOM_TWISTS = [
 
 // ---- Helpers --------------------------------------------------------------
 
-// Runs a shell command, returns trimmed stdout.
-const exec = (cmd: string): Effect.Effect<string, ExecError, CommandExecutor.CommandExecutor> =>
-    Command.make("sh", "-c", cmd).pipe(
-        Command.string,
-        Effect.mapError((e) => new ExecError({cmd, detail: String(e)})),
-        Effect.map((s) => s.trim()),
-    );
-
 const pickRandomTwist = (): Effect.Effect<string | null> =>
     Effect.gen(function* () {
         if ((yield* Random.next) >= 0.4) { return null; }
@@ -39,21 +31,6 @@ const pickRandomTwist = (): Effect.Effect<string | null> =>
     });
 
 // ---- Pipeline steps -------------------------------------------------------
-
-function waitForJitter(): Effect.Effect<void, never, CommandExecutor.CommandExecutor | AppConfigService> {
-    return Effect.gen(function* () {
-        const config   = yield* AppConfigService;
-        const runsJson = yield* exec(`gh api repos/${config.repo}/actions/runs --jq '.workflow_runs | map(select(.status == "in_progress")) | length'`).pipe(
-            Effect.orElseSucceed(() => "1"),
-        );
-        const concurrentRuns = Math.min(isNaN(parseInt(runsJson, 10)) ? 1 : parseInt(runsJson, 10), 10);
-        const jitterMs = concurrentRuns <= 1 ? 0 : Math.floor((yield* Random.next) * concurrentRuns * 13_000);
-        if (jitterMs > 0) {
-            yield* Effect.log(`${concurrentRuns} concurrent runs - waiting ${(jitterMs / 1000).toFixed(1)}s before first attempt...`);
-            yield* Effect.sleep(Duration.millis(jitterMs));
-        }
-    });
-}
 
 export const generateImage = (prompt: string) =>
     ProvidersServiceTag.pipe(Effect.flatMap((p) => p.generateWithFallback(prompt)));
@@ -77,7 +54,6 @@ const program = Effect.gen(function* () {
     yield* fsys.makeDirectory(memesDir, {recursive: true});
 
     yield* Effect.log(`Starting generation for issue #${config.issueNumber}: "${config.memePrompt}"`);
-    yield* waitForJitter();
     const {buffer, history} = yield* generateImage(prompt);
     yield* fsys.writeFile(outFile, buffer);
     yield* Effect.log(`Image saved: ${outFile}`);
