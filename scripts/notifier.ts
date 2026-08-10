@@ -11,6 +11,7 @@ const SlackPayload = Schema.Struct({
     image_url: Schema.String,
     title:     Schema.String,
     requester: Schema.String,
+    channel:   Schema.String,
     error:     Schema.String,
     provider:  Schema.optional(Schema.String),
 });
@@ -101,13 +102,13 @@ const makeNotifier = (): NotifierService => ({
         yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.ignore);
         yield* Effect.log(`Issue #${config.issueNumber} closed.`);
         const imageUrl = `https://raw.githubusercontent.com/${config.repo}/refs/heads/main/memes/${memeId}.jpg`;
-        yield* postSlack({status: "success", image_url: imageUrl, title: config.memePrompt, requester: config.requester, error: "", provider});
+        yield* postSlack({status: "success", image_url: imageUrl, title: config.memePrompt, requester: config.requester, channel: config.channel, error: "", provider});
     }),
 
     notifyFailure: (message, closeNotPlanned = false) => Effect.gen(function* () {
         const config = yield* AppConfigService;
         yield* postComment(`❌ Meme generation failed.\n\n\`\`\`\n${message}\n\`\`\``);
-        yield* postSlack({status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, error: message});
+        yield* postSlack({status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, channel: config.channel, error: message});
         if (closeNotPlanned) {
             yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`).pipe(Effect.ignore);
         }
