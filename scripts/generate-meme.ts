@@ -75,14 +75,17 @@ const program = Effect.gen(function* () {
     })),
 );
 
+const NodeLayer   = NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer));
+const SharedLayer = Layer.mergeAll(AppConfigLayer, NodeFileSystem.layer, NodeLayer);
+
 const AppLayer = Layer.mergeAll(
     AppConfigLayer,
     NodePath.layer,
     NodeFileSystem.layer,
     ProvidersLayer,
-    NotifierLayer,
-    GitLayer,
-    NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
+    NotifierLayer.pipe(Layer.provide(SharedLayer)),
+    GitLayer.pipe(Layer.provide(SharedLayer)),
+    NodeLayer,
 );
 
 import {fileURLToPath} from "url";
