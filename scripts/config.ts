@@ -1,5 +1,5 @@
-import {Config, Context, Effect, Layer} from "effect";
-import {IssueBodyMissingFieldError} from "./errors.js";
+import * as ConfigError from "effect/ConfigError";
+import {Config, Context, Effect, Layer, Schema} from "effect";
 
 export interface AppConfig {
     issueNumber:     string;
@@ -12,16 +12,39 @@ export interface AppConfig {
 }
 
 export class AppConfigService extends Context.Tag("AppConfigService")<AppConfigService, AppConfig>() {}
+export const AppConfigLayer = Layer.effect(AppConfigService, Effect.gen(function* () {
+    const {repo, slackWebhookUrl, issueNumber, issueBody} = yield* Config.all({
+        repo:            Config.string("REPO"),
+        slackWebhookUrl: Config.string("SLACK_WEBHOOK_URL"),
+        issueNumber:     Config.string("ISSUE_NUMBER"),
+        issueBody:       Config.string("ISSUE_BODY"),
+    });
 
-export function parseIssueBody(body: string): Record<string, string> {
-    const knownFields = new Set(["sender", "message", "channel", "link"]);
+    const fields = yield* parseIssueBody(issueBody).pipe(
+        Effect.mapError((e) => ConfigError.InvalidData(["ISSUE_BODY"], e.message)),
+    );
+
+    return {issueNumber, repo, slackWebhookUrl, requester: fields.sender, memePrompt: fields.message, channel: fields.channel, slackLink: fields.link};
+}));
+
+export const parseIssueBody = (body: string) => Schema.decodeUnknown(IssueFields)(tokenizeIssueBody(body));
+
+
+export class IssueFields extends Schema.Class<IssueFields>("IssueFields")({
+    sender:  Schema.NonEmptyTrimmedString,
+    message: Schema.NonEmptyTrimmedString,
+    channel: Schema.NonEmptyTrimmedString,
+    link:    Schema.NonEmptyTrimmedString,
+}) {}
+
+function tokenizeIssueBody(body: string): Record<string, string> {
     const result: Record<string, string> = {};
     let currentKey: string | null = null;
     for (const rawLine of (body ?? "").split("\n")) {
         const line = rawLine.replace(/\r$/, "");
         const sep = line.indexOf(": ");
         const potentialKey = sep !== -1 ? line.slice(0, sep).trim().toLowerCase() : null;
-        if (potentialKey != null && knownFields.has(potentialKey)) {
+        if (potentialKey != null) {
             currentKey = potentialKey;
             result[currentKey] = line.slice(sep + 2).trim();
         } else if (currentKey != null && line.trim() !== "") {
@@ -31,20 +54,3 @@ export function parseIssueBody(body: string): Record<string, string> {
     return result;
 }
 
-export const AppConfigLayer = Layer.effect(AppConfigService, Effect.gen(function* () {
-    const repo            = yield* Config.string("REPO");
-    const slackWebhookUrl = yield* Config.string("SLACK_WEBHOOK_URL");
-    const issueNumber     = yield* Config.string("ISSUE_NUMBER");
-    const issueBody       = yield* Config.string("ISSUE_BODY");
-
-    const fields       = parseIssueBody(issueBody);
-    const requireField = (key: string): Effect.Effect<string, IssueBodyMissingFieldError> =>
-        fields[key] != null ? Effect.succeed(fields[key]) : Effect.fail(new IssueBodyMissingFieldError(key));
-
-    const requester  = yield* requireField("sender");
-    const memePrompt = yield* requireField("message");
-    const channel    = yield* requireField("channel");
-    const slackLink  = yield* requireField("link");
-
-    return {issueNumber, repo, slackWebhookUrl, requester, memePrompt, channel, slackLink};
-}));

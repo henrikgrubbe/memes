@@ -1,27 +1,25 @@
 import {Effect, Exit, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {DoubleModerationError, ModerationBlockedError, ProviderError, RateLimitExhaustedError} from "./errors.js";
+import {DoubleModerationError, ModerationBlockedError, ProviderError, RateLimitError} from "./errors.js";
 import {generateImage} from "./generate-meme.js";
-import {MODERATION_FALLBACK, ProvidersService} from "./providers.js";
+import {MODERATION_FALLBACK, makeProvidersLayer, ProvidersServiceTag} from "./providers.js";
 import type {ProviderFn} from "./providers.js";
-import {parseIssueBody} from "./config.js";
 
 // ---- Provider mock helpers ------------------------------------------------
 
-const successFn   = (): ProviderFn => (_) => Effect.succeed({buffer: Buffer.from("hello"), rateLimitHits: 0});
-const successRlFn = (hits: number): ProviderFn => (_) => Effect.succeed({buffer: Buffer.from("hello"), rateLimitHits: hits});
-const modFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ModerationBlockedError(provider, "blocked"));
-const rlFn        = (provider: string): ProviderFn => (_) => Effect.fail(new RateLimitExhaustedError(provider, 10));
-const errFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ProviderError(provider, "error"));
+const successFn   = (provider = PRIMARY): ProviderFn => (_) => Effect.succeed({buffer: Buffer.from("hello"), history: [{provider, status: "success"}]});
+const successRlFn = (provider: string, hits: number): ProviderFn => (_) => Effect.succeed({buffer: Buffer.from("hello"), history: [
+    ...Array.from({length: hits}, (): {provider: string; status: "rate-limited"} => ({provider, status: "rate-limited"})),
+    {provider, status: "success"},
+]});
+const modFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ModerationBlockedError({provider, detail: "blocked"}));
+const rlFn        = (provider: string): ProviderFn => (_) => Effect.fail(new RateLimitError({provider, attempts: 10}));
+const errFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ProviderError({provider, detail: "error"}));
 
 // Since only 1 non-fallback candidate (OpenAI), primary is always "OpenAI".
 const PRIMARY = "OpenAI";
 
-function providersLayer(primary: ProviderFn, fallback: ProviderFn): Layer.Layer<ProvidersService> {
-    return Layer.succeed(ProvidersService, {[PRIMARY]: primary, [MODERATION_FALLBACK]: fallback});
-}
-
-const run = <A, E>(effect: Effect.Effect<A, E, ProvidersService>, layer: Layer.Layer<ProvidersService>) =>
+const run = <A, E>(effect: Effect.Effect<A, E, ProvidersServiceTag>, layer: Layer.Layer<ProvidersServiceTag>) =>
     Effect.runPromise(Effect.exit(Effect.provide(effect, layer)));
 
 // ---- generateImage --------------------------------------------------------
@@ -30,7 +28,7 @@ describe("generateImage", () => {
     it("returns success with primary provider history", async () => {
         const exit = await run(
             generateImage("make a meme"),
-            providersLayer(successFn(), successFn()),
+            makeProvidersLayer({[PRIMARY]: successFn(), [MODERATION_FALLBACK]: successFn()}),
         );
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
@@ -43,7 +41,7 @@ describe("generateImage", () => {
     it("records rate-limit hits in history when primary succeeds after rate limits", async () => {
         const exit = await run(
             generateImage("make a meme"),
-            providersLayer(successRlFn(2), successFn()),
+            makeProvidersLayer({[PRIMARY]: successRlFn(PRIMARY, 2), [MODERATION_FALLBACK]: successFn()}),
         );
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
@@ -57,7 +55,7 @@ describe("generateImage", () => {
     it("falls back to fallback provider on moderation block", async () => {
         const exit = await run(
             generateImage("make a meme"),
-            providersLayer(modFn(PRIMARY), successFn()),
+            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY), [MODERATION_FALLBACK]: successFn(MODERATION_FALLBACK)}),
         );
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
@@ -70,7 +68,7 @@ describe("generateImage", () => {
     it("fails with DoubleModerationError when both providers are blocked", async () => {
         const exit = await run(
             generateImage("make a meme"),
-            providersLayer(modFn(PRIMARY), modFn(MODERATION_FALLBACK)),
+            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY), [MODERATION_FALLBACK]: modFn(MODERATION_FALLBACK)}),
         );
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
@@ -79,22 +77,22 @@ describe("generateImage", () => {
         }
     });
 
-    it("propagates RateLimitExhaustedError from primary (not a moderation block)", async () => {
+    it("propagates RateLimitError from primary (not a moderation block)", async () => {
         const exit = await run(
             generateImage("make a meme"),
-            providersLayer(rlFn(PRIMARY), successFn()),
+            makeProvidersLayer({[PRIMARY]: rlFn(PRIMARY), [MODERATION_FALLBACK]: successFn()}),
         );
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
             // @ts-expect-error accessing .error on Cause.Fail
-            expect(exit.cause.error).toBeInstanceOf(RateLimitExhaustedError);
+            expect(exit.cause.error).toBeInstanceOf(RateLimitError);
         }
     });
 
     it("propagates ProviderError from primary (not a moderation block)", async () => {
         const exit = await run(
             generateImage("make a meme"),
-            providersLayer(errFn(PRIMARY), successFn()),
+            makeProvidersLayer({[PRIMARY]: errFn(PRIMARY), [MODERATION_FALLBACK]: successFn()}),
         );
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
@@ -104,38 +102,3 @@ describe("generateImage", () => {
     });
 });
 
-// ---- parseIssueBody -------------------------------------------------------
-
-describe("parseIssueBody", () => {
-    it("parses all known fields", () => {
-        const body = "sender: hhb\nmessage: funny cat\nchannel: #memes\nlink: https://slack.com/x";
-        const result = parseIssueBody(body);
-        expect(result["sender"]).toBe("hhb");
-        expect(result["message"]).toBe("funny cat");
-        expect(result["channel"]).toBe("#memes");
-        expect(result["link"]).toBe("https://slack.com/x");
-    });
-
-    it("handles multi-line message values", () => {
-        const body = "sender: hhb\nmessage: line one\n  continuation\nchannel: #general\nlink: https://x";
-        const result = parseIssueBody(body);
-        expect(result["message"]).toBe("line one\n  continuation");
-    });
-
-    it("ignores unknown keys", () => {
-        const body = "sender: hhb\nrandom: ignored\nmessage: hi\nchannel: #c\nlink: https://x";
-        const result = parseIssueBody(body);
-        expect(result["random"]).toBeUndefined();
-    });
-
-    it("handles Windows-style CRLF line endings", () => {
-        const body = "sender: hhb\r\nmessage: hi\r\nchannel: #c\r\nlink: https://x";
-        const result = parseIssueBody(body);
-        expect(result["sender"]).toBe("hhb");
-        expect(result["message"]).toBe("hi");
-    });
-
-    it("handles missing body gracefully", () => {
-        expect(parseIssueBody("")).toEqual({});
-    });
-});
