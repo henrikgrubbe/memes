@@ -86,7 +86,7 @@ export const ProvidersLayer = Layer.effect(ProvidersServiceTag, Effect.gen(funct
 
 // ---- generateWithFallback ---------------------------------------------------
 
-const CANDIDATES = PROVIDER_CONFIGS.map((c) => c.name);
+const CANDIDATES = PROVIDER_CONFIGS.map((c) => c.name).filter((name) => name !== MODERATION_FALLBACK);
 
 function generateWithFallback(
     providers: Record<string, ProviderFn>,
