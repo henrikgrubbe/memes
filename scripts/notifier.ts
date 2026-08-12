@@ -73,12 +73,16 @@ const postSlack = (data: SlackPayload): Effect.Effect<void, never, NotifierDeps>
 
 function buildSuccessComment({memeId, provider, history, prompt, twist, requester, channel, slackLink}: {
     memeId: string; provider: string; history: HistoryEntry[];
-    prompt: string; twist: string | null; requester: string; channel: string; slackLink: string;
+    prompt: string; twist: string | null; requester: string; channel: string; slackLink: string; repo: string;
 }): string {
     const providerNote  = ` _(${[provider, twist].filter((x) => x != null).join(" - ")})_`;
     const promptDisplay = prompt.includes("`") ? `\`\`${prompt}\`\`` : `\`${prompt}\``;
+    const blobUrl       = `https://github.com/${repo}/blob/main/memes/${memeId}.jpg`;
+    const imageUrl      = `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`;
     return [
-        `🎉 Meme generated and committed to [memes/${memeId}.jpg](../blob/main/memes/${memeId}.jpg)${providerNote}`,
+        `🎉 Meme generated and committed to [memes/${memeId}.jpg](${blobUrl})${providerNote}`,
+        ``,
+        `![Generated meme](${imageUrl})`,
         ``,
         `**Requested by:** ${requester} in ${channel} - [View in Slack](${slackLink})`,
         `**Prompt:** ${promptDisplay}`,
@@ -98,7 +102,7 @@ const makeNotifier = (): NotifierService => ({
     notifySuccess: ({memeId, history, prompt, twist}) => Effect.gen(function* () {
         const config   = yield* AppConfigService;
         const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
-        yield* postComment(buildSuccessComment({memeId, provider, history, prompt, twist, requester: config.requester, channel: config.channel, slackLink: config.slackLink}));
+        yield* postComment(buildSuccessComment({memeId, provider, history, prompt, twist, requester: config.requester, channel: config.channel, slackLink: config.slackLink, repo: config.repo}));
         yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.ignore);
         yield* Effect.log(`Issue #${config.issueNumber} closed.`);
         const imageUrl = `https://raw.githubusercontent.com/${config.repo}/refs/heads/main/memes/${memeId}.jpg`;
