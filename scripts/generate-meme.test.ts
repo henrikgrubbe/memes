@@ -16,11 +16,10 @@ const modFn       = (provider: string): ProviderFn => (_) => Effect.fail(new Mod
 const rlFn        = (provider: string): ProviderFn => (_) => Effect.fail(new RateLimitError({provider, attempts: 10}));
 const errFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ProviderError({provider, detail: "error"}));
 
-// Since only 1 non-fallback candidate (OpenAI), primary is always "OpenAI".
 const PRIMARY = "OpenAI";
 
 const run = <A, E>(effect: Effect.Effect<A, E, ProvidersServiceTag>, layer: Layer.Layer<ProvidersServiceTag>) =>
-    Effect.runPromise(Effect.exit(Effect.provide(effect, layer)));
+    Effect.runPromise(Effect.exit(Effect.provide(effect.pipe(Effect.withRandomFixed([0])), layer)));
 
 // ---- generateImage --------------------------------------------------------
 
@@ -101,4 +100,3 @@ describe("generateImage", () => {
         }
     });
 });
-

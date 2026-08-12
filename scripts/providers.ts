@@ -27,14 +27,31 @@ export interface HistoryEntry {
     message?: string;
 }
 
+export interface UsageEntry {
+    inputTokens:  number;
+    outputTokens: number;
+    totalTokens:  number;
+}
+
+export interface GenerationMetadata {
+    revisedPrompt?: string;
+    usage?:         UsageEntry;
+}
+
+export interface GenerationResult {
+    buffer:   Buffer;
+    history:  HistoryEntry[];
+    metadata?: GenerationMetadata;
+}
+
 // ---- ProvidersService -------------------------------------------------------
 // Deep interface: callers ask for an image; provider selection, retry, and
 // moderation fallback are entirely behind the seam.
 
-export type ProviderFn = (prompt: string) => Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, ModerationBlockedError | RateLimitError | ProviderError>;
+export type ProviderFn = (prompt: string) => Effect.Effect<GenerationResult, ModerationBlockedError | RateLimitError | ProviderError>;
 
 export interface ProvidersService {
-    generateWithFallback(prompt: string): Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, DoubleModerationError | ProviderError | RateLimitError>;
+    generateWithFallback(prompt: string): Effect.Effect<GenerationResult, DoubleModerationError | ProviderError | RateLimitError>;
 }
 
 export class ProvidersServiceTag extends Context.Tag("ProvidersService")<ProvidersServiceTag, ProvidersService>() {}
@@ -74,7 +91,7 @@ const CANDIDATES = PROVIDER_CONFIGS.map((c) => c.name);
 function generateWithFallback(
     providers: Record<string, ProviderFn>,
     prompt: string,
-): Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, DoubleModerationError | ProviderError | RateLimitError> {
+): Effect.Effect<GenerationResult, DoubleModerationError | ProviderError | RateLimitError> {
     return Effect.gen(function* () {
         const primary = yield* Random.choice(CANDIDATES);
         yield* Effect.log(`Randomly selected ${primary} as primary provider...`);
@@ -144,7 +161,7 @@ export function callWithRetry(
     model: string,
     params: Record<string, string>,
     prompt: string,
-): Effect.Effect<{buffer: Buffer; history: HistoryEntry[]}, ModerationBlockedError | RateLimitError | ProviderError> {
+): Effect.Effect<GenerationResult, ModerationBlockedError | RateLimitError | ProviderError> {
     return Effect.gen(function* () {
         const rateLimitHitsRef = yield* Ref.make(0);
 
@@ -155,9 +172,21 @@ export function callWithRetry(
         }).pipe(
             Effect.flatMap((result) => {
                 const b64 = result.data?.[0]?.b64_json;
-                return b64 != null
-                    ? Effect.succeed(Buffer.from(b64, "base64"))
-                    : Effect.fail(new ProviderError({provider: model, detail: "No image data returned"}));
+                if (b64 == null) {
+                    return Effect.fail(new ProviderError({provider: model, detail: "No image data returned"}));
+                }
+                const usage = result.usage != null
+                    ? {
+                        inputTokens:  result.usage.input_tokens,
+                        outputTokens: result.usage.output_tokens,
+                        totalTokens:  result.usage.total_tokens,
+                    }
+                    : undefined;
+                const revisedPrompt = result.data?.[0]?.revised_prompt;
+                const metadata = usage != null || revisedPrompt != null
+                    ? {usage, revisedPrompt}
+                    : undefined;
+                return Effect.succeed({buffer: Buffer.from(b64, "base64"), metadata});
             }),
         );
 
@@ -177,7 +206,7 @@ export function callWithRetry(
             Schedule.jittered,
         );
 
-        const buffer = yield* Effect.retry(attempt, retryPolicy).pipe(
+        const {buffer, metadata} = yield* Effect.retry(attempt, retryPolicy).pipe(
             Effect.mapError((e) => e._tag === "RateLimitRetryableError" ? new RateLimitError({provider: model, attempts: MAX_RETRIES}) : e),
         );
 
@@ -186,6 +215,6 @@ export function callWithRetry(
             ...Array.from({length: rateLimitHits}, (): HistoryEntry => ({provider: providerName, status: "rate-limited"})),
             {provider: providerName, status: "success"},
         ];
-        return {buffer, history};
+        return {buffer, history, metadata};
     });
 }

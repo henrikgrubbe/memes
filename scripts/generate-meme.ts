@@ -54,13 +54,13 @@ const program = Effect.gen(function* () {
     yield* fsys.makeDirectory(memesDir, {recursive: true});
 
     yield* Effect.log(`Starting generation for issue #${config.issueNumber}: "${config.memePrompt}"`);
-    const {buffer, history} = yield* generateImage(prompt);
+    const {buffer, history, metadata} = yield* generateImage(prompt);
     yield* fsys.writeFile(outFile, buffer);
     yield* Effect.log(`Image saved: ${outFile}`);
     const git = yield* GitServiceTag;
     yield* git.commitAndPush(memeId);
     const notifier = yield* NotifierServiceTag;
-    yield* notifier.notifySuccess({memeId, history, prompt, twist});
+    yield* notifier.notifySuccess({memeId, history, prompt, twist, metadata});
     yield* Effect.log("Done.");
 }).pipe(
     Effect.catchTag("DoubleModerationError", (e) => Effect.gen(function* () {
