@@ -2,7 +2,7 @@ import {Command, CommandExecutor, FileSystem} from "@effect/platform";
 import {Context, Effect, Layer} from "effect";
 import * as Schema from "effect/Schema";
 import {AppConfigService} from "./config.js";
-import type {HistoryEntry} from "./providers.js";
+import type {GenerationMetadata, HistoryEntry} from "./providers.js";
 
 // ---- Types ------------------------------------------------------------------
 
@@ -18,10 +18,11 @@ const SlackPayload = Schema.Struct({
 type SlackPayload = Schema.Schema.Type<typeof SlackPayload>;
 
 export interface NotifySuccessParams {
-    memeId:  string;
-    history: HistoryEntry[];
-    prompt:  string;
-    twist:   string | null;
+    memeId:   string;
+    history:  HistoryEntry[];
+    prompt:   string;
+    twist:    string | null;
+    metadata?: GenerationMetadata;
 }
 
 // ---- NotifierService --------------------------------------------------------
@@ -71,12 +72,19 @@ const postSlack = (data: SlackPayload): Effect.Effect<void, never, NotifierDeps>
         );
     });
 
-function buildSuccessComment({memeId, provider, history, prompt, twist, requester, channel, slackLink}: {
+function buildSuccessComment({memeId, provider, history, prompt, twist, requester, channel, slackLink, metadata}: {
     memeId: string; provider: string; history: HistoryEntry[];
-    prompt: string; twist: string | null; requester: string; channel: string; slackLink: string; repo: string;
+    prompt: string; twist: string | null; requester: string; channel: string; slackLink: string; repo: string; metadata?: GenerationMetadata;
 }): string {
     const providerNote  = ` _(${[provider, twist].filter((x) => x != null).join(" - ")})_`;
     const promptDisplay = prompt.includes("`") ? `\`\`${prompt}\`\`` : `\`${prompt}\``;
+    const revisedPrompt = metadata?.revisedPrompt;
+    const revisedPromptDisplay = revisedPrompt == null
+        ? null
+        : (revisedPrompt.includes("`") ? `\`\`${revisedPrompt}\`\`` : `\`${revisedPrompt}\``);
+    const usageSummary = metadata?.usage == null
+        ? null
+        : `${metadata.usage.inputTokens} input, ${metadata.usage.outputTokens} output, ${metadata.usage.totalTokens} total tokens`;
     const blobUrl       = `https://github.com/${repo}/blob/main/memes/${memeId}.jpg`;
     const imageUrl      = `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`;
     return [
@@ -86,6 +94,14 @@ function buildSuccessComment({memeId, provider, history, prompt, twist, requeste
         ``,
         `**Requested by:** ${requester} in ${channel} - [View in Slack](${slackLink})`,
         `**Prompt:** ${promptDisplay}`,
+        ...(revisedPromptDisplay == null ? [] : [`**Revised prompt:** ${revisedPromptDisplay}`]),
+        ...(usageSummary == null
+            ? []
+            : [
+                `**Usage:** ${usageSummary}`,
+                `**Estimated cost:** unavailable from provider response`,
+                `**Remaining balance:** unavailable from provider response`,
+            ]),
         ``,
         `**Provider attempts:**`,
         ...history.map(({provider, status, message}) => {
@@ -99,10 +115,10 @@ function buildSuccessComment({memeId, provider, history, prompt, twist, requeste
 }
 
 const makeNotifier = (): NotifierService => ({
-    notifySuccess: ({memeId, history, prompt, twist}) => Effect.gen(function* () {
+    notifySuccess: ({memeId, history, prompt, twist, metadata}) => Effect.gen(function* () {
         const config   = yield* AppConfigService;
         const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
-        yield* postComment(buildSuccessComment({memeId, provider, history, prompt, twist, requester: config.requester, channel: config.channel, slackLink: config.slackLink, repo: config.repo}));
+        yield* postComment(buildSuccessComment({memeId, provider, history, prompt, twist, requester: config.requester, channel: config.channel, slackLink: config.slackLink, repo: config.repo, metadata}));
         yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.ignore);
         yield* Effect.log(`Issue #${config.issueNumber} closed.`);
         const imageUrl = `https://raw.githubusercontent.com/${config.repo}/refs/heads/main/memes/${memeId}.jpg`;

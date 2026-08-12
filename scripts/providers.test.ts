@@ -11,7 +11,14 @@ const call = (client: OpenAI) => callWithRetry(PROVIDER, client, "m", {}, "promp
 
 // ---- Mock OpenAI client factory -------------------------------------------
 
-type ImageResponse = {data: Array<{b64_json?: string}>};
+type ImageResponse = {
+    data: Array<{b64_json?: string; revised_prompt?: string}>;
+    usage?: {
+        input_tokens: number;
+        output_tokens: number;
+        total_tokens: number;
+    };
+};
 
 function makeClient(responses: Array<() => Promise<ImageResponse>>): OpenAI {
     let i = 0;
@@ -40,6 +47,21 @@ describe("callWithRetry", () => {
         if (Exit.isSuccess(exit)) {
             expect(exit.value.buffer.toString("base64")).toBe("aGVsbG8=");
             expect(exit.value.history).toEqual([{provider: PROVIDER, status: "success"}]);
+        }
+    });
+
+    it("captures revised prompt and usage metadata when returned", async () => {
+        const client = makeClient([() => Promise.resolve({
+            data: [{b64_json: "aGVsbG8=", revised_prompt: "revised prompt text"}],
+            usage: {input_tokens: 12, output_tokens: 34, total_tokens: 46},
+        })]);
+        const exit = await run(call(client));
+        expect(Exit.isSuccess(exit)).toBe(true);
+        if (Exit.isSuccess(exit)) {
+            expect(exit.value.metadata).toEqual({
+                revisedPrompt: "revised prompt text",
+                usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46},
+            });
         }
     });
 
