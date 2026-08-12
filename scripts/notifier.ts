@@ -95,13 +95,9 @@ function buildSuccessComment({memeId, provider, history, prompt, twist, requeste
         `**Requested by:** ${requester} in ${channel} - [View in Slack](${slackLink})`,
         `**Prompt:** ${promptDisplay}`,
         ...(revisedPromptDisplay == null ? [] : [`**Revised prompt:** ${revisedPromptDisplay}`]),
-        ...(usageSummary == null
-            ? []
-            : [
-                `**Usage:** ${usageSummary}`,
-                `**Estimated cost:** unavailable from provider response`,
-                `**Remaining balance:** unavailable from provider response`,
-            ]),
+        ...(usageSummary == null ? [] : [`**Usage:** ${usageSummary}`]),
+        `**Estimated cost:** unavailable from provider response`,
+        `**Remaining balance:** unavailable from provider response`,
         ``,
         `**Provider attempts:**`,
         ...history.map(({provider, status, message}) => {
