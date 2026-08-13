@@ -85,6 +85,12 @@ export function buildSuccessComment({memeId, provider, history, prompt, twist, r
     const usageSummary = metadata?.usage == null
         ? null
         : `${metadata.usage.inputTokens} input, ${metadata.usage.outputTokens} output, ${metadata.usage.totalTokens} total tokens`;
+    // gpt-image-2 token prices derived from empirical cost/usage data: $5/M input, $30/M output
+    const INPUT_TOKEN_PRICE_PER_M  = 5;
+    const OUTPUT_TOKEN_PRICE_PER_M = 30;
+    const costCents = metadata?.usage == null
+        ? null
+        : ((metadata.usage.inputTokens * INPUT_TOKEN_PRICE_PER_M + metadata.usage.outputTokens * OUTPUT_TOKEN_PRICE_PER_M) / 1_000_000 * 100).toFixed(3);
     const blobUrl       = `https://github.com/${repo}/blob/main/memes/${memeId}.jpg`;
     const imageUrl      = `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`;
     return [
@@ -96,8 +102,7 @@ export function buildSuccessComment({memeId, provider, history, prompt, twist, r
         `**Prompt:** ${promptDisplay}`,
         ...(revisedPromptDisplay == null ? [] : [`**Revised prompt:** ${revisedPromptDisplay}`]),
         ...(usageSummary == null ? [] : [`**Usage:** ${usageSummary}`]),
-        `**Estimated cost:** unavailable from provider response`,
-        `**Remaining balance:** unavailable from provider response`,
+        ...(costCents == null ? [] : [`**Estimated cost:** ${costCents}¢`]),
         ``,
         `**Provider attempts:**`,
         ...history.map(({provider, status, message}) => {
