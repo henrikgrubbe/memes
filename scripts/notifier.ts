@@ -72,7 +72,7 @@ const postSlack = (data: SlackPayload): Effect.Effect<void, never, NotifierDeps>
         );
     });
 
-function buildSuccessComment({memeId, provider, history, prompt, twist, requester, channel, slackLink, metadata}: {
+export function buildSuccessComment({memeId, provider, history, prompt, twist, requester, channel, slackLink, repo, metadata}: {
     memeId: string; provider: string; history: HistoryEntry[];
     prompt: string; twist: string | null; requester: string; channel: string; slackLink: string; repo: string; metadata?: GenerationMetadata;
 }): string {
