@@ -26,7 +26,7 @@ const RANDOM_TWISTS = [
 
 const pickRandomTwist = (): Effect.Effect<string | null> =>
     Effect.gen(function* () {
-        if ((yield* Random.next) >= 0.4) { return null; }
+        if ((yield* Random.next) >= 0.05) { return null; }
         return yield* Random.choice(RANDOM_TWISTS);
     });
 
