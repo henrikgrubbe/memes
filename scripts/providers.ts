@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import {Config, Context, Duration, Effect, Layer, Random, Ref, Schedule} from "effect";
 import {DoubleModerationError, ModerationBlockedError, ProviderError, RateLimitError} from "./errors.js";
 
-export const MODERATION_FALLBACK    = "xAI";
+export const MODERATION_FALLBACK    = "OpenAI";
 export const MAX_RETRIES            = 10;
 const        RETRY_DELAY_PADDING_MS = 1_000;
 
@@ -16,7 +16,7 @@ export interface ProviderConfig {
 
 export const PROVIDER_CONFIGS: ProviderConfig[] = [
     {name: "OpenAI", envKey: "OPENAI_API_KEY", model: "gpt-image-2", params: {size: "1024x1024", quality: "low", output_format: "jpeg"}},
-    {name: "xAI",    envKey: "XAI_API_KEY",    model: "grok-imagine-image", baseURL: "https://api.x.ai/v1", params: {response_format: "b64_json"}},
+//    {name: "xAI",    envKey: "XAI_API_KEY",    model: "grok-imagine-image", baseURL: "https://api.x.ai/v1", params: {response_format: "b64_json"}},
 ];
 
 // ---- HistoryEntry -----------------------------------------------------------
