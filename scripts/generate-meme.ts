@@ -1,10 +1,11 @@
 import {fileURLToPath} from "node:url";
+import {FileSystem, Path} from "@effect/platform";
 import {NodeCommandExecutor, NodeFileSystem, NodePath} from "@effect/platform-node";
 import {Effect, Layer} from "effect";
 import {AppConfigService, AppConfigLayer} from "./config.js";
 import {ProvidersServiceTag, ProvidersLayer} from "./providers.js";
 import {NotifierServiceTag, NotifierLayer} from "./notifier.js";
-import {AssetStoreTag, AssetStoreLayer} from "./assets.js";
+import {GitServiceTag, GitLayer} from "./git.js";
 
 // ---- Pipeline steps -------------------------------------------------------
 
@@ -25,22 +26,27 @@ const handleFailure = (message: string, closeNotPlanned: boolean) =>
 
 const program = Effect.gen(function* () {
     const config   = yield* AppConfigService;
+    const fsys     = yield* FileSystem.FileSystem;
+    const pathSvc  = yield* Path.Path;
     const memeId   = crypto.randomUUID();
+    const memesDir = pathSvc.join(process.cwd(), "memes");
+    const outFile  = pathSvc.join(memesDir, `${memeId}.jpg`);
 
     const fullPrompt = `Make a meme: ${config.memePrompt}.`;
     if (fullPrompt.length > 4000) {
         yield* Effect.logWarning(`Prompt truncated from ${fullPrompt.length} to 4000 characters.`);
     }
     const prompt = fullPrompt.slice(0, 4000);
+    yield* fsys.makeDirectory(memesDir, {recursive: true});
 
     yield* Effect.log(`Starting generation for issue #${config.issueNumber}: "${config.memePrompt}"`);
     const {buffer, history, metadata} = yield* generateImage(prompt);
-
-    const assets   = yield* AssetStoreTag;
-    const imageUrl = yield* assets.publish(memeId, buffer);
-
+    yield* fsys.writeFile(outFile, buffer);
+    yield* Effect.log(`Image saved: ${outFile}`);
+    const git = yield* GitServiceTag;
+    yield* git.commitAndPush(memeId);
     const notifier = yield* NotifierServiceTag;
-    yield* notifier.notifySuccess({memeId, imageUrl, history, prompt, metadata});
+    yield* notifier.notifySuccess({memeId, history, prompt, metadata});
     yield* Effect.log("Done.");
 }).pipe(
     // A moderation failure is a terminal content problem: close the issue.
@@ -60,7 +66,7 @@ const AppLayer = Layer.mergeAll(
     PlatformLayer,
     ProvidersLayer,
     NotifierLayer,
-    AssetStoreLayer,
+    GitLayer,
 ).pipe(
     Layer.provide(Layer.mergeAll(AppConfigLayer, PlatformLayer)),
 );

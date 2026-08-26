@@ -21,7 +21,6 @@ type SlackPayload = Schema.Schema.Type<typeof SlackPayload>;
 
 export interface NotifySuccessParams {
     memeId:   string;
-    imageUrl: string;
     history:  HistoryEntry[];
     prompt:   string;
     metadata?: GenerationMetadata;
@@ -91,9 +90,9 @@ export function formatCostCents(metadata?: GenerationMetadata): string | null {
     return costCents == null ? null : `${costCents.toFixed(3)}¢`;
 }
 
-export function buildSuccessComment({memeId, imageUrl, provider, history, prompt, requester, channel, slackLink, metadata}: {
-    memeId: string; imageUrl: string; provider: string; history: HistoryEntry[];
-    prompt: string; requester: string; channel: string; slackLink: string; metadata?: GenerationMetadata;
+export function buildSuccessComment({memeId, provider, history, prompt, requester, channel, slackLink, repo, metadata}: {
+    memeId: string; provider: string; history: HistoryEntry[];
+    prompt: string; requester: string; channel: string; slackLink: string; repo: string; metadata?: GenerationMetadata;
 }): string {
     const providerNote  = ` _(${provider})_`;
     const promptDisplay = prompt.includes("`") ? `\`\`${prompt}\`\`` : `\`${prompt}\``;
@@ -105,8 +104,10 @@ export function buildSuccessComment({memeId, imageUrl, provider, history, prompt
         ? null
         : `${metadata.usage.inputTokens} input, ${metadata.usage.outputTokens} output, ${metadata.usage.totalTokens} total tokens`;
     const costCents = formatCostCents(metadata);
+    const blobUrl       = `https://github.com/${repo}/blob/main/memes/${memeId}.jpg`;
+    const imageUrl      = `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`;
     return [
-        `🎉 Meme generated and uploaded as [${memeId}.jpg](${imageUrl})${providerNote}`,
+        `🎉 Meme generated and committed to [memes/${memeId}.jpg](${blobUrl})${providerNote}`,
         ``,
         `![Generated meme](${imageUrl})`,
         ``,
@@ -128,13 +129,13 @@ export function buildSuccessComment({memeId, imageUrl, provider, history, prompt
 }
 
 /** Build the Slack webhook payload for a successful generation. */
-export function buildSlackSuccessPayload({imageUrl, provider, title, requester, channel, metadata}: {
-    imageUrl: string; provider: string; title: string; requester: string; channel: string; metadata?: GenerationMetadata;
+export function buildSlackSuccessPayload({memeId, provider, title, requester, channel, repo, metadata}: {
+    memeId: string; provider: string; title: string; requester: string; channel: string; repo: string; metadata?: GenerationMetadata;
 }): SlackPayload {
     const costCents = formatCostCents(metadata);
     return {
         status:    "success",
-        image_url: imageUrl,
+        image_url: `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`,
         title,
         requester,
         channel,
@@ -151,13 +152,13 @@ interface RawNotifier {
 }
 
 const makeNotifier = (): RawNotifier => ({
-    notifySuccess: ({memeId, imageUrl, history, prompt, metadata}) => Effect.gen(function* () {
+    notifySuccess: ({memeId, history, prompt, metadata}) => Effect.gen(function* () {
         const config   = yield* AppConfigService;
         const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
-        yield* postComment(buildSuccessComment({memeId, imageUrl, provider, history, prompt, requester: config.requester, channel: config.channel, slackLink: config.slackLink, metadata}));
+        yield* postComment(buildSuccessComment({memeId, provider, history, prompt, requester: config.requester, channel: config.channel, slackLink: config.slackLink, repo: config.repo, metadata}));
         yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.ignore);
         yield* Effect.log(`Issue #${config.issueNumber} closed.`);
-        yield* postSlack(buildSlackSuccessPayload({imageUrl, provider, title: config.memePrompt, requester: config.requester, channel: config.channel, metadata}));
+        yield* postSlack(buildSlackSuccessPayload({memeId, provider, title: config.memePrompt, requester: config.requester, channel: config.channel, repo: config.repo, metadata}));
     }),
 
     notifyFailure: (message, closeNotPlanned = false) => Effect.gen(function* () {
