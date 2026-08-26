@@ -169,4 +169,34 @@ describe("generateImage", () => {
             expect(exit.cause.error).toBeInstanceOf(QuotaExhaustedError);
         }
     });
+
+    it("lists every exhausted primary in AllProvidersExhaustedError", async () => {
+        const SECONDARY = "OpenAI-alt";
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: quotaFn(PRIMARY), [SECONDARY]: quotaFn(SECONDARY)}),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            const error = exit.cause.error;
+            expect(error).toBeInstanceOf(AllProvidersExhaustedError);
+            expect([...error.providers].sort()).toEqual([PRIMARY, SECONDARY].sort());
+        }
+    });
+
+    it("keeps a skipped-primary entry in history when a later primary triggers the moderation fallback", async () => {
+        const SECONDARY = "OpenAI-alt";
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: quotaFn(PRIMARY), [SECONDARY]: modFn(SECONDARY)}, successFn(FALLBACK)),
+        );
+        expect(Exit.isSuccess(exit)).toBe(true);
+        if (Exit.isSuccess(exit)) {
+            const {history} = exit.value;
+            expect(history[0]).toMatchObject({provider: PRIMARY, status: "failed"});   // out of credits, skipped
+            expect(history[1]).toMatchObject({provider: SECONDARY, status: "failed"}); // moderation blocked
+            expect(history.at(-1)).toMatchObject({provider: FALLBACK, status: "success"});
+        }
+    });
 });

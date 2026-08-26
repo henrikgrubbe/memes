@@ -1,10 +1,10 @@
-import {Duration, Effect, Exit, Fiber, Layer} from "effect";
+import {ConfigProvider, Duration, Effect, Exit, Fiber, Layer} from "effect";
 import * as TestClock from "effect/TestClock";
 import * as TestContext from "effect/TestContext";
 import type OpenAI from "openai";
 import {describe, expect, it} from "vitest";
 import {ModerationBlockedError, ProviderError, QuotaExhaustedError, RateLimitError} from "./errors.js";
-import {callWithRetry, makeCandidates, MAX_RETRIES, modelLabel} from "./providers.js";
+import {callWithRetry, makeCandidates, MAX_RETRIES, modelLabel, ProvidersLayer, ProvidersServiceTag} from "./providers.js";
 
 const PROVIDER = "test-provider";
 const call = (client: OpenAI) => callWithRetry(PROVIDER, client, "m", {}, "prompt");
@@ -199,5 +199,33 @@ describe("model candidates", () => {
         );
         expect(candidates.map(([label]) => label)).toEqual(["OpenAI (gpt-image-2)", "OpenAI HQ"]);
         expect(typeof candidates[0][1]).toBe("function");
+    });
+});
+
+describe("ProvidersLayer (disable-by-omission)", () => {
+    // Build the layer under a fake set of env vars and report whether it
+    // succeeded. The layer constructs clients but makes no network calls.
+    const buildWith = (env: Record<string, string>) =>
+        Effect.runPromise(
+            ProvidersServiceTag.pipe(
+                Effect.provide(ProvidersLayer),
+                Effect.withConfigProvider(ConfigProvider.fromMap(new Map(Object.entries(env)))),
+                Effect.exit,
+            ),
+        );
+
+    it("dies when no primary provider key is set", async () => {
+        const exit = await buildWith({});
+        expect(Exit.isFailure(exit)).toBe(true);
+    });
+
+    it("treats a blank key as disabled and dies with no primary configured", async () => {
+        const exit = await buildWith({OPENAI_API_KEY: "   "});
+        expect(Exit.isFailure(exit)).toBe(true);
+    });
+
+    it("builds when the primary key is set, with or without the fallback key", async () => {
+        expect(Exit.isSuccess(await buildWith({OPENAI_API_KEY: "sk-primary"}))).toBe(true);
+        expect(Exit.isSuccess(await buildWith({OPENAI_API_KEY: "sk-primary", XAI_API_KEY: "xai-key"}))).toBe(true);
     });
 });
