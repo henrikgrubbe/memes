@@ -20,10 +20,10 @@ export class RateLimitError extends Data.TaggedError("RateLimitError")<{
     get message() { return `${this.provider} rate-limit retries exhausted after ${this.attempts} attempts`; }
 }
 
-export class UploadFailedError extends Data.TaggedError("UploadFailedError")<{
+export class PushFailedError extends Data.TaggedError("PushFailedError")<{
     readonly attempts: number;
 }> {
-    get message() { return `Failed to upload meme asset after ${this.attempts} attempts`; }
+    get message() { return `Failed to push after ${this.attempts} attempts`; }
 }
 
 export class ModerationFailedError extends Data.TaggedError("ModerationFailedError")<{

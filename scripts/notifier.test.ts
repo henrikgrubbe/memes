@@ -2,26 +2,25 @@ import {describe, expect, it} from "vitest";
 import {buildSlackSuccessPayload, buildSuccessComment, estimateCostCents, formatCostCents} from "./notifier.js";
 
 describe("buildSuccessComment", () => {
-    it("embeds the provided image url without crashing", () => {
+    it("includes repo-backed image links without crashing", () => {
         const comment = buildSuccessComment({
             memeId: "meme-123",
-            imageUrl: "https://github.com/henrikgrubbe/memes/releases/download/memes/meme-123.jpg",
             provider: "xAI",
             history: [{provider: "xAI", status: "success"}],
             prompt: "make a meme",
             requester: "U123",
             channel: "#memes",
             slackLink: "https://slack.example/message",
+            repo: "henrikgrubbe/memes",
         });
 
-        expect(comment).toContain("[meme-123.jpg](https://github.com/henrikgrubbe/memes/releases/download/memes/meme-123.jpg)");
-        expect(comment).toContain("![Generated meme](https://github.com/henrikgrubbe/memes/releases/download/memes/meme-123.jpg)");
+        expect(comment).toContain("https://github.com/henrikgrubbe/memes/blob/main/memes/meme-123.jpg");
+        expect(comment).toContain("https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg");
     });
 
     it("renders revised prompt and usage metadata when present", () => {
         const comment = buildSuccessComment({
             memeId: "meme-123",
-            imageUrl: "https://github.com/henrikgrubbe/memes/releases/download/memes/meme-123.jpg",
             provider: "OpenAI",
             history: [
                 {provider: "xAI", status: "rate-limited"},
@@ -31,6 +30,7 @@ describe("buildSuccessComment", () => {
             requester: "U123",
             channel: "#memes",
             slackLink: "https://slack.example/message",
+            repo: "henrikgrubbe/memes",
             metadata: {
                 revisedPrompt: "revised prompt text",
                 usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46},
@@ -48,13 +48,13 @@ describe("buildSuccessComment", () => {
     it("omits estimated cost when no usage metadata is available", () => {
         const comment = buildSuccessComment({
             memeId: "meme-456",
-            imageUrl: "https://github.com/henrikgrubbe/memes/releases/download/memes/meme-456.jpg",
             provider: "xAI",
             history: [{provider: "xAI", status: "success"}],
             prompt: "make a meme",
             requester: "U456",
             channel: "#memes",
             slackLink: "https://slack.example/message",
+            repo: "henrikgrubbe/memes",
         });
 
         expect(comment).not.toContain("**Estimated cost:**");
@@ -88,11 +88,12 @@ describe("formatCostCents", () => {
 
 describe("buildSlackSuccessPayload", () => {
     const base = {
-        imageUrl: "https://github.com/henrikgrubbe/memes/releases/download/memes/meme-123.jpg",
+        memeId: "meme-123",
         provider: "OpenAI",
         title: "make a meme",
         requester: "U123",
         channel: "#memes",
+        repo: "henrikgrubbe/memes",
     };
 
     it("includes a display-ready cost_cents string when usage is present", () => {
@@ -102,7 +103,7 @@ describe("buildSlackSuccessPayload", () => {
         });
         expect(payload.status).toBe("success");
         expect(payload.provider).toBe("OpenAI");
-        expect(payload.image_url).toBe("https://github.com/henrikgrubbe/memes/releases/download/memes/meme-123.jpg");
+        expect(payload.image_url).toBe("https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg");
         expect(payload.cost_cents).toBe("0.108¢");
     });
 
