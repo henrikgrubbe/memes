@@ -7,13 +7,15 @@ import type {GenerationMetadata, HistoryEntry} from "./providers.js";
 // ---- Types ------------------------------------------------------------------
 
 const SlackPayload = Schema.Struct({
-    status:    Schema.Literal("success", "failure"),
-    image_url: Schema.String,
-    title:     Schema.String,
-    requester: Schema.String,
-    channel:   Schema.String,
-    error:     Schema.String,
-    provider:  Schema.optional(Schema.String),
+    status:     Schema.Literal("success", "failure"),
+    image_url:  Schema.String,
+    title:      Schema.String,
+    requester:  Schema.String,
+    channel:    Schema.String,
+    error:      Schema.String,
+    provider:   Schema.optional(Schema.String),
+    // Slack webhooks are text-only, so this is a display-ready string (e.g. "0.108¢").
+    cost_cents: Schema.optional(Schema.String),
 });
 type SlackPayload = Schema.Schema.Type<typeof SlackPayload>;
 
@@ -71,6 +73,23 @@ const postSlack = (data: SlackPayload): Effect.Effect<void, never, NotifierDeps>
         );
     });
 
+// gpt-image-2 token prices derived from empirical cost/usage data: $5/M input, $30/M output
+const INPUT_TOKEN_PRICE_PER_M  = 5;
+const OUTPUT_TOKEN_PRICE_PER_M = 30;
+
+/** Estimated generation cost in cents, or null when token usage is unknown. */
+export function estimateCostCents(metadata?: GenerationMetadata): number | null {
+    const usage = metadata?.usage;
+    if (usage == null) { return null; }
+    return (usage.inputTokens * INPUT_TOKEN_PRICE_PER_M + usage.outputTokens * OUTPUT_TOKEN_PRICE_PER_M) / 1_000_000 * 100;
+}
+
+/** Display-ready cost string (e.g. "0.108¢"), or null when token usage is unknown. */
+export function formatCostCents(metadata?: GenerationMetadata): string | null {
+    const costCents = estimateCostCents(metadata);
+    return costCents == null ? null : `${costCents.toFixed(3)}¢`;
+}
+
 export function buildSuccessComment({memeId, provider, history, prompt, requester, channel, slackLink, repo, metadata}: {
     memeId: string; provider: string; history: HistoryEntry[];
     prompt: string; requester: string; channel: string; slackLink: string; repo: string; metadata?: GenerationMetadata;
@@ -84,12 +103,7 @@ export function buildSuccessComment({memeId, provider, history, prompt, requeste
     const usageSummary = metadata?.usage == null
         ? null
         : `${metadata.usage.inputTokens} input, ${metadata.usage.outputTokens} output, ${metadata.usage.totalTokens} total tokens`;
-    // gpt-image-2 token prices derived from empirical cost/usage data: $5/M input, $30/M output
-    const INPUT_TOKEN_PRICE_PER_M  = 5;
-    const OUTPUT_TOKEN_PRICE_PER_M = 30;
-    const costCents = metadata?.usage == null
-        ? null
-        : ((metadata.usage.inputTokens * INPUT_TOKEN_PRICE_PER_M + metadata.usage.outputTokens * OUTPUT_TOKEN_PRICE_PER_M) / 1_000_000 * 100).toFixed(3);
+    const costCents = formatCostCents(metadata);
     const blobUrl       = `https://github.com/${repo}/blob/main/memes/${memeId}.jpg`;
     const imageUrl      = `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`;
     return [
@@ -101,7 +115,7 @@ export function buildSuccessComment({memeId, provider, history, prompt, requeste
         `**Prompt:** ${promptDisplay}`,
         ...(revisedPromptDisplay == null ? [] : [`**Revised prompt:** ${revisedPromptDisplay}`]),
         ...(usageSummary == null ? [] : [`**Usage:** ${usageSummary}`]),
-        ...(costCents == null ? [] : [`**Estimated cost:** ${costCents}¢`]),
+        ...(costCents == null ? [] : [`**Estimated cost:** ${costCents}`]),
         ``,
         `**Provider attempts:**`,
         ...history.map(({provider, status, message}) => {
@@ -112,6 +126,24 @@ export function buildSuccessComment({memeId, provider, history, prompt, requeste
             }
         }),
     ].join("\n");
+}
+
+/** Build the Slack webhook payload for a successful generation. */
+export function buildSlackSuccessPayload({memeId, provider, title, requester, channel, repo, metadata}: {
+    memeId: string; provider: string; title: string; requester: string; channel: string; repo: string; metadata?: GenerationMetadata;
+}): SlackPayload {
+    const costCents = formatCostCents(metadata);
+    return {
+        status:    "success",
+        image_url: `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`,
+        title,
+        requester,
+        channel,
+        error:     "",
+        provider,
+        // Slack renders text only; send the pre-formatted display string.
+        ...(costCents == null ? {} : {cost_cents: costCents}),
+    };
 }
 
 interface RawNotifier {
@@ -126,8 +158,7 @@ const makeNotifier = (): RawNotifier => ({
         yield* postComment(buildSuccessComment({memeId, provider, history, prompt, requester: config.requester, channel: config.channel, slackLink: config.slackLink, repo: config.repo, metadata}));
         yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.ignore);
         yield* Effect.log(`Issue #${config.issueNumber} closed.`);
-        const imageUrl = `https://raw.githubusercontent.com/${config.repo}/refs/heads/main/memes/${memeId}.jpg`;
-        yield* postSlack({status: "success", image_url: imageUrl, title: config.memePrompt, requester: config.requester, channel: config.channel, error: "", provider});
+        yield* postSlack(buildSlackSuccessPayload({memeId, provider, title: config.memePrompt, requester: config.requester, channel: config.channel, repo: config.repo, metadata}));
     }),
 
     notifyFailure: (message, closeNotPlanned = false) => Effect.gen(function* () {

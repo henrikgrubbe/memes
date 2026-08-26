@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {buildSuccessComment} from "./notifier.js";
+import {buildSlackSuccessPayload, buildSuccessComment, estimateCostCents, formatCostCents} from "./notifier.js";
 
 describe("buildSuccessComment", () => {
     it("includes repo-backed image links without crashing", () => {
@@ -59,5 +59,57 @@ describe("buildSuccessComment", () => {
 
         expect(comment).not.toContain("**Estimated cost:**");
         expect(comment).not.toContain("**Usage:**");
+    });
+});
+
+describe("estimateCostCents", () => {
+    it("returns null when token usage is unknown", () => {
+        expect(estimateCostCents(undefined)).toBeNull();
+        expect(estimateCostCents({revisedPrompt: "x"})).toBeNull();
+    });
+
+    it("computes cost in cents from input/output token usage", () => {
+        // 12 * $5/M + 34 * $30/M = $0.00108 = 0.108¢
+        expect(estimateCostCents({usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46}}))
+            .toBeCloseTo(0.108, 6);
+    });
+});
+
+describe("formatCostCents", () => {
+    it("returns null when token usage is unknown", () => {
+        expect(formatCostCents(undefined)).toBeNull();
+    });
+
+    it("formats cost as a cents string with three decimals", () => {
+        expect(formatCostCents({usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46}}))
+            .toBe("0.108¢");
+    });
+});
+
+describe("buildSlackSuccessPayload", () => {
+    const base = {
+        memeId: "meme-123",
+        provider: "OpenAI",
+        title: "make a meme",
+        requester: "U123",
+        channel: "#memes",
+        repo: "henrikgrubbe/memes",
+    };
+
+    it("includes a display-ready cost_cents string when usage is present", () => {
+        const payload = buildSlackSuccessPayload({
+            ...base,
+            metadata: {usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46}},
+        });
+        expect(payload.status).toBe("success");
+        expect(payload.provider).toBe("OpenAI");
+        expect(payload.image_url).toBe("https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg");
+        expect(payload.cost_cents).toBe("0.108¢");
+    });
+
+    it("omits cost_cents when usage is unavailable", () => {
+        const payload = buildSlackSuccessPayload(base);
+        expect(payload.cost_cents).toBeUndefined();
+        expect("cost_cents" in payload).toBe(false);
     });
 });
