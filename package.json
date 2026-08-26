@@ -12,7 +12,7 @@
     "openai": "^7.4.0"
   },
   "devDependencies": {
-    "@effect/tsgo": "0.36.5",
+    "@effect/tsgo": "0.37.0",
     "@types/node": "^26.1.2",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.10",
