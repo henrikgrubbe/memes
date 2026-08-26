@@ -42,9 +42,25 @@ const exec = (executor: CommandExecutor.CommandExecutor, cmd: string): Effect.Ef
         Effect.provideService(CommandExecutor.CommandExecutor, executor),
     );
 
-/** Public download URL for a release asset. */
+/** Public download URL for a release asset (canonical storage location). */
 export const assetUrl = (repo: string, memeId: string): string =>
     `https://github.com/${repo}/releases/download/${RELEASE_TAG}/${memeId}.jpg`;
+
+// GitHub serves release-asset downloads as `Content-Disposition: attachment`
+// with `application/octet-stream`, so Slack (webhook-only, no bot) and browsers
+// treat the URL as a file download instead of an inline image. Routing it
+// through an image proxy re-serves the exact same bytes as an inline
+// `image/jpeg`, which Slack unfurls.
+//
+// To self-host this instead of depending on a third party, deploy a tiny
+// Cloudflare Worker (or similar) that fetches the asset and returns it with
+// `content-type: image/jpeg` + `content-disposition: inline`, then point this
+// at it — e.g. "https://memes-img.<you>.workers.dev/?url=".
+const IMAGE_PROXY_BASE = "https://images.weserv.nl/?url=";
+
+/** Inline-image URL suitable for Slack and Markdown embedding. */
+export const displayImageUrl = (repo: string, memeId: string): string =>
+    `${IMAGE_PROXY_BASE}github.com/${repo}/releases/download/${RELEASE_TAG}/${memeId}.jpg`;
 
 export const AssetStoreLayer: Layer.Layer<AssetStoreTag, never, AssetDeps> =
     Layer.effect(
@@ -79,9 +95,10 @@ export const AssetStoreLayer: Layer.Layer<AssetStoreTag, never, AssetDeps> =
                             Schedule.recurs(MAX_UPLOAD_RETRIES - 1),
                         ).pipe(Effect.mapError(() => new UploadFailedError({attempts: MAX_UPLOAD_RETRIES})));
 
-                        const url = assetUrl(config.repo, memeId);
-                        yield* Effect.log(`Uploaded ${memeId}.jpg -> ${url}`);
-                        return url;
+                        yield* Effect.log(`Uploaded ${memeId}.jpg -> ${assetUrl(config.repo, memeId)}`);
+                        // Return the proxied inline-image URL so Slack and the
+                        // issue comment render the meme rather than download it.
+                        return displayImageUrl(config.repo, memeId);
                     }).pipe(Effect.scoped),
             } satisfies AssetStore;
         }),
