@@ -1,7 +1,7 @@
+import {fileURLToPath} from "node:url";
 import {FileSystem, Path} from "@effect/platform";
 import {NodeCommandExecutor, NodeFileSystem, NodePath} from "@effect/platform-node";
 import {Effect, Layer, Random} from "effect";
-import {DoubleModerationError} from "./errors.js";
 import {AppConfigService, AppConfigLayer} from "./config.js";
 import {ProvidersServiceTag, ProvidersLayer} from "./providers.js";
 import {NotifierServiceTag, NotifierLayer} from "./notifier.js";
@@ -27,13 +27,25 @@ const RANDOM_TWISTS = [
 const pickRandomTwist = (): Effect.Effect<string | null> =>
     Effect.gen(function* () {
         if ((yield* Random.next) >= 0.05) { return null; }
-        return yield* Random.choice(RANDOM_TWISTS);
+        // RANDOM_TWISTS is a non-empty constant; an empty choice is impossible,
+        // so collapse the NoSuchElementException into a defect.
+        return yield* Random.choice(RANDOM_TWISTS).pipe(Effect.orDie);
     });
 
 // ---- Pipeline steps -------------------------------------------------------
 
 export const generateImage = (prompt: string) =>
     ProvidersServiceTag.pipe(Effect.flatMap((p) => p.generateWithFallback(prompt)));
+
+// ---- Failure handling -----------------------------------------------------
+
+const handleFailure = (message: string, closeNotPlanned: boolean) =>
+    Effect.gen(function* () {
+        yield* Effect.logError(`Fatal: ${message}`);
+        const notifier = yield* NotifierServiceTag;
+        yield* notifier.notifyFailure(message, closeNotPlanned);
+        return yield* Effect.die("failure-handled");
+    });
 
 // ---- Program --------------------------------------------------------------
 
@@ -63,32 +75,27 @@ const program = Effect.gen(function* () {
     yield* notifier.notifySuccess({memeId, history, prompt, twist, metadata});
     yield* Effect.log("Done.");
 }).pipe(
-    Effect.catchTag("DoubleModerationError", (e) => Effect.gen(function* () {
-        yield* Effect.logError(`Fatal: ${e.message}`);
-        yield* NotifierServiceTag.pipe(Effect.flatMap((n) => n.notifyFailure(e.message, true)));
-        return yield* Effect.die("failure-handled");
-    })),
-    Effect.catchAll((e) => Effect.gen(function* () {
-        yield* Effect.logError(`Fatal: ${e.message}`);
-        yield* NotifierServiceTag.pipe(Effect.flatMap((n) => n.notifyFailure(e.message)));
-        return yield* Effect.die("failure-handled");
-    })),
+    // A moderation failure is a terminal content problem: close the issue.
+    Effect.catchTag("ModerationFailedError", (e) => handleFailure(e.message, true)),
+    // Everything else is transient/infra: report but leave the issue open.
+    Effect.catchAll((e) => handleFailure(e.message, false)),
 );
 
-const NodeLayer   = NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer));
-const SharedLayer = Layer.mergeAll(AppConfigLayer, NodeFileSystem.layer, NodeLayer);
+const PlatformLayer = Layer.mergeAll(
+    NodeFileSystem.layer,
+    NodePath.layer,
+    NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
+);
 
 const AppLayer = Layer.mergeAll(
     AppConfigLayer,
-    NodePath.layer,
-    NodeFileSystem.layer,
+    PlatformLayer,
     ProvidersLayer,
-    NotifierLayer.pipe(Layer.provide(SharedLayer)),
-    GitLayer.pipe(Layer.provide(SharedLayer)),
-    NodeLayer,
+    NotifierLayer,
+    GitLayer,
+).pipe(
+    Layer.provide(Layer.mergeAll(AppConfigLayer, PlatformLayer)),
 );
-
-import {fileURLToPath} from "url";
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
     Effect.runPromise(

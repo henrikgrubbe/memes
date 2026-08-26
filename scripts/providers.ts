@@ -1,8 +1,8 @@
 import OpenAI from "openai";
-import {Config, Context, Duration, Effect, Layer, Random, Ref, Schedule} from "effect";
-import {DoubleModerationError, ModerationBlockedError, ProviderError, RateLimitError} from "./errors.js";
+import {Config, Context, Duration, Effect, Layer, Option, Random, Ref, Schedule} from "effect";
+import type {ConfigError} from "effect/ConfigError";
+import {ModerationFailedError, ModerationBlockedError, ProviderError, RateLimitError} from "./errors.js";
 
-export const MODERATION_FALLBACK    = "OpenAI";
 export const MAX_RETRIES            = 10;
 const        RETRY_DELAY_PADDING_MS = 1_000;
 
@@ -14,10 +14,19 @@ export interface ProviderConfig {
     params?:  Record<string, string>;
 }
 
-export const PROVIDER_CONFIGS: ProviderConfig[] = [
+// A provider is active only when its API key env var is set to a non-empty
+// value. To disable one (e.g. temporarily), unset its secret — no code change.
+
+// Primary providers are chosen at random for normal generation.
+export const PRIMARY_PROVIDERS: ProviderConfig[] = [
     {name: "OpenAI", envKey: "OPENAI_API_KEY", model: "gpt-image-2", params: {size: "1024x1024", quality: "low", output_format: "jpeg"}},
-//    {name: "xAI",    envKey: "XAI_API_KEY",    model: "grok-imagine-image", baseURL: "https://api.x.ai/v1", params: {response_format: "b64_json"}},
 ];
+
+// The moderation fallback is used *only* when a primary is blocked by
+// moderation. It tends to be more permissive (and more expensive), so it is
+// never part of the primary pool.
+export const MODERATION_FALLBACK_PROVIDER: ProviderConfig =
+    {name: "xAI", envKey: "XAI_API_KEY", model: "grok-imagine-image", baseURL: "https://api.x.ai/v1", params: {response_format: "b64_json"}};
 
 // ---- HistoryEntry -----------------------------------------------------------
 
@@ -51,62 +60,93 @@ export interface GenerationResult {
 export type ProviderFn = (prompt: string) => Effect.Effect<GenerationResult, ModerationBlockedError | RateLimitError | ProviderError>;
 
 export interface ProvidersService {
-    generateWithFallback(prompt: string): Effect.Effect<GenerationResult, DoubleModerationError | ProviderError | RateLimitError>;
+    generateWithFallback(prompt: string): Effect.Effect<GenerationResult, ModerationFailedError | ProviderError | RateLimitError>;
 }
 
 export class ProvidersServiceTag extends Context.Tag("ProvidersService")<ProvidersServiceTag, ProvidersService>() {}
 
-/** Test helper: build a Layer from a pre-constructed provider map (bypasses Config/API key loading). */
-export const makeProvidersLayer = (providerMap: Record<string, ProviderFn>): Layer.Layer<ProvidersServiceTag> =>
+/**
+ * Test helper: build a Layer from pre-constructed providers (bypasses
+ * Config/API key loading). `fallback` is the moderation-fallback provider;
+ * omit it to model a deployment where no fallback is configured.
+ */
+export const makeProvidersLayer = (
+    primaries: Record<string, ProviderFn>,
+    fallback?: ProviderFn,
+): Layer.Layer<ProvidersServiceTag> =>
     Layer.succeed(ProvidersServiceTag, {
-        generateWithFallback: (prompt) => generateWithFallback(providerMap, prompt),
+        generateWithFallback: (prompt) => generateWithFallback(primaries, fallback ?? null, prompt),
+    });
+
+const makeProviderFn = (cfg: ProviderConfig, apiKey: string): ProviderFn => {
+    const client = new OpenAI({apiKey, ...(cfg.baseURL != null ? {baseURL: cfg.baseURL} : {})});
+    return (prompt) => callWithRetry(cfg.name, client, cfg.model, cfg.params ?? {}, prompt);
+};
+
+/** Load a provider iff its API key env var is set to a non-empty value. */
+const loadProvider = (cfg: ProviderConfig): Effect.Effect<Option.Option<readonly [string, ProviderFn]>, ConfigError> =>
+    Effect.gen(function* () {
+        const key = yield* Config.option(Config.string(cfg.envKey));
+        if (Option.isNone(key) || key.value.trim() === "") { return Option.none(); }
+        return Option.some([cfg.name, makeProviderFn(cfg, key.value)] as const);
     });
 
 export const ProvidersLayer = Layer.effect(ProvidersServiceTag, Effect.gen(function* () {
-    if (!PROVIDER_CONFIGS.some(({name}) => name === MODERATION_FALLBACK)) {
-        return yield* Effect.die(`MODERATION_FALLBACK "${MODERATION_FALLBACK}" does not match any configured provider`);
+    const loaded    = yield* Effect.forEach(PRIMARY_PROVIDERS, loadProvider);
+    const primaries = Object.fromEntries(loaded.filter(Option.isSome).map((entry) => entry.value));
+
+    if (Object.keys(primaries).length === 0) {
+        return yield* Effect.die("No image provider configured: set at least one primary provider API key.");
     }
 
-    const providerMap = Object.fromEntries(
-        yield* Effect.all(PROVIDER_CONFIGS.map(({name, envKey, model, baseURL, params}) =>
-            Config.string(envKey).pipe(
-                Effect.map((apiKey) => {
-                    const client = new OpenAI({apiKey, ...(baseURL != null ? {baseURL} : {})});
-                    const fn: ProviderFn = (prompt) => callWithRetry(name, client, model, params ?? {}, prompt);
-                    return [name, fn] as const;
-                }),
-            ),
-        )),
+    const fallback = Option.getOrNull(
+        (yield* loadProvider(MODERATION_FALLBACK_PROVIDER)).pipe(Option.map(([, fn]) => fn)),
     );
 
     return {
-        generateWithFallback: (prompt: string) => generateWithFallback(providerMap, prompt),
+        generateWithFallback: (prompt: string) => generateWithFallback(primaries, fallback, prompt),
     };
 }));
 
 // ---- generateWithFallback ---------------------------------------------------
 
-const CANDIDATES = PROVIDER_CONFIGS.map((c) => c.name);
-
 function generateWithFallback(
-    providers: Record<string, ProviderFn>,
+    primaries: Record<string, ProviderFn>,
+    fallback: ProviderFn | null,
     prompt: string,
-): Effect.Effect<GenerationResult, DoubleModerationError | ProviderError | RateLimitError> {
+): Effect.Effect<GenerationResult, ModerationFailedError | ProviderError | RateLimitError> {
     return Effect.gen(function* () {
-        const primary = yield* Random.choice(CANDIDATES);
+        // Object.keys is non-empty for the real layer (guarded above) and for
+        // every test; an empty map is a programmer error, so surface it as a defect.
+        const primary = yield* Random.choice(Object.keys(primaries)).pipe(Effect.orDie);
         yield* Effect.log(`Randomly selected ${primary} as primary provider...`);
 
-        return yield* providers[primary](prompt).pipe(
-            Effect.catchTag("ModerationBlockedError", (primaryErr) => Effect.gen(function* () {
-                yield* Effect.log(`Moderation block on ${primary} - falling back to ${MODERATION_FALLBACK}...`);
-                const primaryEntry: HistoryEntry = {provider: primary, status: "failed", message: primaryErr.message};
-                return yield* providers[MODERATION_FALLBACK](prompt).pipe(
-                    Effect.map(({buffer, history}) => ({buffer, history: [primaryEntry, ...history]})),
-                    Effect.catchTag("ModerationBlockedError", () =>
-                        Effect.fail(new DoubleModerationError({fallbackProvider: MODERATION_FALLBACK})),
-                    ),
-                );
-            })),
+        return yield* primaries[primary](prompt).pipe(
+            Effect.catchTag("ModerationBlockedError", (primaryErr) =>
+                runModerationFallback(primary, primaryErr, fallback, prompt)),
+        );
+    });
+}
+
+function runModerationFallback(
+    primary: string,
+    primaryErr: ModerationBlockedError,
+    fallback: ProviderFn | null,
+    prompt: string,
+): Effect.Effect<GenerationResult, ModerationFailedError | ProviderError | RateLimitError> {
+    return Effect.gen(function* () {
+        if (fallback == null) {
+            yield* Effect.log(`Moderation block on ${primary} - no fallback provider available.`);
+            return yield* Effect.fail(new ModerationFailedError({fallbackProvider: null}));
+        }
+
+        yield* Effect.log(`Moderation block on ${primary} - falling back to ${MODERATION_FALLBACK_PROVIDER.name}...`);
+        const primaryEntry: HistoryEntry = {provider: primary, status: "failed", message: primaryErr.message};
+
+        return yield* fallback(prompt).pipe(
+            Effect.map((result) => ({...result, history: [primaryEntry, ...result.history]})),
+            Effect.catchTag("ModerationBlockedError", () =>
+                Effect.fail(new ModerationFailedError({fallbackProvider: MODERATION_FALLBACK_PROVIDER.name}))),
         );
     });
 }

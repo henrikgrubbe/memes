@@ -26,10 +26,14 @@ export class PushFailedError extends Data.TaggedError("PushFailedError")<{
     get message() { return `Failed to push after ${this.attempts} attempts`; }
 }
 
-export class DoubleModerationError extends Data.TaggedError("DoubleModerationError")<{
-    readonly fallbackProvider: string;
+export class ModerationFailedError extends Data.TaggedError("ModerationFailedError")<{
+    readonly fallbackProvider: string | null;
 }> {
-    get message() { return `Both primary and fallback provider (${this.fallbackProvider}) were blocked by moderation`; }
+    get message() {
+        return this.fallbackProvider == null
+            ? "Blocked by moderation and no fallback provider is available"
+            : `Both primary and fallback provider (${this.fallbackProvider}) were blocked by moderation`;
+    }
 }
 
 export class ProviderError extends Data.TaggedError("ProviderError")<{
