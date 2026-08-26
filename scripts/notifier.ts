@@ -14,7 +14,8 @@ const SlackPayload = Schema.Struct({
     channel:    Schema.String,
     error:      Schema.String,
     provider:   Schema.optional(Schema.String),
-    cost_cents: Schema.optional(Schema.Number),
+    // Slack webhooks are text-only, so this is a display-ready string (e.g. "0.108¢").
+    cost_cents: Schema.optional(Schema.String),
 });
 type SlackPayload = Schema.Schema.Type<typeof SlackPayload>;
 
@@ -83,6 +84,12 @@ export function estimateCostCents(metadata?: GenerationMetadata): number | null 
     return (usage.inputTokens * INPUT_TOKEN_PRICE_PER_M + usage.outputTokens * OUTPUT_TOKEN_PRICE_PER_M) / 1_000_000 * 100;
 }
 
+/** Display-ready cost string (e.g. "0.108¢"), or null when token usage is unknown. */
+export function formatCostCents(metadata?: GenerationMetadata): string | null {
+    const costCents = estimateCostCents(metadata);
+    return costCents == null ? null : `${costCents.toFixed(3)}¢`;
+}
+
 export function buildSuccessComment({memeId, provider, history, prompt, requester, channel, slackLink, repo, metadata}: {
     memeId: string; provider: string; history: HistoryEntry[];
     prompt: string; requester: string; channel: string; slackLink: string; repo: string; metadata?: GenerationMetadata;
@@ -96,7 +103,7 @@ export function buildSuccessComment({memeId, provider, history, prompt, requeste
     const usageSummary = metadata?.usage == null
         ? null
         : `${metadata.usage.inputTokens} input, ${metadata.usage.outputTokens} output, ${metadata.usage.totalTokens} total tokens`;
-    const costCents = estimateCostCents(metadata);
+    const costCents = formatCostCents(metadata);
     const blobUrl       = `https://github.com/${repo}/blob/main/memes/${memeId}.jpg`;
     const imageUrl      = `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`;
     return [
@@ -108,7 +115,7 @@ export function buildSuccessComment({memeId, provider, history, prompt, requeste
         `**Prompt:** ${promptDisplay}`,
         ...(revisedPromptDisplay == null ? [] : [`**Revised prompt:** ${revisedPromptDisplay}`]),
         ...(usageSummary == null ? [] : [`**Usage:** ${usageSummary}`]),
-        ...(costCents == null ? [] : [`**Estimated cost:** ${costCents.toFixed(3)}¢`]),
+        ...(costCents == null ? [] : [`**Estimated cost:** ${costCents}`]),
         ``,
         `**Provider attempts:**`,
         ...history.map(({provider, status, message}) => {
@@ -125,7 +132,7 @@ export function buildSuccessComment({memeId, provider, history, prompt, requeste
 export function buildSlackSuccessPayload({memeId, provider, title, requester, channel, repo, metadata}: {
     memeId: string; provider: string; title: string; requester: string; channel: string; repo: string; metadata?: GenerationMetadata;
 }): SlackPayload {
-    const costCents = estimateCostCents(metadata);
+    const costCents = formatCostCents(metadata);
     return {
         status:    "success",
         image_url: `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`,
@@ -134,8 +141,8 @@ export function buildSlackSuccessPayload({memeId, provider, title, requester, ch
         channel,
         error:     "",
         provider,
-        // Round to avoid floating-point noise; Slack formats it however it likes.
-        ...(costCents == null ? {} : {cost_cents: Math.round(costCents * 1000) / 1000}),
+        // Slack renders text only; send the pre-formatted display string.
+        ...(costCents == null ? {} : {cost_cents: costCents}),
     };
 }
 
