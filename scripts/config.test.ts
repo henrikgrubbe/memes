@@ -23,6 +23,25 @@ describe("parseIssueBody", () => {
         }
     });
 
+    it("keeps a colon-prefixed continuation line as part of the message (issue #614)", async () => {
+        const body = [
+            "Sender: U4TEZNWNN",
+            "Channel: G01K33ZEMFT",
+            "Message: Meme-maskinen: Fy føj Rune Sostack Clausen, dit meme var alt for beskidt!",
+            "Rune: :sadpepe: :sad-cat-meow: :esben-sad:",
+            "Link: https://bankdata.slack.com/archives/G01K33ZEMFT/p1787747639249749",
+            "Timestamp: 1787747639.249749",
+        ].join("\n");
+        const exit = await run(body);
+        expect(Exit.isSuccess(exit)).toBe(true);
+        if (Exit.isSuccess(exit)) {
+            expect(exit.value.message).toBe(
+                "Meme-maskinen: Fy føj Rune Sostack Clausen, dit meme var alt for beskidt!\nRune: :sadpepe: :sad-cat-meow: :esben-sad:",
+            );
+            expect(exit.value.link).toBe("https://bankdata.slack.com/archives/G01K33ZEMFT/p1787747639249749");
+        }
+    });
+
     it("ignores unknown keys", async () => {
         const body = "sender: hhb\nrandom: ignored\nmessage: hi\nchannel: #c\nlink: https://x";
         const exit = await run(body);

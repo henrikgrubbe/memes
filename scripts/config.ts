@@ -37,6 +37,12 @@ export class IssueFields extends Schema.Class<IssueFields>("IssueFields")({
     link:    Schema.NonEmptyTrimmedString,
 }) {}
 
+// Keys emitted by the Slack workflow that files these issues. Only these start a
+// new field; any other line is treated as a continuation of the current value so
+// that multi-line messages (which may themselves contain "word: ..." lines, e.g.
+// "Rune: :sadpepe:") are preserved instead of being truncated at the first line.
+const KNOWN_KEYS = new Set(["sender", "channel", "message", "link", "timestamp"]);
+
 function tokenizeIssueBody(body: string): Record<string, string> {
     const result: Record<string, string> = {};
     let currentKey: string | null = null;
@@ -44,7 +50,7 @@ function tokenizeIssueBody(body: string): Record<string, string> {
         const line = rawLine.replace(/\r$/, "");
         const sep = line.indexOf(": ");
         const potentialKey = sep !== -1 ? line.slice(0, sep).trim().toLowerCase() : null;
-        if (potentialKey != null) {
+        if (potentialKey != null && KNOWN_KEYS.has(potentialKey)) {
             currentKey = potentialKey;
             result[currentKey] = line.slice(sep + 2).trim();
         } else if (currentKey != null && line.trim() !== "") {
