@@ -1,11 +1,14 @@
 import {Effect, Exit, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {DoubleModerationError, ModerationBlockedError, ProviderError, RateLimitError} from "./errors.js";
+import {AllProvidersExhaustedError, ModerationFailedError, ModerationBlockedError, ProviderError, QuotaExhaustedError, RateLimitError} from "./errors.js";
 import {generateImage} from "./generate-meme.js";
-import {MODERATION_FALLBACK, makeProvidersLayer, ProvidersServiceTag} from "./providers.js";
+import {makeProvidersLayer, ProvidersServiceTag} from "./providers.js";
 import type {ProviderFn} from "./providers.js";
 
 // ---- Provider mock helpers ------------------------------------------------
+
+const PRIMARY  = "OpenAI";
+const FALLBACK = "xAI";
 
 const successFn   = (provider = PRIMARY): ProviderFn => (_) => Effect.succeed({buffer: Buffer.from("hello"), history: [{provider, status: "success"}]});
 const successRlFn = (provider: string, hits: number): ProviderFn => (_) => Effect.succeed({buffer: Buffer.from("hello"), history: [
@@ -15,8 +18,7 @@ const successRlFn = (provider: string, hits: number): ProviderFn => (_) => Effec
 const modFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ModerationBlockedError({provider, detail: "blocked"}));
 const rlFn        = (provider: string): ProviderFn => (_) => Effect.fail(new RateLimitError({provider, attempts: 10}));
 const errFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ProviderError({provider, detail: "error"}));
-
-const PRIMARY = "OpenAI";
+const quotaFn     = (provider: string): ProviderFn => (_) => Effect.fail(new QuotaExhaustedError({provider, detail: "no credits"}));
 
 const run = <A, E>(effect: Effect.Effect<A, E, ProvidersServiceTag>, layer: Layer.Layer<ProvidersServiceTag>) =>
     Effect.runPromise(Effect.exit(Effect.provide(effect.pipe(Effect.withRandomFixed([0])), layer)));
@@ -27,7 +29,7 @@ describe("generateImage", () => {
     it("returns success with primary provider history", async () => {
         const exit = await run(
             generateImage("make a meme"),
-            makeProvidersLayer({[PRIMARY]: successFn(), [MODERATION_FALLBACK]: successFn()}),
+            makeProvidersLayer({[PRIMARY]: successFn()}),
         );
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
@@ -40,7 +42,7 @@ describe("generateImage", () => {
     it("records rate-limit hits in history when primary succeeds after rate limits", async () => {
         const exit = await run(
             generateImage("make a meme"),
-            makeProvidersLayer({[PRIMARY]: successRlFn(PRIMARY, 2), [MODERATION_FALLBACK]: successFn()}),
+            makeProvidersLayer({[PRIMARY]: successRlFn(PRIMARY, 2)}),
         );
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
@@ -54,32 +56,62 @@ describe("generateImage", () => {
     it("falls back to fallback provider on moderation block", async () => {
         const exit = await run(
             generateImage("make a meme"),
-            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY), [MODERATION_FALLBACK]: successFn(MODERATION_FALLBACK)}),
+            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY)}, successFn(FALLBACK)),
         );
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
             const {history} = exit.value;
             expect(history[0]).toMatchObject({provider: PRIMARY, status: "failed"});
-            expect(history.at(-1)).toMatchObject({provider: MODERATION_FALLBACK, status: "success"});
+            expect(history.at(-1)).toMatchObject({provider: FALLBACK, status: "success"});
         }
     });
 
-    it("fails with DoubleModerationError when both providers are blocked", async () => {
+    it("preserves metadata from the fallback provider", async () => {
+        const fallbackWithMeta: ProviderFn = (_) => Effect.succeed({
+            buffer:   Buffer.from("hello"),
+            history:  [{provider: FALLBACK, status: "success"}],
+            metadata: {revisedPrompt: "revised"},
+        });
         const exit = await run(
             generateImage("make a meme"),
-            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY), [MODERATION_FALLBACK]: modFn(MODERATION_FALLBACK)}),
+            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY)}, fallbackWithMeta),
+        );
+        expect(Exit.isSuccess(exit)).toBe(true);
+        if (Exit.isSuccess(exit)) {
+            expect(exit.value.metadata).toEqual({revisedPrompt: "revised"});
+        }
+    });
+
+    it("fails with ModerationFailedError when both providers are blocked", async () => {
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY)}, modFn(FALLBACK)),
         );
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
             // @ts-expect-error accessing .error on Cause.Fail
-            expect(exit.cause.error).toBeInstanceOf(DoubleModerationError);
+            expect(exit.cause.error).toBeInstanceOf(ModerationFailedError);
+        }
+    });
+
+    it("fails with ModerationFailedError when blocked and no fallback is configured", async () => {
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY)}),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error).toBeInstanceOf(ModerationFailedError);
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error.fallbackProvider).toBeNull();
         }
     });
 
     it("propagates RateLimitError from primary (not a moderation block)", async () => {
         const exit = await run(
             generateImage("make a meme"),
-            makeProvidersLayer({[PRIMARY]: rlFn(PRIMARY), [MODERATION_FALLBACK]: successFn()}),
+            makeProvidersLayer({[PRIMARY]: rlFn(PRIMARY)}, successFn(FALLBACK)),
         );
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
@@ -91,12 +123,80 @@ describe("generateImage", () => {
     it("propagates ProviderError from primary (not a moderation block)", async () => {
         const exit = await run(
             generateImage("make a meme"),
-            makeProvidersLayer({[PRIMARY]: errFn(PRIMARY), [MODERATION_FALLBACK]: successFn()}),
+            makeProvidersLayer({[PRIMARY]: errFn(PRIMARY)}, successFn(FALLBACK)),
         );
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
             // @ts-expect-error accessing .error on Cause.Fail
             expect(exit.cause.error).toBeInstanceOf(ProviderError);
+        }
+    });
+
+    it("fails with AllProvidersExhaustedError when the only primary is out of credits", async () => {
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: quotaFn(PRIMARY)}),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error).toBeInstanceOf(AllProvidersExhaustedError);
+        }
+    });
+
+    it("skips an out-of-credits primary and uses the next available primary", async () => {
+        const SECONDARY = "OpenAI-alt";
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: quotaFn(PRIMARY), [SECONDARY]: successFn(SECONDARY)}),
+        );
+        expect(Exit.isSuccess(exit)).toBe(true);
+        if (Exit.isSuccess(exit)) {
+            const {history} = exit.value;
+            expect(history[0]).toMatchObject({provider: PRIMARY, status: "failed"});
+            expect(history.at(-1)).toMatchObject({provider: SECONDARY, status: "success"});
+        }
+    });
+
+    it("propagates QuotaExhaustedError when the moderation fallback is out of credits", async () => {
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY)}, quotaFn(FALLBACK)),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error).toBeInstanceOf(QuotaExhaustedError);
+        }
+    });
+
+    it("lists every exhausted primary in AllProvidersExhaustedError", async () => {
+        const SECONDARY = "OpenAI-alt";
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: quotaFn(PRIMARY), [SECONDARY]: quotaFn(SECONDARY)}),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            const error = exit.cause.error;
+            expect(error).toBeInstanceOf(AllProvidersExhaustedError);
+            expect([...error.providers].sort()).toEqual([PRIMARY, SECONDARY].sort());
+        }
+    });
+
+    it("keeps a skipped-primary entry in history when a later primary triggers the moderation fallback", async () => {
+        const SECONDARY = "OpenAI-alt";
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: quotaFn(PRIMARY), [SECONDARY]: modFn(SECONDARY)}, successFn(FALLBACK)),
+        );
+        expect(Exit.isSuccess(exit)).toBe(true);
+        if (Exit.isSuccess(exit)) {
+            const {history} = exit.value;
+            expect(history[0]).toMatchObject({provider: PRIMARY, status: "failed"});   // out of credits, skipped
+            expect(history[1]).toMatchObject({provider: SECONDARY, status: "failed"}); // moderation blocked
+            expect(history.at(-1)).toMatchObject({provider: FALLBACK, status: "success"});
         }
     });
 });

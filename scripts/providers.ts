@@ -1,23 +1,59 @@
 import OpenAI from "openai";
-import {Config, Context, Duration, Effect, Layer, Random, Ref, Schedule} from "effect";
-import {DoubleModerationError, ModerationBlockedError, ProviderError, RateLimitError} from "./errors.js";
+import {Config, Context, Duration, Effect, Layer, Option, Random, Ref, Schedule} from "effect";
+import type {ConfigError} from "effect/ConfigError";
+import {AllProvidersExhaustedError, ModerationFailedError, ModerationBlockedError, ProviderError, QuotaExhaustedError, RateLimitError} from "./errors.js";
 
-export const MODERATION_FALLBACK    = "OpenAI";
 export const MAX_RETRIES            = 10;
 const        RETRY_DELAY_PADDING_MS = 1_000;
 
-export interface ProviderConfig {
-    name:     string;
-    envKey:   string;
-    model:    string;
-    baseURL?: string;
-    params?:  Record<string, string>;
+export interface ModelConfig {
+    // The model identifier sent to the API (e.g. "gpt-image-2").
+    model:   string;
+    // Extra image-generation params for this model (size, quality, etc.).
+    params?: Record<string, string>;
+    // Optional display label; defaults to "<provider> (<model>)".
+    label?:  string;
 }
 
-export const PROVIDER_CONFIGS: ProviderConfig[] = [
-    {name: "OpenAI", envKey: "OPENAI_API_KEY", model: "gpt-image-2", params: {size: "1024x1024", quality: "low", output_format: "jpeg"}},
-//    {name: "xAI",    envKey: "XAI_API_KEY",    model: "grok-imagine-image", baseURL: "https://api.x.ai/v1", params: {response_format: "b64_json"}},
+export interface ProviderConfig {
+    // Provider/account name, e.g. "OpenAI". Shared by all of its models.
+    name:     string;
+    // Env var holding the API key. Unset/blank => the whole provider is disabled.
+    envKey:   string;
+    // OpenAI-compatible base URL (omit for the default OpenAI endpoint).
+    baseURL?: string;
+    // One or more models to offer. Each becomes its own selectable candidate.
+    models:   ModelConfig[];
+}
+
+// A provider is active only when its API key env var is set to a non-empty
+// value. To disable one (e.g. temporarily), unset its secret — no code change.
+
+// Primary candidates are chosen at random for normal generation. Every model
+// listed under a provider becomes an independent candidate, so adding a model
+// here is all it takes to let it be selected.
+export const PRIMARY_PROVIDERS: ProviderConfig[] = [
+    {
+        name:   "OpenAI",
+        envKey: "OPENAI_API_KEY",
+        models: [
+            {model: "gpt-image-2", params: {size: "1024x1024", quality: "low", output_format: "jpeg"}},
+        ],
+    },
 ];
+
+// The moderation fallback is used *only* when a primary is blocked by
+// moderation. It tends to be more permissive (and more expensive), so it is
+// never part of the primary pool. If it lists several models, one is chosen at
+// random each time the fallback is invoked.
+export const MODERATION_FALLBACK_PROVIDER: ProviderConfig = {
+    name:    "xAI",
+    envKey:  "XAI_API_KEY",
+    baseURL: "https://api.x.ai/v1",
+    models: [
+        {model: "grok-imagine-image", params: {response_format: "b64_json"}},
+    ],
+};
 
 // ---- HistoryEntry -----------------------------------------------------------
 
@@ -48,65 +84,139 @@ export interface GenerationResult {
 // Deep interface: callers ask for an image; provider selection, retry, and
 // moderation fallback are entirely behind the seam.
 
-export type ProviderFn = (prompt: string) => Effect.Effect<GenerationResult, ModerationBlockedError | RateLimitError | ProviderError>;
+export type ProviderFn = (prompt: string) => Effect.Effect<GenerationResult, ModerationBlockedError | RateLimitError | ProviderError | QuotaExhaustedError>;
 
 export interface ProvidersService {
-    generateWithFallback(prompt: string): Effect.Effect<GenerationResult, DoubleModerationError | ProviderError | RateLimitError>;
+    generateWithFallback(prompt: string): Effect.Effect<GenerationResult, ModerationFailedError | AllProvidersExhaustedError | ProviderError | RateLimitError | QuotaExhaustedError>;
 }
 
 export class ProvidersServiceTag extends Context.Tag("ProvidersService")<ProvidersServiceTag, ProvidersService>() {}
 
-/** Test helper: build a Layer from a pre-constructed provider map (bypasses Config/API key loading). */
-export const makeProvidersLayer = (providerMap: Record<string, ProviderFn>): Layer.Layer<ProvidersServiceTag> =>
+/**
+ * Test helper: build a Layer from pre-constructed providers (bypasses
+ * Config/API key loading). `fallback` is the moderation-fallback provider;
+ * omit it to model a deployment where no fallback is configured.
+ */
+export const makeProvidersLayer = (
+    primaries: Record<string, ProviderFn>,
+    fallback?: ProviderFn,
+): Layer.Layer<ProvidersServiceTag> =>
     Layer.succeed(ProvidersServiceTag, {
-        generateWithFallback: (prompt) => generateWithFallback(providerMap, prompt),
+        generateWithFallback: (prompt) => generateWithFallback(primaries, fallback ?? null, prompt),
+    });
+
+export const modelLabel = (cfg: ProviderConfig, model: ModelConfig): string =>
+    model.label ?? `${cfg.name} (${model.model})`;
+
+/**
+ * Build one ProviderFn per model, all sharing a single client. Each candidate
+ * is keyed by a unique label so it can be selected, skipped, and reported on
+ * independently.
+ */
+export const makeCandidates = (cfg: ProviderConfig, apiKey: string): ReadonlyArray<readonly [string, ProviderFn]> => {
+    const client = new OpenAI({apiKey, ...(cfg.baseURL != null ? {baseURL: cfg.baseURL} : {})});
+    return cfg.models.map((m) => {
+        const label = modelLabel(cfg, m);
+        const fn: ProviderFn = (prompt) => callWithRetry(label, client, m.model, m.params ?? {}, prompt);
+        return [label, fn] as const;
+    });
+};
+
+/** Load a provider's model candidates iff its API key env var is non-empty. */
+const loadProvider = (cfg: ProviderConfig): Effect.Effect<ReadonlyArray<readonly [string, ProviderFn]>, ConfigError> =>
+    Effect.gen(function* () {
+        const key = yield* Config.option(Config.string(cfg.envKey));
+        if (Option.isNone(key) || key.value.trim() === "") { return []; }
+        return makeCandidates(cfg, key.value);
     });
 
 export const ProvidersLayer = Layer.effect(ProvidersServiceTag, Effect.gen(function* () {
-    if (!PROVIDER_CONFIGS.some(({name}) => name === MODERATION_FALLBACK)) {
-        return yield* Effect.die(`MODERATION_FALLBACK "${MODERATION_FALLBACK}" does not match any configured provider`);
+    const loaded    = yield* Effect.forEach(PRIMARY_PROVIDERS, loadProvider);
+    const primaries = Object.fromEntries(loaded.flat());
+
+    if (Object.keys(primaries).length === 0) {
+        return yield* Effect.die("No image provider configured: set at least one primary provider API key.");
     }
 
-    const providerMap = Object.fromEntries(
-        yield* Effect.all(PROVIDER_CONFIGS.map(({name, envKey, model, baseURL, params}) =>
-            Config.string(envKey).pipe(
-                Effect.map((apiKey) => {
-                    const client = new OpenAI({apiKey, ...(baseURL != null ? {baseURL} : {})});
-                    const fn: ProviderFn = (prompt) => callWithRetry(name, client, model, params ?? {}, prompt);
-                    return [name, fn] as const;
-                }),
-            ),
-        )),
-    );
+    // The moderation fallback may offer several models; pick one at random per call.
+    const fallbackCandidates = (yield* loadProvider(MODERATION_FALLBACK_PROVIDER)).map(([, fn]) => fn);
+    const fallback: ProviderFn | null = fallbackCandidates.length === 0
+        ? null
+        : (prompt) => Random.choice(fallbackCandidates).pipe(Effect.orDie, Effect.flatMap((fn) => fn(prompt)));
 
     return {
-        generateWithFallback: (prompt: string) => generateWithFallback(providerMap, prompt),
+        generateWithFallback: (prompt: string) => generateWithFallback(primaries, fallback, prompt),
     };
 }));
 
 // ---- generateWithFallback ---------------------------------------------------
 
-const CANDIDATES = PROVIDER_CONFIGS.map((c) => c.name);
+type GenerateError = ModerationFailedError | AllProvidersExhaustedError | ProviderError | RateLimitError | QuotaExhaustedError;
 
 function generateWithFallback(
-    providers: Record<string, ProviderFn>,
+    primaries: Record<string, ProviderFn>,
+    fallback: ProviderFn | null,
     prompt: string,
-): Effect.Effect<GenerationResult, DoubleModerationError | ProviderError | RateLimitError> {
-    return Effect.gen(function* () {
-        const primary = yield* Random.choice(CANDIDATES);
-        yield* Effect.log(`Randomly selected ${primary} as primary provider...`);
+): Effect.Effect<GenerationResult, GenerateError> {
+    // Object.keys is non-empty for the real layer (guarded above) and for every
+    // test; an empty map is a programmer error, surfaced as a defect below.
+    return tryPrimaries(primaries, Object.keys(primaries), [], fallback, prompt);
+}
 
-        return yield* providers[primary](prompt).pipe(
-            Effect.catchTag("ModerationBlockedError", (primaryErr) => Effect.gen(function* () {
-                yield* Effect.log(`Moderation block on ${primary} - falling back to ${MODERATION_FALLBACK}...`);
-                const primaryEntry: HistoryEntry = {provider: primary, status: "failed", message: primaryErr.message};
-                return yield* providers[MODERATION_FALLBACK](prompt).pipe(
-                    Effect.map(({buffer, history}) => ({buffer, history: [primaryEntry, ...history]})),
-                    Effect.catchTag("ModerationBlockedError", () =>
-                        Effect.fail(new DoubleModerationError({fallbackProvider: MODERATION_FALLBACK})),
-                    ),
-                );
+/**
+ * Try primary providers one at a time in random order. A provider that is out
+ * of credits/quota is skipped and the next one is tried; a moderation block
+ * diverts to the dedicated fallback provider. Other errors propagate.
+ */
+function tryPrimaries(
+    primaries: Record<string, ProviderFn>,
+    remaining: string[],
+    skipped: HistoryEntry[],
+    fallback: ProviderFn | null,
+    prompt: string,
+): Effect.Effect<GenerationResult, GenerateError> {
+    return Effect.gen(function* () {
+        if (remaining.length === 0) {
+            return yield* Effect.fail(new AllProvidersExhaustedError({providers: skipped.map((e) => e.provider)}));
+        }
+
+        const primary = yield* Random.choice(remaining).pipe(Effect.orDie);
+        const rest    = remaining.filter((name) => name !== primary);
+        yield* Effect.log(`Selected ${primary} as primary provider...`);
+
+        return yield* primaries[primary](prompt).pipe(
+            Effect.map((result) => ({...result, history: [...skipped, ...result.history]})),
+            Effect.catchTag("QuotaExhaustedError", (err) => Effect.gen(function* () {
+                yield* Effect.logWarning(`${primary} is out of credits/quota - skipping. ${err.detail}`);
+                const entry: HistoryEntry = {provider: primary, status: "failed", message: err.message};
+                return yield* tryPrimaries(primaries, rest, [...skipped, entry], fallback, prompt);
             })),
+            Effect.catchTag("ModerationBlockedError", (err) =>
+                runModerationFallback(primary, err, skipped, fallback, prompt)),
+        );
+    });
+}
+
+function runModerationFallback(
+    primary: string,
+    primaryErr: ModerationBlockedError,
+    skipped: HistoryEntry[],
+    fallback: ProviderFn | null,
+    prompt: string,
+): Effect.Effect<GenerationResult, GenerateError> {
+    return Effect.gen(function* () {
+        if (fallback == null) {
+            yield* Effect.log(`Moderation block on ${primary} - no fallback provider available.`);
+            return yield* Effect.fail(new ModerationFailedError({fallbackProvider: null}));
+        }
+
+        yield* Effect.log(`Moderation block on ${primary} - falling back to ${MODERATION_FALLBACK_PROVIDER.name}...`);
+        const primaryEntry: HistoryEntry = {provider: primary, status: "failed", message: primaryErr.message};
+
+        return yield* fallback(prompt).pipe(
+            Effect.map((result) => ({...result, history: [...skipped, primaryEntry, ...result.history]})),
+            Effect.catchTag("ModerationBlockedError", () =>
+                Effect.fail(new ModerationFailedError({fallbackProvider: MODERATION_FALLBACK_PROVIDER.name}))),
         );
     });
 }
@@ -119,7 +229,7 @@ class RateLimitRetryableError {
     constructor(readonly delayMs: number) {}
 }
 
-type CallError = ModerationBlockedError | RateLimitRetryableError | ProviderError;
+type CallError = ModerationBlockedError | RateLimitRetryableError | ProviderError | QuotaExhaustedError;
 
 // OpenAI error shape for catch-clause narrowing
 interface ApiError {
@@ -132,6 +242,17 @@ interface ApiError {
     };
 }
 
+// A provider is "out of tokens" when its account has no credits or has hit a
+// spending/quota limit. These never resolve by retrying, so we skip the
+// provider entirely. Covers OpenAI (429 insufficient_quota / 403 billing
+// hard limit) and xAI (403 with a credits/spending-limit message).
+function isQuotaExhausted(err: ApiError): boolean {
+    const code = err?.error?.code;
+    if (code === "insufficient_quota" || code === "billing_hard_limit_reached") { return true; }
+    if (err?.status === 403 && /credit|spending limit|quota|billing/i.test(err?.message ?? "")) { return true; }
+    return false;
+}
+
 function classifyApiError(err: unknown, model: string): CallError {
     const apiErr = err as ApiError;
     if (apiErr?.error?.code === "moderation_blocked") {
@@ -140,6 +261,9 @@ function classifyApiError(err: unknown, model: string): CallError {
             ? `\nModeration stage: ${details.moderation_stage}\nCategories: ${(details.categories ?? []).join(", ")}`
             : "";
         return new ModerationBlockedError({provider: model, detail: (apiErr?.message ?? String(err)) + extra});
+    }
+    if (isQuotaExhausted(apiErr)) {
+        return new QuotaExhaustedError({provider: model, detail: apiErr?.message ?? String(err)});
     }
     if (apiErr?.status === 429) {
         const delayMs = parseRetryDelayMs(apiErr);
@@ -161,7 +285,7 @@ export function callWithRetry(
     model: string,
     params: Record<string, string>,
     prompt: string,
-): Effect.Effect<GenerationResult, ModerationBlockedError | RateLimitError | ProviderError> {
+): Effect.Effect<GenerationResult, ModerationBlockedError | RateLimitError | ProviderError | QuotaExhaustedError> {
     return Effect.gen(function* () {
         const rateLimitHitsRef = yield* Ref.make(0);
 

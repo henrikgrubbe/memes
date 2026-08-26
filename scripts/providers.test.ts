@@ -1,10 +1,10 @@
-import {Duration, Effect, Exit, Fiber, Layer} from "effect";
+import {ConfigProvider, Duration, Effect, Exit, Fiber, Layer} from "effect";
 import * as TestClock from "effect/TestClock";
 import * as TestContext from "effect/TestContext";
 import type OpenAI from "openai";
 import {describe, expect, it} from "vitest";
-import {ModerationBlockedError, ProviderError, RateLimitError} from "./errors.js";
-import {callWithRetry, MAX_RETRIES} from "./providers.js";
+import {ModerationBlockedError, ProviderError, QuotaExhaustedError, RateLimitError} from "./errors.js";
+import {callWithRetry, makeCandidates, MAX_RETRIES, modelLabel, ProvidersLayer, ProvidersServiceTag} from "./providers.js";
 
 const PROVIDER = "test-provider";
 const call = (client: OpenAI) => callWithRetry(PROVIDER, client, "m", {}, "prompt");
@@ -33,6 +33,8 @@ const ok    = (b64 = "aGVsbG8=") => (): Promise<ImageResponse> => Promise.resolv
 const rl    = (delayS = 0.001)   => (): Promise<ImageResponse> => Promise.reject({status: 429, message: `try again in ${delayS}s`, headers: {}});
 const mod   = ()                  => (): Promise<ImageResponse> => Promise.reject({status: 400, message: "blocked", error: {code: "moderation_blocked", moderation_details: {moderation_stage: "input"}}});
 const fail  = (msg = "boom")     => (): Promise<ImageResponse> => Promise.reject({status: 500, message: msg});
+const xaiCredits        = ()     => (): Promise<ImageResponse> => Promise.reject({status: 403, message: "Your team abc has either used all available credits or reached its monthly spending limit."});
+const insufficientQuota = ()     => (): Promise<ImageResponse> => Promise.reject({status: 429, message: "You exceeded your current quota", error: {code: "insufficient_quota"}});
 
 const run   = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(Effect.exit(effect));
 const runTC = <A, E>(effect: Effect.Effect<A, E, never>) =>
@@ -93,6 +95,26 @@ describe("callWithRetry", () => {
         }
     });
 
+    it("fails with QuotaExhaustedError on a 403 credit/spending-limit error", async () => {
+        const exit = await run(call(makeClient([xaiCredits()])));
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error).toBeInstanceOf(QuotaExhaustedError);
+        }
+    });
+
+    it("fails with QuotaExhaustedError without retrying on 429 insufficient_quota", async () => {
+        // Second response would succeed; a quota error must not be retried, so we
+        // never reach it.
+        const exit = await run(call(makeClient([insufficientQuota(), ok()])));
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error).toBeInstanceOf(QuotaExhaustedError);
+        }
+    });
+
     it("retries after rate limit and succeeds", async () => {
         const client = makeClient([rl(), ok()]);
         const test   = Effect.gen(function* () {
@@ -149,5 +171,61 @@ describe("callWithRetry", () => {
         expect(capturedParams["quality"]).toBe("hd");
         expect(capturedParams["model"]).toBe("dall-e-3");
         expect(capturedParams["prompt"]).toBe("cat");
+    });
+});
+
+describe("model candidates", () => {
+    it("defaults a candidate label to '<provider> (<model>)'", () => {
+        expect(modelLabel({name: "OpenAI", envKey: "K", models: []}, {model: "gpt-image-2"}))
+            .toBe("OpenAI (gpt-image-2)");
+    });
+
+    it("honours an explicit label override", () => {
+        expect(modelLabel({name: "OpenAI", envKey: "K", models: []}, {model: "gpt-image-2", label: "Fast"}))
+            .toBe("Fast");
+    });
+
+    it("expands each model into its own uniquely-labelled candidate", () => {
+        const candidates = makeCandidates(
+            {
+                name:   "OpenAI",
+                envKey: "OPENAI_API_KEY",
+                models: [
+                    {model: "gpt-image-2", params: {quality: "low"}},
+                    {model: "gpt-image-2", params: {quality: "high"}, label: "OpenAI HQ"},
+                ],
+            },
+            "sk-test",
+        );
+        expect(candidates.map(([label]) => label)).toEqual(["OpenAI (gpt-image-2)", "OpenAI HQ"]);
+        expect(typeof candidates[0][1]).toBe("function");
+    });
+});
+
+describe("ProvidersLayer (disable-by-omission)", () => {
+    // Build the layer under a fake set of env vars and report whether it
+    // succeeded. The layer constructs clients but makes no network calls.
+    const buildWith = (env: Record<string, string>) =>
+        Effect.runPromise(
+            ProvidersServiceTag.pipe(
+                Effect.provide(ProvidersLayer),
+                Effect.withConfigProvider(ConfigProvider.fromMap(new Map(Object.entries(env)))),
+                Effect.exit,
+            ),
+        );
+
+    it("dies when no primary provider key is set", async () => {
+        const exit = await buildWith({});
+        expect(Exit.isFailure(exit)).toBe(true);
+    });
+
+    it("treats a blank key as disabled and dies with no primary configured", async () => {
+        const exit = await buildWith({OPENAI_API_KEY: "   "});
+        expect(Exit.isFailure(exit)).toBe(true);
+    });
+
+    it("builds when the primary key is set, with or without the fallback key", async () => {
+        expect(Exit.isSuccess(await buildWith({OPENAI_API_KEY: "sk-primary"}))).toBe(true);
+        expect(Exit.isSuccess(await buildWith({OPENAI_API_KEY: "sk-primary", XAI_API_KEY: "xai-key"}))).toBe(true);
     });
 });
