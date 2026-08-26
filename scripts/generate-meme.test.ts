@@ -1,6 +1,6 @@
 import {Effect, Exit, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {ModerationFailedError, ModerationBlockedError, ProviderError, RateLimitError} from "./errors.js";
+import {AllProvidersExhaustedError, ModerationFailedError, ModerationBlockedError, ProviderError, QuotaExhaustedError, RateLimitError} from "./errors.js";
 import {generateImage} from "./generate-meme.js";
 import {makeProvidersLayer, ProvidersServiceTag} from "./providers.js";
 import type {ProviderFn} from "./providers.js";
@@ -18,6 +18,7 @@ const successRlFn = (provider: string, hits: number): ProviderFn => (_) => Effec
 const modFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ModerationBlockedError({provider, detail: "blocked"}));
 const rlFn        = (provider: string): ProviderFn => (_) => Effect.fail(new RateLimitError({provider, attempts: 10}));
 const errFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ProviderError({provider, detail: "error"}));
+const quotaFn     = (provider: string): ProviderFn => (_) => Effect.fail(new QuotaExhaustedError({provider, detail: "no credits"}));
 
 const run = <A, E>(effect: Effect.Effect<A, E, ProvidersServiceTag>, layer: Layer.Layer<ProvidersServiceTag>) =>
     Effect.runPromise(Effect.exit(Effect.provide(effect.pipe(Effect.withRandomFixed([0])), layer)));
@@ -128,6 +129,44 @@ describe("generateImage", () => {
         if (Exit.isFailure(exit)) {
             // @ts-expect-error accessing .error on Cause.Fail
             expect(exit.cause.error).toBeInstanceOf(ProviderError);
+        }
+    });
+
+    it("fails with AllProvidersExhaustedError when the only primary is out of credits", async () => {
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: quotaFn(PRIMARY)}),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error).toBeInstanceOf(AllProvidersExhaustedError);
+        }
+    });
+
+    it("skips an out-of-credits primary and uses the next available primary", async () => {
+        const SECONDARY = "OpenAI-alt";
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: quotaFn(PRIMARY), [SECONDARY]: successFn(SECONDARY)}),
+        );
+        expect(Exit.isSuccess(exit)).toBe(true);
+        if (Exit.isSuccess(exit)) {
+            const {history} = exit.value;
+            expect(history[0]).toMatchObject({provider: PRIMARY, status: "failed"});
+            expect(history.at(-1)).toMatchObject({provider: SECONDARY, status: "success"});
+        }
+    });
+
+    it("propagates QuotaExhaustedError when the moderation fallback is out of credits", async () => {
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY)}, quotaFn(FALLBACK)),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error).toBeInstanceOf(QuotaExhaustedError);
         }
     });
 });

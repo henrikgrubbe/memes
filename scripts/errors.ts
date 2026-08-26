@@ -42,3 +42,16 @@ export class ProviderError extends Data.TaggedError("ProviderError")<{
 }> {
     get message() { return `${this.provider} failed: ${this.detail}`; }
 }
+
+export class QuotaExhaustedError extends Data.TaggedError("QuotaExhaustedError")<{
+    readonly provider: string;
+    readonly detail:   string;
+}> {
+    get message() { return `${this.provider} is out of credits/quota: ${this.detail}`; }
+}
+
+export class AllProvidersExhaustedError extends Data.TaggedError("AllProvidersExhaustedError")<{
+    readonly providers: ReadonlyArray<string>;
+}> {
+    get message() { return `All image providers are out of credits/quota: ${this.providers.join(", ")}`; }
+}

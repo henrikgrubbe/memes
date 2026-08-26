@@ -115,7 +115,12 @@ export function buildSuccessComment({memeId, provider, history, prompt, twist, r
     ].join("\n");
 }
 
-const makeNotifier = (): NotifierService => ({
+interface RawNotifier {
+    notifySuccess(params: NotifySuccessParams): Effect.Effect<void, never, NotifierDeps>;
+    notifyFailure(message: string, closeNotPlanned?: boolean): Effect.Effect<void, never, NotifierDeps>;
+}
+
+const makeNotifier = (): RawNotifier => ({
     notifySuccess: ({memeId, history, prompt, twist, metadata}) => Effect.gen(function* () {
         const config   = yield* AppConfigService;
         const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
@@ -140,11 +145,21 @@ export const NotifierLayer: Layer.Layer<NotifierServiceTag, never, CommandExecut
     Layer.effect(
         NotifierServiceTag,
         Effect.gen(function* () {
-            // Yield deps here so the layer type accurately declares its requirements.
-            // The service methods close over these via context at runtime.
-            yield* CommandExecutor.CommandExecutor;
-            yield* AppConfigService;
-            yield* FileSystem.FileSystem;
-            return makeNotifier();
+            // Capture dependencies once, at layer construction, and provide them
+            // to the service methods so their effects require nothing (R = never).
+            const executor = yield* CommandExecutor.CommandExecutor;
+            const config   = yield* AppConfigService;
+            const fs       = yield* FileSystem.FileSystem;
+            const provideDeps = <A>(effect: Effect.Effect<A, never, NotifierDeps>): Effect.Effect<A> =>
+                effect.pipe(
+                    Effect.provideService(CommandExecutor.CommandExecutor, executor),
+                    Effect.provideService(AppConfigService, config),
+                    Effect.provideService(FileSystem.FileSystem, fs),
+                );
+            const notifier = makeNotifier();
+            return {
+                notifySuccess: (params) => provideDeps(notifier.notifySuccess(params)),
+                notifyFailure: (message, closeNotPlanned) => provideDeps(notifier.notifyFailure(message, closeNotPlanned)),
+            } satisfies NotifierService;
         }),
     );

@@ -28,7 +28,7 @@ describe("parseIssueBody", () => {
         const exit = await run(body);
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
-            expect((exit.value as Record<string, unknown>)["random"]).toBeUndefined();
+            expect((exit.value as unknown as Record<string, unknown>)["random"]).toBeUndefined();
         }
     });
 

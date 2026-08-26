@@ -3,7 +3,7 @@ import * as TestClock from "effect/TestClock";
 import * as TestContext from "effect/TestContext";
 import type OpenAI from "openai";
 import {describe, expect, it} from "vitest";
-import {ModerationBlockedError, ProviderError, RateLimitError} from "./errors.js";
+import {ModerationBlockedError, ProviderError, QuotaExhaustedError, RateLimitError} from "./errors.js";
 import {callWithRetry, MAX_RETRIES} from "./providers.js";
 
 const PROVIDER = "test-provider";
@@ -33,6 +33,8 @@ const ok    = (b64 = "aGVsbG8=") => (): Promise<ImageResponse> => Promise.resolv
 const rl    = (delayS = 0.001)   => (): Promise<ImageResponse> => Promise.reject({status: 429, message: `try again in ${delayS}s`, headers: {}});
 const mod   = ()                  => (): Promise<ImageResponse> => Promise.reject({status: 400, message: "blocked", error: {code: "moderation_blocked", moderation_details: {moderation_stage: "input"}}});
 const fail  = (msg = "boom")     => (): Promise<ImageResponse> => Promise.reject({status: 500, message: msg});
+const xaiCredits        = ()     => (): Promise<ImageResponse> => Promise.reject({status: 403, message: "Your team abc has either used all available credits or reached its monthly spending limit."});
+const insufficientQuota = ()     => (): Promise<ImageResponse> => Promise.reject({status: 429, message: "You exceeded your current quota", error: {code: "insufficient_quota"}});
 
 const run   = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(Effect.exit(effect));
 const runTC = <A, E>(effect: Effect.Effect<A, E, never>) =>
@@ -90,6 +92,26 @@ describe("callWithRetry", () => {
         if (Exit.isFailure(exit)) {
             // @ts-expect-error accessing .error on Cause.Fail
             expect(exit.cause.error).toBeInstanceOf(ProviderError);
+        }
+    });
+
+    it("fails with QuotaExhaustedError on a 403 credit/spending-limit error", async () => {
+        const exit = await run(call(makeClient([xaiCredits()])));
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error).toBeInstanceOf(QuotaExhaustedError);
+        }
+    });
+
+    it("fails with QuotaExhaustedError without retrying on 429 insufficient_quota", async () => {
+        // Second response would succeed; a quota error must not be retried, so we
+        // never reach it.
+        const exit = await run(call(makeClient([insufficientQuota(), ok()])));
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error).toBeInstanceOf(QuotaExhaustedError);
         }
     });
 
