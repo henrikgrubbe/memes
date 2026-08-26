@@ -21,7 +21,6 @@ export interface NotifySuccessParams {
     memeId:   string;
     history:  HistoryEntry[];
     prompt:   string;
-    twist:    string | null;
     metadata?: GenerationMetadata;
 }
 
@@ -72,11 +71,11 @@ const postSlack = (data: SlackPayload): Effect.Effect<void, never, NotifierDeps>
         );
     });
 
-export function buildSuccessComment({memeId, provider, history, prompt, twist, requester, channel, slackLink, repo, metadata}: {
+export function buildSuccessComment({memeId, provider, history, prompt, requester, channel, slackLink, repo, metadata}: {
     memeId: string; provider: string; history: HistoryEntry[];
-    prompt: string; twist: string | null; requester: string; channel: string; slackLink: string; repo: string; metadata?: GenerationMetadata;
+    prompt: string; requester: string; channel: string; slackLink: string; repo: string; metadata?: GenerationMetadata;
 }): string {
-    const providerNote  = ` _(${[provider, twist].filter((x) => x != null).join(" - ")})_`;
+    const providerNote  = ` _(${provider})_`;
     const promptDisplay = prompt.includes("`") ? `\`\`${prompt}\`\`` : `\`${prompt}\``;
     const revisedPrompt = metadata?.revisedPrompt;
     const revisedPromptDisplay = revisedPrompt == null
@@ -121,10 +120,10 @@ interface RawNotifier {
 }
 
 const makeNotifier = (): RawNotifier => ({
-    notifySuccess: ({memeId, history, prompt, twist, metadata}) => Effect.gen(function* () {
+    notifySuccess: ({memeId, history, prompt, metadata}) => Effect.gen(function* () {
         const config   = yield* AppConfigService;
         const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
-        yield* postComment(buildSuccessComment({memeId, provider, history, prompt, twist, requester: config.requester, channel: config.channel, slackLink: config.slackLink, repo: config.repo, metadata}));
+        yield* postComment(buildSuccessComment({memeId, provider, history, prompt, requester: config.requester, channel: config.channel, slackLink: config.slackLink, repo: config.repo, metadata}));
         yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.ignore);
         yield* Effect.log(`Issue #${config.issueNumber} closed.`);
         const imageUrl = `https://raw.githubusercontent.com/${config.repo}/refs/heads/main/memes/${memeId}.jpg`;
