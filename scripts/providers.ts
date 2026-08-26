@@ -6,27 +6,54 @@ import {AllProvidersExhaustedError, ModerationFailedError, ModerationBlockedErro
 export const MAX_RETRIES            = 10;
 const        RETRY_DELAY_PADDING_MS = 1_000;
 
+export interface ModelConfig {
+    // The model identifier sent to the API (e.g. "gpt-image-2").
+    model:   string;
+    // Extra image-generation params for this model (size, quality, etc.).
+    params?: Record<string, string>;
+    // Optional display label; defaults to "<provider> (<model>)".
+    label?:  string;
+}
+
 export interface ProviderConfig {
+    // Provider/account name, e.g. "OpenAI". Shared by all of its models.
     name:     string;
+    // Env var holding the API key. Unset/blank => the whole provider is disabled.
     envKey:   string;
-    model:    string;
+    // OpenAI-compatible base URL (omit for the default OpenAI endpoint).
     baseURL?: string;
-    params?:  Record<string, string>;
+    // One or more models to offer. Each becomes its own selectable candidate.
+    models:   ModelConfig[];
 }
 
 // A provider is active only when its API key env var is set to a non-empty
 // value. To disable one (e.g. temporarily), unset its secret — no code change.
 
-// Primary providers are chosen at random for normal generation.
+// Primary candidates are chosen at random for normal generation. Every model
+// listed under a provider becomes an independent candidate, so adding a model
+// here is all it takes to let it be selected.
 export const PRIMARY_PROVIDERS: ProviderConfig[] = [
-    {name: "OpenAI", envKey: "OPENAI_API_KEY", model: "gpt-image-2", params: {size: "1024x1024", quality: "low", output_format: "jpeg"}},
+    {
+        name:   "OpenAI",
+        envKey: "OPENAI_API_KEY",
+        models: [
+            {model: "gpt-image-2", params: {size: "1024x1024", quality: "low", output_format: "jpeg"}},
+        ],
+    },
 ];
 
 // The moderation fallback is used *only* when a primary is blocked by
 // moderation. It tends to be more permissive (and more expensive), so it is
-// never part of the primary pool.
-export const MODERATION_FALLBACK_PROVIDER: ProviderConfig =
-    {name: "xAI", envKey: "XAI_API_KEY", model: "grok-imagine-image", baseURL: "https://api.x.ai/v1", params: {response_format: "b64_json"}};
+// never part of the primary pool. If it lists several models, one is chosen at
+// random each time the fallback is invoked.
+export const MODERATION_FALLBACK_PROVIDER: ProviderConfig = {
+    name:    "xAI",
+    envKey:  "XAI_API_KEY",
+    baseURL: "https://api.x.ai/v1",
+    models: [
+        {model: "grok-imagine-image", params: {response_format: "b64_json"}},
+    ],
+};
 
 // ---- HistoryEntry -----------------------------------------------------------
 
@@ -78,30 +105,44 @@ export const makeProvidersLayer = (
         generateWithFallback: (prompt) => generateWithFallback(primaries, fallback ?? null, prompt),
     });
 
-const makeProviderFn = (cfg: ProviderConfig, apiKey: string): ProviderFn => {
+export const modelLabel = (cfg: ProviderConfig, model: ModelConfig): string =>
+    model.label ?? `${cfg.name} (${model.model})`;
+
+/**
+ * Build one ProviderFn per model, all sharing a single client. Each candidate
+ * is keyed by a unique label so it can be selected, skipped, and reported on
+ * independently.
+ */
+export const makeCandidates = (cfg: ProviderConfig, apiKey: string): ReadonlyArray<readonly [string, ProviderFn]> => {
     const client = new OpenAI({apiKey, ...(cfg.baseURL != null ? {baseURL: cfg.baseURL} : {})});
-    return (prompt) => callWithRetry(cfg.name, client, cfg.model, cfg.params ?? {}, prompt);
+    return cfg.models.map((m) => {
+        const label = modelLabel(cfg, m);
+        const fn: ProviderFn = (prompt) => callWithRetry(label, client, m.model, m.params ?? {}, prompt);
+        return [label, fn] as const;
+    });
 };
 
-/** Load a provider iff its API key env var is set to a non-empty value. */
-const loadProvider = (cfg: ProviderConfig): Effect.Effect<Option.Option<readonly [string, ProviderFn]>, ConfigError> =>
+/** Load a provider's model candidates iff its API key env var is non-empty. */
+const loadProvider = (cfg: ProviderConfig): Effect.Effect<ReadonlyArray<readonly [string, ProviderFn]>, ConfigError> =>
     Effect.gen(function* () {
         const key = yield* Config.option(Config.string(cfg.envKey));
-        if (Option.isNone(key) || key.value.trim() === "") { return Option.none(); }
-        return Option.some([cfg.name, makeProviderFn(cfg, key.value)] as const);
+        if (Option.isNone(key) || key.value.trim() === "") { return []; }
+        return makeCandidates(cfg, key.value);
     });
 
 export const ProvidersLayer = Layer.effect(ProvidersServiceTag, Effect.gen(function* () {
     const loaded    = yield* Effect.forEach(PRIMARY_PROVIDERS, loadProvider);
-    const primaries = Object.fromEntries(loaded.filter(Option.isSome).map((entry) => entry.value));
+    const primaries = Object.fromEntries(loaded.flat());
 
     if (Object.keys(primaries).length === 0) {
         return yield* Effect.die("No image provider configured: set at least one primary provider API key.");
     }
 
-    const fallback = Option.getOrNull(
-        (yield* loadProvider(MODERATION_FALLBACK_PROVIDER)).pipe(Option.map(([, fn]) => fn)),
-    );
+    // The moderation fallback may offer several models; pick one at random per call.
+    const fallbackCandidates = (yield* loadProvider(MODERATION_FALLBACK_PROVIDER)).map(([, fn]) => fn);
+    const fallback: ProviderFn | null = fallbackCandidates.length === 0
+        ? null
+        : (prompt) => Random.choice(fallbackCandidates).pipe(Effect.orDie, Effect.flatMap((fn) => fn(prompt)));
 
     return {
         generateWithFallback: (prompt: string) => generateWithFallback(primaries, fallback, prompt),

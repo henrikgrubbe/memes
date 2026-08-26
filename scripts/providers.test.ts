@@ -4,7 +4,7 @@ import * as TestContext from "effect/TestContext";
 import type OpenAI from "openai";
 import {describe, expect, it} from "vitest";
 import {ModerationBlockedError, ProviderError, QuotaExhaustedError, RateLimitError} from "./errors.js";
-import {callWithRetry, MAX_RETRIES} from "./providers.js";
+import {callWithRetry, makeCandidates, MAX_RETRIES, modelLabel} from "./providers.js";
 
 const PROVIDER = "test-provider";
 const call = (client: OpenAI) => callWithRetry(PROVIDER, client, "m", {}, "prompt");
@@ -171,5 +171,33 @@ describe("callWithRetry", () => {
         expect(capturedParams["quality"]).toBe("hd");
         expect(capturedParams["model"]).toBe("dall-e-3");
         expect(capturedParams["prompt"]).toBe("cat");
+    });
+});
+
+describe("model candidates", () => {
+    it("defaults a candidate label to '<provider> (<model>)'", () => {
+        expect(modelLabel({name: "OpenAI", envKey: "K", models: []}, {model: "gpt-image-2"}))
+            .toBe("OpenAI (gpt-image-2)");
+    });
+
+    it("honours an explicit label override", () => {
+        expect(modelLabel({name: "OpenAI", envKey: "K", models: []}, {model: "gpt-image-2", label: "Fast"}))
+            .toBe("Fast");
+    });
+
+    it("expands each model into its own uniquely-labelled candidate", () => {
+        const candidates = makeCandidates(
+            {
+                name:   "OpenAI",
+                envKey: "OPENAI_API_KEY",
+                models: [
+                    {model: "gpt-image-2", params: {quality: "low"}},
+                    {model: "gpt-image-2", params: {quality: "high"}, label: "OpenAI HQ"},
+                ],
+            },
+            "sk-test",
+        );
+        expect(candidates.map(([label]) => label)).toEqual(["OpenAI (gpt-image-2)", "OpenAI HQ"]);
+        expect(typeof candidates[0][1]).toBe("function");
     });
 });
