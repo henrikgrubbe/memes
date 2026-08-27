@@ -12,6 +12,8 @@ prompt before generation, and are case-insensitive; saga names are slugs of
 
 - `read:<saga>` — prepend that saga's canon to the image prompt for continuity.
 - `write:<saga>` — fold this meme into that saga's canon after generating.
+- `saga:<saga>` — shorthand for both: read *and* write the same saga (the usual
+  "keep participating in this saga" case).
 
 They are independent: a meme may read one saga, write another, both, or
 neither. A space after the colon (`read: the news`) is **not** a directive.
