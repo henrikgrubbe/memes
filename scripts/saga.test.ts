@@ -1,9 +1,12 @@
+import {Effect} from "effect";
 import {describe, expect, it} from "vitest";
 import {
     appendFallback,
     buildCompressionMessages,
     buildMemePrompt,
+    buildShortenMessages,
     capCanon,
+    foldCanon,
     MAX_CANON_CHARS,
     MAX_PROMPT_CHARS,
     sagaPath,
@@ -46,7 +49,21 @@ describe("capCanon", () => {
     });
 
     it("truncates canon longer than the ceiling", () => {
-        expect(capCanon("z".repeat(MAX_CANON_CHARS + 500)).length).toBe(MAX_CANON_CHARS);
+        expect(capCanon("z".repeat(MAX_CANON_CHARS + 500)).length).toBeLessThanOrEqual(MAX_CANON_CHARS);
+    });
+
+    it("cuts at the last line boundary rather than mid-word", () => {
+        const text   = "a".repeat(MAX_CANON_CHARS - 10) + "\n" + "b".repeat(100);
+        const capped = capCanon(text);
+        expect(capped.length).toBeLessThanOrEqual(MAX_CANON_CHARS);
+        expect(capped).toBe("a".repeat(MAX_CANON_CHARS - 10));
+        expect(capped).not.toContain("b");
+    });
+
+    it("hard-cuts when the only boundary is too early to be useful", () => {
+        const text   = "x. " + "y".repeat(MAX_CANON_CHARS + 100); // boundary at index 1
+        const capped = capCanon(text);
+        expect(capped.length).toBe(MAX_CANON_CHARS);
     });
 });
 
@@ -87,5 +104,52 @@ describe("buildCompressionMessages", () => {
 describe("sagaPath", () => {
     it("maps a saga name to a markdown file under the context dir", () => {
         expect(sagaPath("heist")).toBe("context/heist.md");
+    });
+});
+
+describe("buildShortenMessages", () => {
+    it("instructs a hard shorten under the ceiling and includes the overlong canon", () => {
+        const [system, user] = buildShortenMessages("heist", "way too long canon");
+        expect(system.content).toContain('saga "heist"');
+        expect(system.content).toContain(String(MAX_CANON_CHARS));
+        expect(system.content.toUpperCase()).toContain("SHORTER");
+        expect(user.content).toContain("way too long canon");
+    });
+});
+
+describe("foldCanon", () => {
+    const queuedModel = (responses: Array<string | Error>) => {
+        let i = 0;
+        return () => {
+            const r = responses[Math.min(i++, responses.length - 1)];
+            return r instanceof Error ? Effect.fail(r) : Effect.succeed(r);
+        };
+    };
+    const run = (responses: Array<string | Error>, canon = "old canon", prompt = "new idea") =>
+        Effect.runPromise(foldCanon(queuedModel(responses), "heist", canon, prompt));
+
+    it("returns the model's canon unchanged when it is within budget", async () => {
+        expect(await run(["a tidy canon"])).toBe("a tidy canon");
+    });
+
+    it("retries with a shorten pass when the first response overshoots", async () => {
+        const result = await run(["x".repeat(MAX_CANON_CHARS + 500), "shortened canon"]);
+        expect(result).toBe("shortened canon");
+    });
+
+    it("clamps to the ceiling when even the shorten pass overshoots", async () => {
+        const result = await run(["x".repeat(MAX_CANON_CHARS + 500), "y".repeat(MAX_CANON_CHARS + 500)]);
+        expect(result.length).toBeLessThanOrEqual(MAX_CANON_CHARS);
+    });
+
+    it("falls back to a raw append when the model call fails", async () => {
+        const result = await run([new Error("boom")], "old canon", "new idea");
+        expect(result).toBe("old canon\n- new idea");
+    });
+
+    it("clamps the first response when the shorten retry fails", async () => {
+        const result = await run(["z".repeat(MAX_CANON_CHARS + 500), new Error("boom")]);
+        expect(result.length).toBeLessThanOrEqual(MAX_CANON_CHARS);
+        expect(result).toContain("z");
     });
 });

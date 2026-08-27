@@ -11,6 +11,9 @@ export const MAX_PROMPT_CHARS = 4000;
 export const MAX_CANON_CHARS  = 3000;
 // Cheap text model used to fold each new meme into a saga's canon.
 export const COMPRESSION_MODEL = "gpt-4o-mini";
+// Upper bound on compression output, so a runaway response can't balloon the
+// canon. ~4 chars/token, with headroom above MAX_CANON_CHARS.
+export const MAX_CANON_TOKENS = 900;
 // Directory (repo-relative) holding one markdown file per saga.
 export const CONTEXT_DIR = "context";
 
@@ -21,9 +24,25 @@ const MAX_PUSH_RETRIES = 5;
 /** Repo-relative path for a saga's canon file. */
 export const sagaPath = (saga: string): string => `${CONTEXT_DIR}/${saga}.md`;
 
-/** Truncate canon text to the ceiling so it never blows the prompt budget. */
-export const capCanon = (text: string): string =>
-    text.length > MAX_CANON_CHARS ? text.slice(0, MAX_CANON_CHARS) : text;
+/**
+ * Clamp canon text to the ceiling. This is only a last-resort safety net (the
+ * model is asked to stay under budget and gets a shorten retry first). When it
+ * must cut, it prefers the last paragraph/line/sentence boundary within budget
+ * so the canon isn't left dangling mid-word.
+ */
+export function capCanon(text: string): string {
+    if (text.length <= MAX_CANON_CHARS) { return text; }
+    const slice = text.slice(0, MAX_CANON_CHARS);
+    const boundary = Math.max(
+        slice.lastIndexOf("\n"),
+        slice.lastIndexOf(". "),
+        slice.lastIndexOf("! "),
+        slice.lastIndexOf("? "),
+    );
+    // Only honour a boundary that keeps most of the budget; otherwise hard-cut.
+    const end = boundary > MAX_CANON_CHARS * 0.6 ? boundary : slice.length;
+    return slice.slice(0, end).trimEnd();
+}
 
 /**
  * Assemble the final image prompt. When a saga canon is supplied it is
@@ -68,9 +87,46 @@ export function buildCompressionMessages(saga: string, canon: string, prompt: st
     return [{role: "system", content: system}, {role: "user", content: user}];
 }
 
+/** Ask the model to shrink an over-budget canon without losing key elements. */
+export function buildShortenMessages(saga: string, overlong: string): ChatMessage[] {
+    const system = [
+        `You are editing the canon for the saga "${saga}".`,
+        `Rewrite it to be SHORTER without losing recurring characters, running`,
+        `jokes, locations or key story beats. It MUST be under ${MAX_CANON_CHARS}`,
+        `characters. Keep the same language. Output ONLY the canon text.`,
+    ].join("\n");
+    return [{role: "system", content: system}, {role: "user", content: `Canon to shorten:\n${overlong}`}];
+}
+
 /** Fallback used when the compression model is unavailable: raw append, capped. */
 export const appendFallback = (canon: string, prompt: string): string =>
     capCanon(`${canon}${canon.trim() === "" ? "" : "\n"}- ${prompt}`);
+
+/**
+ * Fold a new meme idea into the canon using an injected model call. Total by
+ * construction: if the first response overshoots the budget it gets one
+ * "shorten" retry, then the result is boundary-clamped; any model failure falls
+ * back to a raw capped append so a write is never lost. Pure w.r.t. transport,
+ * so it is unit-tested without the network.
+ */
+export function foldCanon<E>(
+    callModel: (messages: ChatMessage[]) => Effect.Effect<string, E>,
+    saga: string,
+    canon: string,
+    prompt: string,
+): Effect.Effect<string> {
+    return callModel(buildCompressionMessages(saga, canon, prompt)).pipe(
+        Effect.flatMap((first) =>
+            first.length <= MAX_CANON_CHARS
+                ? Effect.succeed(first)
+                : callModel(buildShortenMessages(saga, first)).pipe(Effect.orElseSucceed(() => first))),
+        Effect.map(capCanon),
+        Effect.catchAll((err) =>
+            Effect.logWarning(`Saga compression failed - appending raw. ${String(err)}`).pipe(
+                Effect.as(appendFallback(canon, prompt)),
+            )),
+    );
+}
 
 // ---- SagaService ------------------------------------------------------------
 // Deep interface: callers read a saga's canon or contribute a meme to it;
@@ -123,24 +179,28 @@ export const SagaLayer: Layer.Layer<SagaServiceTag, never, CommandExecutor.Comma
             const readCanon = (saga: string): Effect.Effect<string | null> =>
                 fs.readFileString(absPath(saga)).pipe(Effect.orElseSucceed(() => null));
 
+            // Raw model call: returns trimmed content, or fails on empty output
+            // or transport error so foldCanon can retry / fall back.
+            const callModel = (messages: ReadonlyArray<{role: "system" | "user"; content: string}>) =>
+                Effect.tryPromise(() => client!.chat.completions.create({
+                    model:                 COMPRESSION_MODEL,
+                    messages:              messages as {role: "system" | "user"; content: string}[],
+                    max_completion_tokens: MAX_CANON_TOKENS,
+                })).pipe(
+                    Effect.flatMap((res) => {
+                        const content = res.choices[0]?.message?.content?.trim();
+                        return content != null && content !== ""
+                            ? Effect.succeed(content)
+                            : Effect.fail(new Error("empty compression response"));
+                    }),
+                );
+
             // Fold the new prompt into the canon via the text model, falling back
             // to a raw capped append when no client is configured or the call fails.
-            const compress = (saga: string, canon: string, prompt: string): Effect.Effect<string> => {
-                if (client == null) { return Effect.succeed(appendFallback(canon, prompt)); }
-                return Effect.tryPromise(() => client.chat.completions.create({
-                    model:    COMPRESSION_MODEL,
-                    messages: buildCompressionMessages(saga, canon, prompt),
-                })).pipe(
-                    Effect.map((res) => {
-                        const content = res.choices[0]?.message?.content?.trim();
-                        return content != null && content !== "" ? capCanon(content) : appendFallback(canon, prompt);
-                    }),
-                    Effect.catchAll((err) =>
-                        Effect.logWarning(`Saga compression failed - appending raw. ${String(err)}`).pipe(
-                            Effect.as(appendFallback(canon, prompt)),
-                        )),
-                );
-            };
+            const compress = (saga: string, canon: string, prompt: string): Effect.Effect<string> =>
+                client == null
+                    ? Effect.succeed(appendFallback(canon, prompt))
+                    : foldCanon(callModel, saga, canon, prompt);
 
             // One read-compress-write-commit-push attempt. Each attempt starts
             // from a freshly pulled tree and re-reads the canon, so concurrent
