@@ -178,10 +178,31 @@ describe("extractSagaDirectives", () => {
         expect(r.prompt).toBe("something");
     });
 
-    it("falls back to the original message when stripping empties the prompt", () => {
-        const r = extractSagaDirectives("read:heist write:heist");
-        expect(r.readSaga).toBe("heist");
-        expect(r.writeSaga).toBe("heist");
-        expect(r.prompt).toBe("read:heist write:heist");
+    it("treats saga:<name> as both a read and a write of that saga", () => {
+        const r = extractSagaDirectives("saga:mar rune paints a cup");
+        expect(r.readSaga).toBe("mar");
+        expect(r.writeSaga).toBe("mar");
+        expect(r.prompt).toBe("rune paints a cup");
+    });
+
+    it("is case-insensitive on the saga: shorthand and lower-cases the name", () => {
+        const r = extractSagaDirectives("SAGA:StarWars luke as a cat");
+        expect(r.readSaga).toBe("starwars");
+        expect(r.writeSaga).toBe("starwars");
+        expect(r.prompt).toBe("luke as a cat");
+    });
+
+    it("lets an explicit read/write override the saga: shorthand target", () => {
+        const r = extractSagaDirectives("read:origin saga:mar a plot twist");
+        expect(r.readSaga).toBe("origin");
+        expect(r.writeSaga).toBe("mar");
+        expect(r.prompt).toBe("a plot twist");
+    });
+
+    it("does not treat 'saga: the epic' (space after colon) as a directive", () => {
+        const r = extractSagaDirectives("saga: the epic tale");
+        expect(r.readSaga).toBeNull();
+        expect(r.writeSaga).toBeNull();
+        expect(r.prompt).toBe("saga: the epic tale");
     });
 });
