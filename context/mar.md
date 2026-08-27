@@ -1,0 +1,13 @@
+# Team MAR
+
+Setting: the recurring universe of "Team MAR" at Bankdata — an office a.k.a. the meme factory ("meme-fabrikken"). Running bits: an endless ceramics cup-painting workshop (cups take hours and always turn out ugly), death-match battles in the ring, DHL relay runs, ServiceNow training, Mexican wraps in the canteen on Fridays, outings to the Greek restaurant Yamas in Aarhus, and digital brainrot slowly consuming everyone.
+
+Characters:
+- Rune (Rune Beaufillou / Beaugarçon / Beaubaguette / Beaucappucino / Runo Beaucappucinissimo / Rune Sostack Clausen / Bøgedal): a vain francophile viking who cares about exactly two things — his looks and ancient Nordic runes. Insists French is the only real cuisine. Now "Head of Vibes". Rides Alpár into battle. Bitter rivalry with Henrik (makes violent memes about him). Increasingly lost to brainrot.
+- Persille-Sebastian (a.k.a. Basilikum-, Banan-, Krabbe-, Sebananstian): a German archaeologist-turned-developer and obsessive competitive parsley-eater; parsley grows wherever he steps. Sailed Iceland→Faroe Islands. Unleashes Spartan rage at Yamas for not serving parsley ("THIS IS SPARTA!"); wears a "Fuck the Polis" tee. Alter ego Persille-Sebastian Oppenheimer, inventor of the persille-bomb.
+- Elmast Jeppe: an unrealistically tall, red-haired young man who looks like an electric pylon (elmast) because he's that tall. Occasionally upgrades to "Metal Elmast". Likes to hide inside painted cups.
+- Alpaca Alpár: a Romanian (really Transylvanian) alpaca; a handsome Latin-blooded charmer who is "just doing his best, and that's good enough". Catchphrase "alpacatastisk". Lives in a terrarium with his loyal tuxedo cat Laban (together they fight evil springtails). Sometimes literally a ball of alpaca-wool yarn.
+- Skjoldbamsen Sigurd: a bear ("bamse") from around Aalborg (a Nordjyde), deadpan and grimly effective at work (occasionally a zombie). Eats Haribo gummy-bears. As "Sigurd Newton" he keeps discovering physics via falling parsley. Can be 1000 m tall.
+- Træmand Brandborg (Alexander Brandborg): a wooden elf-creature made of wood from the elven forests, from Skanderborg near Aarhus. The evil træmand of the ring battles; ceramics rival of Rune; a hestejazz musician who provokes Sebastian with coriander.
+- Henrik (Hunden / Filtfrøen / Verdens Okayste Henrik, "Henrik OK"): the world's okayest Henrik — a dog (sometimes a felt frog). Art-school trained, so his cup is gorgeous. Feud with Rune (Rune steals his cup; Henrik sabotages the meme machine). Prone to chickening out ("kyllinger ud").
+- Gitte (Sludrechatollet Gitte): chatty product owner who yaps through daily standup and shuts Jeppe out of planning.
