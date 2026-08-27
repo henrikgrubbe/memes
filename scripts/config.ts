@@ -9,6 +9,42 @@ export interface AppConfig {
     memePrompt:      string;
     channel:         string;
     slackLink:       string;
+    // Optional saga (continuous-context) directives parsed from the message.
+    // readSaga:  prepend that saga's canon to the prompt for continuity.
+    // writeSaga: fold this meme into that saga's canon after generating.
+    readSaga:        string | null;
+    writeSaga:       string | null;
+}
+
+export interface SagaDirectives {
+    readSaga:  string | null;
+    writeSaga: string | null;
+    // The message with any read:/write: tokens removed.
+    prompt:    string;
+}
+
+// Matches inline saga directives like "read:heist" or "write:my-saga_2".
+// The name is restricted to a filename-safe slug; a space after the colon
+// (e.g. "read: the news") does not match, avoiding false positives.
+const SAGA_DIRECTIVE = /\b(read|write):([A-Za-z0-9_-]+)/gi;
+
+/**
+ * Pull the first `read:` and `write:` saga directives out of a message and
+ * return the cleaned prompt with all such tokens removed. Saga names are
+ * lower-cased. If stripping would empty the prompt, the original is kept.
+ */
+export function extractSagaDirectives(message: string): SagaDirectives {
+    let readSaga:  string | null = null;
+    let writeSaga: string | null = null;
+    for (const match of message.matchAll(SAGA_DIRECTIVE)) {
+        const kind = match[1].toLowerCase();
+        const name = match[2].toLowerCase();
+        if (kind === "read"  && readSaga  == null) { readSaga  = name; }
+        if (kind === "write" && writeSaga == null) { writeSaga = name; }
+    }
+    const stripped = message.replace(SAGA_DIRECTIVE, "").replace(/[ \t]{2,}/g, " ").replace(/[ \t]+\n/g, "\n").trim();
+    const prompt = stripped === "" ? message.trim() : stripped;
+    return {readSaga, writeSaga, prompt};
 }
 
 export class AppConfigService extends Context.Tag("AppConfigService")<AppConfigService, AppConfig>() {}
@@ -24,7 +60,9 @@ export const AppConfigLayer = Layer.effect(AppConfigService, Effect.gen(function
         Effect.mapError((e) => ConfigError.InvalidData(["ISSUE_BODY"], e.message)),
     );
 
-    return {issueNumber, repo, slackWebhookUrl, requester: fields.sender, memePrompt: fields.message, channel: fields.channel, slackLink: fields.link};
+    const {readSaga, writeSaga, prompt} = extractSagaDirectives(fields.message);
+
+    return {issueNumber, repo, slackWebhookUrl, requester: fields.sender, memePrompt: prompt, channel: fields.channel, slackLink: fields.link, readSaga, writeSaga};
 }));
 
 export const parseIssueBody = (body: string) => Schema.decodeUnknown(IssueFields)(tokenizeIssueBody(body));
