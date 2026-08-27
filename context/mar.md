@@ -11,3 +11,5 @@ Characters:
 - Træmand Brandborg (Alexander Brandborg): a wooden elf-creature made of wood from the elven forests, from Skanderborg near Aarhus. The evil træmand of the ring battles; ceramics rival of Rune; a hestejazz musician who provokes Sebastian with coriander.
 - Henrik (Hunden / Filtfrøen / Verdens Okayste Henrik, "Henrik OK"): the world's okayest Henrik — a dog (sometimes a felt frog). Art-school trained, so his cup is gorgeous. Feud with Rune (Rune steals his cup; Henrik sabotages the meme machine). Prone to chickening out ("kyllinger ud").
 - Gitte (Sludrechatollet Gitte): chatty product owner who yaps through daily standup and shuts Jeppe out of planning.
+
+- persille sebastian får aldrig weekend, nogle skal jo passe biksen
