@@ -1,6 +1,6 @@
 import {Effect, Exit} from "effect";
 import {describe, expect, it} from "vitest";
-import {IssueFields, parseIssueBody} from "./config.js";
+import {extractSagaDirectives, IssueFields, parseIssueBody} from "./config.js";
 
 const run = (body: string) => Effect.runPromise(Effect.exit(parseIssueBody(body)));
 
@@ -129,5 +129,59 @@ describe("parseIssueBody", () => {
         if (Exit.isSuccess(exit)) {
             expect(exit.value).toBeInstanceOf(IssueFields);
         }
+    });
+});
+
+describe("extractSagaDirectives", () => {
+    it("returns no sagas and the untouched prompt when there are no directives", () => {
+        const r = extractSagaDirectives("a cat riding a bike");
+        expect(r).toEqual({readSaga: null, writeSaga: null, prompt: "a cat riding a bike"});
+    });
+
+    it("extracts read and write sagas and strips the tokens from the prompt", () => {
+        const r = extractSagaDirectives("read:heist a cat cracks a safe write:heist");
+        expect(r.readSaga).toBe("heist");
+        expect(r.writeSaga).toBe("heist");
+        expect(r.prompt).toBe("a cat cracks a safe");
+    });
+
+    it("lower-cases saga names and is case-insensitive on the keyword", () => {
+        const r = extractSagaDirectives("READ:StarWars luke as a cat");
+        expect(r.readSaga).toBe("starwars");
+        expect(r.writeSaga).toBeNull();
+        expect(r.prompt).toBe("luke as a cat");
+    });
+
+    it("allows reading one saga while contributing to another", () => {
+        const r = extractSagaDirectives("write:sequel read:origin a plot twist");
+        expect(r.readSaga).toBe("origin");
+        expect(r.writeSaga).toBe("sequel");
+        expect(r.prompt).toBe("a plot twist");
+    });
+
+    it("keeps the first directive of each kind when several are present", () => {
+        const r = extractSagaDirectives("read:one read:two write:a write:b hello");
+        expect(r.readSaga).toBe("one");
+        expect(r.writeSaga).toBe("a");
+        expect(r.prompt).toBe("hello");
+    });
+
+    it("does not treat 'read: the news' (space after colon) as a directive", () => {
+        const r = extractSagaDirectives("read: the news headline");
+        expect(r.readSaga).toBeNull();
+        expect(r.prompt).toBe("read: the news headline");
+    });
+
+    it("accepts slug names with digits, dashes and underscores", () => {
+        const r = extractSagaDirectives("write:saga_2-b something");
+        expect(r.writeSaga).toBe("saga_2-b");
+        expect(r.prompt).toBe("something");
+    });
+
+    it("falls back to the original message when stripping empties the prompt", () => {
+        const r = extractSagaDirectives("read:heist write:heist");
+        expect(r.readSaga).toBe("heist");
+        expect(r.writeSaga).toBe("heist");
+        expect(r.prompt).toBe("read:heist write:heist");
     });
 });

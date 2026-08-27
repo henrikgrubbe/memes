@@ -7,6 +7,7 @@ import {ProvidersServiceTag, ProvidersLayer} from "./providers.js";
 import type {HistoryEntry} from "./providers.js";
 import {NotifierServiceTag, NotifierLayer} from "./notifier.js";
 import {GitServiceTag, GitLayer} from "./git.js";
+import {SagaServiceTag, SagaLayer, buildMemePrompt} from "./saga.js";
 
 // ---- Pipeline steps -------------------------------------------------------
 
@@ -33,11 +34,14 @@ const program = Effect.gen(function* () {
     const memesDir = pathSvc.join(process.cwd(), "memes");
     const outFile  = pathSvc.join(memesDir, `${memeId}.jpg`);
 
-    const fullPrompt = `Make a meme: ${config.memePrompt}.`;
-    if (fullPrompt.length > 4000) {
-        yield* Effect.logWarning(`Prompt truncated from ${fullPrompt.length} to 4000 characters.`);
+    const saga = yield* SagaServiceTag;
+    const canon = config.readSaga != null ? yield* saga.read(config.readSaga) : null;
+    if (config.readSaga != null) {
+        yield* Effect.log(canon != null
+            ? `Reading saga "${config.readSaga}" (${canon.length} chars of canon).`
+            : `Saga "${config.readSaga}" has no canon yet - generating without context.`);
     }
-    const prompt = fullPrompt.slice(0, 4000);
+    const prompt = buildMemePrompt(config.memePrompt, config.readSaga != null && canon != null ? {name: config.readSaga, canon} : null);
     yield* fsys.makeDirectory(memesDir, {recursive: true});
 
     yield* Effect.log(`Starting generation for issue #${config.issueNumber}: "${config.memePrompt}"`);
@@ -47,7 +51,10 @@ const program = Effect.gen(function* () {
     const git = yield* GitServiceTag;
     yield* git.commitAndPush(memeId);
     const notifier = yield* NotifierServiceTag;
-    yield* notifier.notifySuccess({memeId, history, prompt, metadata});
+    yield* notifier.notifySuccess({memeId, history, prompt: config.memePrompt, metadata});
+    if (config.writeSaga != null) {
+        yield* saga.contribute(config.writeSaga, config.memePrompt);
+    }
     yield* Effect.log("Done.");
 }).pipe(
     // A moderation failure is a terminal content problem: close the issue.
@@ -68,6 +75,7 @@ const AppLayer = Layer.mergeAll(
     ProvidersLayer,
     NotifierLayer,
     GitLayer,
+    SagaLayer,
 ).pipe(
     Layer.provide(Layer.mergeAll(AppConfigLayer, PlatformLayer)),
 );

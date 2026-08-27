@@ -1,0 +1,35 @@
+# memes — context
+
+## Sagas (continuous context)
+
+A meme can opt in to a shared, evolving context called a **saga**, so
+generations can build on each other (recurring characters, running jokes,
+story beats).
+
+Two inline tokens in the Slack message opt in (they are stripped from the
+prompt before generation, and are case-insensitive; saga names are slugs of
+`A–Z a–z 0–9 _ -`):
+
+- `read:<saga>` — prepend that saga's canon to the image prompt for continuity.
+- `write:<saga>` — fold this meme into that saga's canon after generating.
+
+They are independent: a meme may read one saga, write another, both, or
+neither. A space after the colon (`read: the news`) is **not** a directive.
+
+### Storage
+
+Each saga is a plain-markdown file `context/<saga>.md` holding the current
+**canon** (an evolving summary). It is committed alongside the meme image.
+
+### Compression
+
+On every `write`, a cheap text model (`gpt-4o-mini`) folds the new meme idea
+into the canon, keeping it under `MAX_CANON_CHARS` (3000) so a canon plus the
+prompt always fits the image prompt cap (`MAX_PROMPT_CHARS`, 4000). If the
+model is unavailable the write falls back to a raw capped append, so a meme is
+never lost. Concurrent writes to the same saga serialize via
+`git pull --rebase` + re-derive (see `scripts/saga.ts`).
+
+Relevant code: `scripts/saga.ts` (service, compression, prompt assembly),
+`scripts/config.ts` (`extractSagaDirectives`), `scripts/generate-meme.ts`
+(pipeline wiring).
