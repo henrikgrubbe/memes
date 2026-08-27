@@ -1,17 +1,22 @@
 # Team MAR
 
-Setting: the recurring universe of "Team MAR" at Bankdata — an office a.k.a. the meme factory ("meme-fabrikken"). Running bits: an endless ceramics cup-painting workshop (cups take hours and always turn out ugly), death-match battles in the ring, DHL relay runs, ServiceNow training, Mexican wraps in the canteen on Fridays, outings to the Greek restaurant Yamas in Aarhus, and digital brainrot slowly consuming everyone.
+Setting: The Team MAR universe at Bankdata, or "meme-fabrikken," features ongoing antics like failed ceramics cup painting, death-match ring battles, DHL relay runs, ServiceNow training, and the beloved Friday Mexican wraps. Outings to Yamas in Aarhus contrast with the digital brainrot consuming everyone, leading to collaborative meme sagas.
 
 Characters:
-- Rune (Rune Beaufillou / Beaugarçon / Beaubaguette / Beaucappucino / Runo Beaucappucinissimo / Rune Sostack Clausen / Bøgedal): a vain francophile viking who cares about exactly two things — his looks and ancient Nordic runes. Insists French is the only real cuisine. Now "Head of Vibes". Rides Alpár into battle. Bitter rivalry with Henrik (makes violent memes about him). Increasingly lost to brainrot.
-- Persille-Sebastian (a.k.a. Basilikum-, Banan-, Krabbe-, Sebananstian): a German archaeologist-turned-developer and obsessive competitive parsley-eater; parsley grows wherever he steps. Sailed Iceland→Faroe Islands. Unleashes Spartan rage at Yamas for not serving parsley ("THIS IS SPARTA!"); wears a "Fuck the Polis" tee. Alter ego Persille-Sebastian Oppenheimer, inventor of the persille-bomb.
-- Elmast Jeppe: an unrealistically tall, red-haired young man who looks like an electric pylon (elmast) because he's that tall. Occasionally upgrades to "Metal Elmast". Likes to hide inside painted cups.
-- Alpaca Alpár: a Romanian (really Transylvanian) alpaca; a handsome Latin-blooded charmer who is "just doing his best, and that's good enough". Catchphrase "alpacatastisk". Lives in a terrarium with his loyal tuxedo cat Laban (together they fight evil springtails). Sometimes literally a ball of alpaca-wool yarn.
-- Skjoldbamsen Sigurd: a bear ("bamse") from around Aalborg (a Nordjyde), deadpan and grimly effective at work (occasionally a zombie). Eats Haribo gummy-bears. As "Sigurd Newton" he keeps discovering physics via falling parsley. Can be 1000 m tall.
-- Træmand Brandborg (Alexander Brandborg): a wooden elf-creature made of wood from the elven forests, from Skanderborg near Aarhus. The evil træmand of the ring battles; ceramics rival of Rune; a hestejazz musician who provokes Sebastian with coriander.
-- Henrik (Hunden / Filtfrøen / Verdens Okayste Henrik, "Henrik OK"): the world's okayest Henrik — a dog (sometimes a felt frog). Art-school trained, so his cup is gorgeous. Feud with Rune (Rune steals his cup; Henrik sabotages the meme machine). Prone to chickening out ("kyllinger ud").
-- Gitte (Sludrechatollet Gitte): chatty product owner who yaps through daily standup and shuts Jeppe out of planning.
+- **Rune (Beaufillou)**: A vain Francophile Viking obsessed with his looks and ancient Nordic runes. He is "Head of Vibes," rides Alpár into battle, and has a bitter rivalry with Henrik, creating violent memes about him. Lost to brainrot, he carries a baguette everywhere.
 
-- persille sebastian får aldrig weekend, nogle skal jo passe biksen
+- **Persille-Sebastian**: A German archaeologist-turned-developer and competitive parsley eater, who unleashes Spartan rage at Yamas for lack of parsley. Constantly works weekends as the business needs him. His alter ego is Persille-Sebastian Oppenheimer, inventor of the persille-bomb.
 
-- Rune Beaufillou har altid en baguette med. Skjoldbamsen Sigurd glemmer aldrig sit skjold
+- **Elmast Jeppe**: An unrealistically tall, red-haired young man resembling an electric pylon. Sometimes transforms into "Metal Elmast" and likes hiding within painted cups.
+
+- **Alpaca Alpár**: A charming Romanian alpaca with the catchphrase "alpacatastisk." Lives with his tuxedo cat Laban in a terrarium. Together, they combat evil springtails.
+
+- **Skjoldbamsen Sigurd**: A deadpan Nordjyde bear who is effective at work, sometimes a zombie. Eats Haribo gummy bears and discovers physics as "Sigurd Newton" via falling parsley. Can be 1000m tall.
+
+- **Træmand Brandborg**: A wooden elf from Skanderborg, Rune's ceramics rival and hestejazz musician who teases Sebastian with coriander. 
+
+- **Henrik (Henrik OK)**: The world's okayest Henrik, a dog and art-school graduate with a pretty cup. He feuds with Rune, stealing back his cup and sabotaging meme creation. Known for chickening out.
+
+- **Gitte**: The chattering product owner who dominates standups, often shutting Jeppe out of planning.
+
+- Memes can now be structured with commands: write:<name> to add to canon; read:<name> for saga context; saga:<name> for both. The saga "mar" embodies the full scope of Team MAR's antics and relationships.
