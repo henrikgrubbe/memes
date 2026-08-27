@@ -6,6 +6,7 @@ import {
     buildMemePrompt,
     buildShortenMessages,
     capCanon,
+    describeModelError,
     foldCanon,
     MAX_CANON_CHARS,
     MAX_PROMPT_CHARS,
@@ -151,5 +152,25 @@ describe("foldCanon", () => {
         const result = await run(["z".repeat(MAX_CANON_CHARS + 500), new Error("boom")]);
         expect(result.length).toBeLessThanOrEqual(MAX_CANON_CHARS);
         expect(result).toContain("z");
+    });
+});
+
+describe("describeModelError", () => {
+    it("renders an OpenAI APIError as status + code + message", () => {
+        const err = {status: 404, code: "model_not_found", message: "The model `gpt-4o-mini` does not exist or you do not have access to it."};
+        expect(describeModelError(err)).toBe("HTTP 404 [model_not_found] The model `gpt-4o-mini` does not exist or you do not have access to it.");
+    });
+
+    it("reads a nested error object shape", () => {
+        const err = {status: 403, error: {code: "insufficient_quota", message: "You exceeded your current quota"}};
+        expect(describeModelError(err)).toBe("HTTP 403 [insufficient_quota] You exceeded your current quota");
+    });
+
+    it("uses the message of a plain Error", () => {
+        expect(describeModelError(new Error("boom"))).toBe("boom");
+    });
+
+    it("stringifies a non-error value", () => {
+        expect(describeModelError("weird")).toBe("weird");
     });
 });
