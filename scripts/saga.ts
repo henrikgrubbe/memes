@@ -103,6 +103,26 @@ export const appendFallback = (canon: string, prompt: string): string =>
     capCanon(`${canon}${canon.trim() === "" ? "" : "\n"}- ${prompt}`);
 
 /**
+ * Best-effort human-readable description of an OpenAI/transport error. The SDK
+ * throws rich `APIError`s (status/code/message); without this they collapse to
+ * an opaque "UnknownException" once wrapped by Effect.tryPromise.
+ */
+export function describeModelError(err: unknown): string {
+    const e = err as {
+        status?:  number;
+        code?:    string;
+        type?:    string;
+        message?: string;
+        error?:   {message?: string; code?: string; type?: string};
+        cause?:   {message?: string};
+    };
+    const status = e?.status != null ? `HTTP ${e.status} ` : "";
+    const code   = e?.code ?? e?.error?.code ?? e?.type ?? e?.error?.type;
+    const msg    = e?.error?.message ?? e?.message ?? e?.cause?.message ?? String(err);
+    return `${status}${code != null ? `[${code}] ` : ""}${msg}`.trim();
+}
+
+/**
  * Fold a new meme idea into the canon using an injected model call. Total by
  * construction: if the first response overshoots the budget it gets one
  * "shorten" retry, then the result is boundary-clamped; any model failure falls
@@ -180,13 +200,18 @@ export const SagaLayer: Layer.Layer<SagaServiceTag, never, CommandExecutor.Comma
                 fs.readFileString(absPath(saga)).pipe(Effect.orElseSucceed(() => null));
 
             // Raw model call: returns trimmed content, or fails on empty output
-            // or transport error so foldCanon can retry / fall back.
+            // or transport error so foldCanon can retry / fall back. The catch
+            // surfaces the real OpenAI error (status/code/message) instead of an
+            // opaque UnknownException, so a failure is actually diagnosable.
             const callModel = (messages: ReadonlyArray<{role: "system" | "user"; content: string}>) =>
-                Effect.tryPromise(() => client!.chat.completions.create({
-                    model:                 COMPRESSION_MODEL,
-                    messages:              messages as {role: "system" | "user"; content: string}[],
-                    max_completion_tokens: MAX_CANON_TOKENS,
-                })).pipe(
+                Effect.tryPromise({
+                    try: () => client!.chat.completions.create({
+                        model:                 COMPRESSION_MODEL,
+                        messages:              messages as {role: "system" | "user"; content: string}[],
+                        max_completion_tokens: MAX_CANON_TOKENS,
+                    }),
+                    catch: (err) => new Error(describeModelError(err)),
+                }).pipe(
                     Effect.flatMap((res) => {
                         const content = res.choices[0]?.message?.content?.trim();
                         return content != null && content !== ""
