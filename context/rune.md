@@ -1,0 +1,1 @@
+- Rune er så pisse træls hele tiden, bla bla bla. Han har rejst alle vejne og er bare en dum en med en dum hat på
