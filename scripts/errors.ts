@@ -5,6 +5,11 @@
  */
 
 import {Data} from "effect";
+import type {HistoryEntry} from "./providers.js";
+
+// Terminal errors surfaced by generateWithFallback optionally carry the full
+// list of provider attempts that led to the failure, so the failure notifier
+// can report them just like a successful run does.
 
 export class ModerationBlockedError extends Data.TaggedError("ModerationBlockedError")<{
     readonly provider: string;
@@ -16,6 +21,7 @@ export class ModerationBlockedError extends Data.TaggedError("ModerationBlockedE
 export class RateLimitError extends Data.TaggedError("RateLimitError")<{
     readonly provider: string;
     readonly attempts: number;
+    readonly history?: ReadonlyArray<HistoryEntry>;
 }> {
     get message() { return `${this.provider} rate-limit retries exhausted after ${this.attempts} attempts`; }
 }
@@ -28,6 +34,7 @@ export class PushFailedError extends Data.TaggedError("PushFailedError")<{
 
 export class ModerationFailedError extends Data.TaggedError("ModerationFailedError")<{
     readonly fallbackProvider: string | null;
+    readonly history?: ReadonlyArray<HistoryEntry>;
 }> {
     get message() {
         return this.fallbackProvider == null
@@ -39,6 +46,7 @@ export class ModerationFailedError extends Data.TaggedError("ModerationFailedErr
 export class ProviderError extends Data.TaggedError("ProviderError")<{
     readonly provider: string;
     readonly detail:   string;
+    readonly history?: ReadonlyArray<HistoryEntry>;
 }> {
     get message() { return `${this.provider} failed: ${this.detail}`; }
 }
@@ -46,12 +54,14 @@ export class ProviderError extends Data.TaggedError("ProviderError")<{
 export class QuotaExhaustedError extends Data.TaggedError("QuotaExhaustedError")<{
     readonly provider: string;
     readonly detail:   string;
+    readonly history?: ReadonlyArray<HistoryEntry>;
 }> {
     get message() { return `${this.provider} is out of credits/quota: ${this.detail}`; }
 }
 
 export class AllProvidersExhaustedError extends Data.TaggedError("AllProvidersExhaustedError")<{
     readonly providers: ReadonlyArray<string>;
+    readonly history?: ReadonlyArray<HistoryEntry>;
 }> {
     get message() { return `All image providers are out of credits/quota: ${this.providers.join(", ")}`; }
 }
