@@ -9,7 +9,7 @@ Characters:
 
 - **Elmast Jeppe**: An unrealistically tall, red-haired young man resembling an electric pylon. Sometimes transforms into "Metal Elmast" and likes hiding within painted cups.
 
-- **Alpaca Alpár**: A charming Romanian alpaca with the catchphrase "alpacatastisk." Lives with his tuxedo cat Laban in a terrarium. Together, they combat evil springtails.
+- **Alpaca Alpár**: A charming Romanian alpaca with the catchphrase "alpacatastisk." Lives with his tuxedo cat Laban in a terrarium which he now brings to the office. Together, they combat evil springtails.
 
 - **Skjoldbamsen Sigurd**: A deadpan Nordjyde bear who is effective at work, sometimes a zombie. Eats Haribo gummy bears and discovers physics as "Sigurd Newton" via falling parsley. Can be 1000m tall.
 
