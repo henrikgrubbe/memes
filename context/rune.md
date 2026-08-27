@@ -3,3 +3,5 @@
 - Rune kan ikke lade, at meme-maskinen er på vej mod mere selvstændighed. Han er imod hukommelse til maskiner
 
 - Rune kan ikke lide, at meme-maskinen er på vej mod mere selvstændighed. Han er imod hukommelse til maskiner
+
+- Rune har en kæmpe teleskop for at kigge på solpletter. Han har masser af tatoveringer af ting og sager. Mest katte. Hans bedste ven er en ballon. meme
