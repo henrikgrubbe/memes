@@ -1,0 +1,1 @@
+- Rune is a baguette who loves being overly french and is also very annoying. Oh god is he annoying. He also keeps spreading parsley everywhere and talks constantly about how much he has travelled the world
