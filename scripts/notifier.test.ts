@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {buildSlackSuccessPayload, buildSuccessComment, estimateCostCents, formatCostCents} from "./notifier.js";
+import {buildFailureComment, buildSlackSuccessPayload, buildSuccessComment, estimateCostCents, formatCostCents} from "./notifier.js";
 
 describe("buildSuccessComment", () => {
     it("includes repo-backed image links without crashing", () => {
@@ -59,6 +59,30 @@ describe("buildSuccessComment", () => {
 
         expect(comment).not.toContain("**Estimated cost:**");
         expect(comment).not.toContain("**Usage:**");
+    });
+});
+
+describe("buildFailureComment", () => {
+    it("renders the error message without a provider list when no history is given", () => {
+        const comment = buildFailureComment("grok-imagine-image is out of credits/quota: 403");
+        expect(comment).toContain("❌ Meme generation failed.");
+        expect(comment).toContain("grok-imagine-image is out of credits/quota: 403");
+        expect(comment).not.toContain("**Provider attempts:**");
+    });
+
+    it("renders each attempt when history is provided (regression for #706)", () => {
+        const comment = buildFailureComment("xAI (grok-imagine-image) is out of credits/quota: 403", [
+            {provider: "OpenAI (gpt-image-2)", status: "failed", message: "blocked by moderation"},
+            {provider: "grok-imagine-image", status: "failed", message: "out of credits"},
+        ]);
+        expect(comment).toContain("**Provider attempts:**");
+        expect(comment).toContain("- OpenAI (gpt-image-2) ❌ (blocked by moderation)");
+        expect(comment).toContain("- grok-imagine-image ❌ (out of credits)");
+    });
+
+    it("omits the provider list for an empty history", () => {
+        const comment = buildFailureComment("some error", []);
+        expect(comment).not.toContain("**Provider attempts:**");
     });
 });
 

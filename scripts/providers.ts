@@ -166,7 +166,8 @@ function generateWithFallback(
 /**
  * Try primary providers one at a time in random order. A provider that is out
  * of credits/quota is skipped and the next one is tried; a moderation block
- * diverts to the dedicated fallback provider. Other errors propagate.
+ * diverts to the dedicated fallback provider. Other errors propagate, but every
+ * terminal failure carries the full attempt history so it can be reported.
  */
 function tryPrimaries(
     primaries: Record<string, ProviderFn>,
@@ -177,7 +178,7 @@ function tryPrimaries(
 ): Effect.Effect<GenerationResult, GenerateError> {
     return Effect.gen(function* () {
         if (remaining.length === 0) {
-            return yield* Effect.fail(new AllProvidersExhaustedError({providers: skipped.map((e) => e.provider)}));
+            return yield* Effect.fail(new AllProvidersExhaustedError({providers: skipped.map((e) => e.provider), history: skipped}));
         }
 
         const primary = yield* Random.choice(remaining).pipe(Effect.orDie);
@@ -193,6 +194,18 @@ function tryPrimaries(
             })),
             Effect.catchTag("ModerationBlockedError", (err) =>
                 runModerationFallback(primary, err, skipped, fallback, prompt)),
+            // RateLimitError / ProviderError are terminal: attach the accumulated
+            // history (including this primary's failure) so the notifier can report it.
+            Effect.catchTags({
+                RateLimitError: (err) => Effect.fail(err.history != null ? err : new RateLimitError({
+                    provider: err.provider, attempts: err.attempts,
+                    history: [...skipped, {provider: primary, status: "failed", message: err.message}],
+                })),
+                ProviderError: (err) => Effect.fail(err.history != null ? err : new ProviderError({
+                    provider: err.provider, detail: err.detail,
+                    history: [...skipped, {provider: primary, status: "failed", message: err.message}],
+                })),
+            }),
         );
     });
 }
@@ -205,18 +218,39 @@ function runModerationFallback(
     prompt: string,
 ): Effect.Effect<GenerationResult, GenerateError> {
     return Effect.gen(function* () {
+        const primaryEntry: HistoryEntry = {provider: primary, status: "failed", message: primaryErr.message};
+        const priorHistory = [...skipped, primaryEntry];
+
         if (fallback == null) {
             yield* Effect.log(`Moderation block on ${primary} - no fallback provider available.`);
-            return yield* Effect.fail(new ModerationFailedError({fallbackProvider: null}));
+            return yield* Effect.fail(new ModerationFailedError({fallbackProvider: null, history: priorHistory}));
         }
 
         yield* Effect.log(`Moderation block on ${primary} - falling back to ${MODERATION_FALLBACK_PROVIDER.name}...`);
-        const primaryEntry: HistoryEntry = {provider: primary, status: "failed", message: primaryErr.message};
 
         return yield* fallback(prompt).pipe(
-            Effect.map((result) => ({...result, history: [...skipped, primaryEntry, ...result.history]})),
-            Effect.catchTag("ModerationBlockedError", () =>
-                Effect.fail(new ModerationFailedError({fallbackProvider: MODERATION_FALLBACK_PROVIDER.name}))),
+            Effect.map((result) => ({...result, history: [...priorHistory, ...result.history]})),
+            Effect.catchTag("ModerationBlockedError", (fallbackErr) =>
+                Effect.fail(new ModerationFailedError({
+                    fallbackProvider: MODERATION_FALLBACK_PROVIDER.name,
+                    history: [...priorHistory, {provider: fallbackErr.provider, status: "failed", message: fallbackErr.message}],
+                }))),
+            // The fallback ran out of credits (or otherwise failed): keep the
+            // primary's moderation attempt in the reported history.
+            Effect.catchTags({
+                QuotaExhaustedError: (err) => Effect.fail(new QuotaExhaustedError({
+                    provider: err.provider, detail: err.detail,
+                    history: [...priorHistory, {provider: err.provider, status: "failed", message: err.message}],
+                })),
+                RateLimitError: (err) => Effect.fail(new RateLimitError({
+                    provider: err.provider, attempts: err.attempts,
+                    history: [...priorHistory, {provider: err.provider, status: "failed", message: err.message}],
+                })),
+                ProviderError: (err) => Effect.fail(new ProviderError({
+                    provider: err.provider, detail: err.detail,
+                    history: [...priorHistory, {provider: err.provider, status: "failed", message: err.message}],
+                })),
+            }),
         );
     });
 }

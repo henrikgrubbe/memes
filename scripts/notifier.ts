@@ -32,7 +32,7 @@ export interface NotifySuccessParams {
 
 export interface NotifierService {
     notifySuccess(params: NotifySuccessParams): Effect.Effect<void>;
-    notifyFailure(message: string, closeNotPlanned?: boolean): Effect.Effect<void>;
+    notifyFailure(message: string, closeNotPlanned?: boolean, history?: ReadonlyArray<HistoryEntry>): Effect.Effect<void>;
 }
 
 export class NotifierServiceTag extends Context.Tag("NotifierService")<NotifierServiceTag, NotifierService>() {}
@@ -90,6 +90,17 @@ export function formatCostCents(metadata?: GenerationMetadata): string | null {
     return costCents == null ? null : `${costCents.toFixed(3)}¢`;
 }
 
+/** Render the shared "Provider attempts" bullet list from an attempt history. */
+export function renderProviderAttempts(history: ReadonlyArray<HistoryEntry>): string[] {
+    return history.map(({provider, status, message}) => {
+        switch (status) {
+            case "success":      return `- ${provider} ✅`;
+            case "rate-limited": return `- ${provider} ⏳ rate limited`;
+            default:             return `- ${provider} ❌ (${message})`;
+        }
+    });
+}
+
 export function buildSuccessComment({memeId, provider, history, prompt, requester, channel, slackLink, repo, metadata}: {
     memeId: string; provider: string; history: HistoryEntry[];
     prompt: string; requester: string; channel: string; slackLink: string; repo: string; metadata?: GenerationMetadata;
@@ -118,13 +129,22 @@ export function buildSuccessComment({memeId, provider, history, prompt, requeste
         ...(costCents == null ? [] : [`**Estimated cost:** ${costCents}`]),
         ``,
         `**Provider attempts:**`,
-        ...history.map(({provider, status, message}) => {
-            switch (status) {
-                case "success":      return `- ${provider} ✅`;
-                case "rate-limited": return `- ${provider} ⏳ rate limited`;
-                default:             return `- ${provider} ❌ (${message})`;
-            }
-        }),
+        ...renderProviderAttempts(history),
+    ].join("\n");
+}
+
+/** Build the issue comment for a failed generation, including any attempt history. */
+export function buildFailureComment(message: string, history?: ReadonlyArray<HistoryEntry>): string {
+    const attempts = history != null && history.length > 0
+        ? [``, `**Provider attempts:**`, ...renderProviderAttempts(history)]
+        : [];
+    return [
+        `❌ Meme generation failed.`,
+        ``,
+        "```",
+        message,
+        "```",
+        ...attempts,
     ].join("\n");
 }
 
@@ -148,7 +168,7 @@ export function buildSlackSuccessPayload({memeId, provider, title, requester, ch
 
 interface RawNotifier {
     notifySuccess(params: NotifySuccessParams): Effect.Effect<void, never, NotifierDeps>;
-    notifyFailure(message: string, closeNotPlanned?: boolean): Effect.Effect<void, never, NotifierDeps>;
+    notifyFailure(message: string, closeNotPlanned?: boolean, history?: ReadonlyArray<HistoryEntry>): Effect.Effect<void, never, NotifierDeps>;
 }
 
 const makeNotifier = (): RawNotifier => ({
@@ -161,9 +181,9 @@ const makeNotifier = (): RawNotifier => ({
         yield* postSlack(buildSlackSuccessPayload({memeId, provider, title: config.memePrompt, requester: config.requester, channel: config.channel, repo: config.repo, metadata}));
     }),
 
-    notifyFailure: (message, closeNotPlanned = false) => Effect.gen(function* () {
+    notifyFailure: (message, closeNotPlanned = false, history) => Effect.gen(function* () {
         const config = yield* AppConfigService;
-        yield* postComment(`❌ Meme generation failed.\n\n\`\`\`\n${message}\n\`\`\``);
+        yield* postComment(buildFailureComment(message, history));
         yield* postSlack({status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, channel: config.channel, error: message});
         if (closeNotPlanned) {
             yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`).pipe(Effect.ignore);
@@ -189,7 +209,7 @@ export const NotifierLayer: Layer.Layer<NotifierServiceTag, never, CommandExecut
             const notifier = makeNotifier();
             return {
                 notifySuccess: (params) => provideDeps(notifier.notifySuccess(params)),
-                notifyFailure: (message, closeNotPlanned) => provideDeps(notifier.notifyFailure(message, closeNotPlanned)),
+                notifyFailure: (message, closeNotPlanned, history) => provideDeps(notifier.notifyFailure(message, closeNotPlanned, history)),
             } satisfies NotifierService;
         }),
     );

@@ -170,6 +170,71 @@ describe("generateImage", () => {
         }
     });
 
+    // Regression for #706: a primary moderation block that diverts to a fallback
+    // which is then out of credits must still report the primary attempt.
+    it("carries the primary moderation attempt in history when the fallback is out of credits", async () => {
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY)}, quotaFn(FALLBACK)),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            const error = exit.cause.error;
+            expect(error).toBeInstanceOf(QuotaExhaustedError);
+            expect(error.history).toHaveLength(2);
+            expect(error.history[0]).toMatchObject({provider: PRIMARY, status: "failed"});
+            expect(error.history[1]).toMatchObject({provider: FALLBACK, status: "failed"});
+        }
+    });
+
+    it("carries full history on ModerationFailedError when both providers are blocked", async () => {
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: modFn(PRIMARY)}, modFn(FALLBACK)),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            const error = exit.cause.error;
+            expect(error).toBeInstanceOf(ModerationFailedError);
+            expect(error.history).toHaveLength(2);
+            expect(error.history[0]).toMatchObject({provider: PRIMARY, status: "failed"});
+            expect(error.history[1]).toMatchObject({provider: FALLBACK, status: "failed"});
+        }
+    });
+
+    it("carries the skipped primaries in history on AllProvidersExhaustedError", async () => {
+        const SECONDARY = "OpenAI-alt";
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: quotaFn(PRIMARY), [SECONDARY]: quotaFn(SECONDARY)}),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            const error = exit.cause.error;
+            expect(error).toBeInstanceOf(AllProvidersExhaustedError);
+            expect(error.history).toHaveLength(2);
+            expect(error.history.every((e: {status: string}) => e.status === "failed")).toBe(true);
+        }
+    });
+
+    it("carries the primary attempt in history on a propagated ProviderError", async () => {
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: errFn(PRIMARY)}, successFn(FALLBACK)),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            const error = exit.cause.error;
+            expect(error).toBeInstanceOf(ProviderError);
+            expect(error.history).toHaveLength(1);
+            expect(error.history[0]).toMatchObject({provider: PRIMARY, status: "failed"});
+        }
+    });
+
     it("lists every exhausted primary in AllProvidersExhaustedError", async () => {
         const SECONDARY = "OpenAI-alt";
         const exit = await run(
