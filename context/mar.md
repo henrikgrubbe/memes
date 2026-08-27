@@ -13,3 +13,5 @@ Characters:
 - Gitte (Sludrechatollet Gitte): chatty product owner who yaps through daily standup and shuts Jeppe out of planning.
 
 - persille sebastian får aldrig weekend, nogle skal jo passe biksen
+
+- Rune Beaufillou har altid en baguette med. Skjoldbamsen Sigurd glemmer aldrig sit skjold
