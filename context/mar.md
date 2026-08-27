@@ -1,6 +1,6 @@
 # Team MAR
 
-Setting: The Team MAR universe at Bankdata, or "meme-fabrikken," features ongoing antics like failed ceramics cup painting, death-match ring battles, DHL relay runs, ServiceNow training, and the beloved Friday Mexican wraps. Outings to Yamas in Aarhus contrast with the digital brainrot consuming everyone, leading to collaborative meme sagas.
+Setting: The Team MAR universe at Bankdata, or "meme-fabrikken," features ongoing antics like failed ceramics cup painting, death-match ring battles, DHL relay runs, ServiceNow training, and the beloved Friday Mexican wraps. Outings to Yamas in Aarhus contrast with the digital brainrot consuming everyone, leading to collaborative meme sagas. It’s noted that der er typisk ikke en boksering på MARs kontor, but the chaotic energy often makes it feel like one.
 
 Characters:
 - **Rune (Beaufillou)**: A vain Francophile Viking obsessed with his looks and ancient Nordic runes. He is "Head of Vibes," rides Alpár into battle, and has a bitter rivalry with Henrik, creating violent memes about him. Lost to brainrot, he carries a baguette everywhere. From now on, Rune speaks exclusively in French (or what he believes is French, which is actually just Danish words pronounced in a "French" way).
