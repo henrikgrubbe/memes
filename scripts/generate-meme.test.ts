@@ -121,6 +121,10 @@ describe("generateImage", () => {
         if (Exit.isFailure(exit)) {
             // @ts-expect-error accessing .error on Cause.Fail
             expect(exit.cause.error).toBeInstanceOf(RateLimitError);
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error.history).toEqual([
+                {provider: PRIMARY, status: "failed", message: `${PRIMARY} rate-limit retries exhausted after 10 attempts`},
+            ]);
         }
     });
 
@@ -243,6 +247,23 @@ describe("generateImage", () => {
             expect(error).toBeInstanceOf(ProviderError);
             expect(error.history).toHaveLength(1);
             expect(error.history[0]).toMatchObject({provider: PRIMARY, status: "failed"});
+        }
+    });
+
+    it("preserves skipped-primary history when a later primary fails", async () => {
+        const SECONDARY = "OpenAI-alt";
+        const exit = await run(
+            generateImage("make a meme"),
+            makeProvidersLayer({[PRIMARY]: quotaFn(PRIMARY), [SECONDARY]: errFn(SECONDARY)}),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            const error = exit.cause.error;
+            expect(error).toBeInstanceOf(ProviderError);
+            expect(error.history).toHaveLength(2);
+            expect(error.history[0]).toMatchObject({provider: PRIMARY, status: "failed"});
+            expect(error.history[1]).toMatchObject({provider: SECONDARY, status: "failed"});
         }
     });
 

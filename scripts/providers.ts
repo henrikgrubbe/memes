@@ -173,6 +173,32 @@ export const ProvidersLayer = Layer.effect(ProvidersServiceTag, Effect.gen(funct
 // ---- generateWithFallback ---------------------------------------------------
 
 type GenerateError = ModerationFailedError | AllProvidersExhaustedError | ProviderError | RateLimitError | QuotaExhaustedError;
+type AttemptError = ModerationBlockedError | ProviderError | RateLimitError | QuotaExhaustedError;
+
+function withAttemptHistory<A>(
+    effect: Effect.Effect<A, AttemptError>,
+    prior: ReadonlyArray<HistoryEntry>,
+    provider: string,
+): Effect.Effect<A, AttemptError> {
+    return effect.pipe(
+        Effect.mapError((error) => {
+            if (error._tag === "ModerationBlockedError") {
+                return error;
+            }
+
+            const attempt: HistoryEntry = {provider, status: "failed", message: error.message};
+            const history = [...prior, attempt, ...(error.history ?? [])];
+            switch (error._tag) {
+                case "ProviderError":
+                    return new ProviderError({provider: error.provider, detail: error.detail, history});
+                case "RateLimitError":
+                    return new RateLimitError({provider: error.provider, attempts: error.attempts, history});
+                case "QuotaExhaustedError":
+                    return new QuotaExhaustedError({provider: error.provider, detail: error.detail, history});
+            }
+        }),
+    );
+}
 
 function generateWithFallback(
     primaries: Record<string, ProviderFn>,
@@ -194,7 +220,7 @@ function generateWithFallback(
 function tryPrimaries(
     primaries: Record<string, ProviderFn>,
     remaining: string[],
-    skipped: HistoryEntry[],
+    skipped: ReadonlyArray<HistoryEntry>,
     fallback: ProviderFn | null,
     prompt: string,
     user?: string,
@@ -208,27 +234,14 @@ function tryPrimaries(
         const rest    = remaining.filter((name) => name !== primary);
         yield* Effect.log(`Selected ${primary} as primary provider...`);
 
-        return yield* primaries[primary](prompt, user).pipe(
+        return yield* withAttemptHistory(primaries[primary](prompt, user), skipped, primary).pipe(
             Effect.map((result) => ({...result, history: [...skipped, ...result.history]})),
             Effect.catchTag("QuotaExhaustedError", (err) => Effect.gen(function* () {
                 yield* Effect.logWarning(`${primary} is out of credits/quota - skipping. ${err.detail}`);
-                const entry: HistoryEntry = {provider: primary, status: "failed", message: err.message};
-                return yield* tryPrimaries(primaries, rest, [...skipped, entry], fallback, prompt, user);
+                return yield* tryPrimaries(primaries, rest, err.history ?? skipped, fallback, prompt, user);
             })),
             Effect.catchTag("ModerationBlockedError", (err) =>
                 runModerationFallback(primary, err, skipped, fallback, prompt, user)),
-            // RateLimitError / ProviderError are terminal: attach the accumulated
-            // history (including this primary's failure) so the notifier can report it.
-            Effect.catchTags({
-                RateLimitError: (err) => Effect.fail(err.history != null ? err : new RateLimitError({
-                    provider: err.provider, attempts: err.attempts,
-                    history: [...skipped, {provider: primary, status: "failed", message: err.message}],
-                })),
-                ProviderError: (err) => Effect.fail(err.history != null ? err : new ProviderError({
-                    provider: err.provider, detail: err.detail,
-                    history: [...skipped, {provider: primary, status: "failed", message: err.message}],
-                })),
-            }),
         );
     });
 }
@@ -236,7 +249,7 @@ function tryPrimaries(
 function runModerationFallback(
     primary: string,
     primaryErr: ModerationBlockedError,
-    skipped: HistoryEntry[],
+    skipped: ReadonlyArray<HistoryEntry>,
     fallback: ProviderFn | null,
     prompt: string,
     user?: string,
