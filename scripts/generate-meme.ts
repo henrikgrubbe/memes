@@ -4,10 +4,10 @@ import {NodeCommandExecutor, NodeFileSystem, NodePath} from "@effect/platform-no
 import {Effect, Layer} from "effect";
 import {AppConfigService, AppConfigLayer} from "./config.js";
 import {ProvidersServiceTag, ProvidersLayer} from "./providers.js";
-import type {HistoryEntry} from "./providers.js";
 import {NotifierServiceTag, NotifierLayer} from "./notifier.js";
 import {GitServiceTag, GitLayer} from "./git.js";
 import {SagaServiceTag, SagaLayer, buildMemePrompt} from "./saga.js";
+import {failureDisposition, type FailureDisposition} from "./disposition.js";
 
 // ---- Pipeline steps -------------------------------------------------------
 
@@ -16,7 +16,7 @@ export const generateImage = (prompt: string, user?: string) =>
 
 // ---- Failure handling -----------------------------------------------------
 
-const handleFailure = (message: string, closeNotPlanned: boolean, history?: ReadonlyArray<HistoryEntry>) =>
+const handleFailure = ({message, closeNotPlanned, history}: FailureDisposition) =>
     Effect.gen(function* () {
         yield* Effect.logError(`Fatal: ${message}`);
         const notifier = yield* NotifierServiceTag;
@@ -65,9 +65,9 @@ const program = Effect.gen(function* () {
     yield* Effect.log("Done.");
 }).pipe(
     // A moderation failure is a terminal content problem: close the issue.
-    Effect.catchTag("ModerationFailedError", (e) => handleFailure(e.message, true, e.history)),
+    Effect.catchTag("ModerationFailedError", (e) => handleFailure(failureDisposition(e))),
     // Everything else is transient/infra: report but leave the issue open.
-    Effect.catchAll((e) => handleFailure(e.message, false, "history" in e ? e.history : undefined)),
+    Effect.catchAll((e) => handleFailure(failureDisposition(e))),
 );
 
 const PlatformLayer = Layer.mergeAll(
