@@ -46,10 +46,17 @@ const program = Effect.gen(function* () {
 
     yield* Effect.log(`Starting generation for issue #${config.issueNumber}: "${config.memePrompt}"`);
     const {buffer, history, metadata} = yield* generateImage(prompt, config.requester);
-    yield* fsys.writeFile(outFile, buffer);
-    yield* Effect.log(`Image saved: ${outFile}`);
     const git = yield* GitServiceTag;
-    yield* git.commitAndPush(memeId);
+    yield* git.commitToMain({
+        message: `Add meme for issue #${config.issueNumber} (${memeId})`,
+        // Re-materialised on every push attempt so a rebase-and-retry re-writes
+        // the image against the freshly pulled tree.
+        stage: fsys.writeFile(outFile, buffer).pipe(
+            Effect.orDie,
+            Effect.tap(() => Effect.log(`Image saved: ${outFile}`)),
+            Effect.as([`memes/${memeId}.jpg`]),
+        ),
+    });
     const notifier = yield* NotifierServiceTag;
     yield* notifier.notifySuccess({memeId, history, prompt: config.memePrompt, metadata});
     if (config.writeSaga != null) {
@@ -75,7 +82,7 @@ const AppLayer = Layer.mergeAll(
     ProvidersLayer,
     NotifierLayer,
     GitLayer,
-    SagaLayer,
+    SagaLayer.pipe(Layer.provide(GitLayer)),
 ).pipe(
     Layer.provide(Layer.mergeAll(AppConfigLayer, PlatformLayer)),
 );
