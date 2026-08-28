@@ -11,8 +11,8 @@ import {SagaServiceTag, SagaLayer, buildMemePrompt} from "./saga.js";
 
 // ---- Pipeline steps -------------------------------------------------------
 
-export const generateImage = (prompt: string) =>
-    ProvidersServiceTag.pipe(Effect.flatMap((p) => p.generateWithFallback(prompt)));
+export const generateImage = (prompt: string, user?: string) =>
+    ProvidersServiceTag.pipe(Effect.flatMap((p) => p.generateWithFallback(prompt, user)));
 
 // ---- Failure handling -----------------------------------------------------
 
@@ -45,7 +45,7 @@ const program = Effect.gen(function* () {
     yield* fsys.makeDirectory(memesDir, {recursive: true});
 
     yield* Effect.log(`Starting generation for issue #${config.issueNumber}: "${config.memePrompt}"`);
-    const {buffer, history, metadata} = yield* generateImage(prompt);
+    const {buffer, history, metadata} = yield* generateImage(prompt, config.requester);
     yield* fsys.writeFile(outFile, buffer);
     yield* Effect.log(`Image saved: ${outFile}`);
     const git = yield* GitServiceTag;

@@ -4,7 +4,7 @@ import * as TestContext from "effect/TestContext";
 import type OpenAI from "openai";
 import {describe, expect, it} from "vitest";
 import {ModerationBlockedError, ProviderError, QuotaExhaustedError, RateLimitError} from "./errors.js";
-import {callWithRetry, makeCandidates, MAX_RETRIES, modelLabel, ProvidersLayer, ProvidersServiceTag} from "./providers.js";
+import {callWithRetry, makeCandidates, MAX_RETRIES, modelLabel, PRIMARY_PROVIDERS, ProvidersLayer, ProvidersServiceTag} from "./providers.js";
 
 const PROVIDER = "test-provider";
 const call = (client: OpenAI) => callWithRetry(PROVIDER, client, "m", {}, "prompt");
@@ -172,6 +172,48 @@ describe("callWithRetry", () => {
         expect(capturedParams["model"]).toBe("dall-e-3");
         expect(capturedParams["prompt"]).toBe("cat");
     });
+
+    it("passes numeric params (e.g. output_compression) through to the API", async () => {
+        let capturedParams: Record<string, unknown> = {};
+        const client = {
+            images: {
+                generate: (p: Record<string, unknown>) => {
+                    capturedParams = p;
+                    return Promise.resolve({data: [{b64_json: "aGk="}]});
+                },
+            },
+        } as unknown as OpenAI;
+        await run(callWithRetry(PROVIDER, client, "gpt-image-2", {output_compression: 80}, "cat"));
+        expect(capturedParams["output_compression"]).toBe(80);
+    });
+
+    it("forwards the end-user id as `user` when provided", async () => {
+        let capturedParams: Record<string, unknown> = {};
+        const client = {
+            images: {
+                generate: (p: Record<string, unknown>) => {
+                    capturedParams = p;
+                    return Promise.resolve({data: [{b64_json: "aGk="}]});
+                },
+            },
+        } as unknown as OpenAI;
+        await run(callWithRetry(PROVIDER, client, "gpt-image-2", {}, "cat", "U017Z2VDNJJ"));
+        expect(capturedParams["user"]).toBe("U017Z2VDNJJ");
+    });
+
+    it("omits `user` entirely when no end-user id is provided", async () => {
+        let capturedParams: Record<string, unknown> = {};
+        const client = {
+            images: {
+                generate: (p: Record<string, unknown>) => {
+                    capturedParams = p;
+                    return Promise.resolve({data: [{b64_json: "aGk="}]});
+                },
+            },
+        } as unknown as OpenAI;
+        await run(callWithRetry(PROVIDER, client, "gpt-image-2", {}, "cat"));
+        expect("user" in capturedParams).toBe(false);
+    });
 });
 
 describe("model candidates", () => {
@@ -199,6 +241,16 @@ describe("model candidates", () => {
         );
         expect(candidates.map(([label]) => label)).toEqual(["OpenAI (gpt-image-2)", "OpenAI HQ"]);
         expect(typeof candidates[0][1]).toBe("function");
+    });
+
+    it("configures the OpenAI primary with relaxed moderation and JPEG compression", () => {
+        const openai = PRIMARY_PROVIDERS.find((p) => p.name === "OpenAI");
+        expect(openai).toBeDefined();
+        const model = openai!.models.find((m) => m.model === "gpt-image-2");
+        expect(model).toBeDefined();
+        expect(model!.params?.moderation).toBe("low");
+        expect(model!.params?.output_compression).toBe(80);
+        expect(model!.params?.output_format).toBe("jpeg");
     });
 });
 
