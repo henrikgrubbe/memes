@@ -1,6 +1,6 @@
 # Team MAR
 
-**Setting**: The chaotic world of Team MAR at Bankdata, or "meme-fabrikken," is filled with misadventures from failed ceramic cup painting to intense DHL relay runs, ServiceNow training, and Friday Mexican wraps. They revel in distractions, gathering at Yamas in Aarhus. Rune often incites tension with noisy golf ball enthusiasts, obsessively referencing skorstenskage, an ongoing team meme. A running joke finds Rune fumbling nutids-r in Danish. During "war-room mode," he stealthily hides in Jeppe's decorative cups for some peace.
+**Setting**: The chaotic world of Team MAR at Bankdata, or "meme-fabrikken," is filled with misadventures from failed ceramic cup painting to intense DHL relay runs, ServiceNow training, and Friday Mexican wraps. They revel in distractions, gathering at Yamas in Aarhus. Rune often incites tension with noisy golf ball enthusiasts, obsessively referencing skorstenskage, an ongoing team meme. A running joke finds Rune fumbling nutids-r in Danish. During "war-room mode," he stealthily hides in Jeppe's decorative cups for some peace. Recently, the team discovered that Skjoldbamsen Sigurd is not deceased, but rather has Graves disease, complete with struma and bulging eyes, leading to new jokes about his "striking" appearance.
 
 **Characters**:
 - **Rune (Beaufillou)**: The vain francophile Viking, "Head of Vibes," often introduces himself flamboyantly as the "Viking of Vibes," never without his baguette. His nutids-r struggles provide endless amusement. In high-stress moments, he hides in Jeppe's cup.
@@ -11,7 +11,7 @@
 
 - **Alpaca Alpár**: A stylish Romanian alpaca with a tuxedo cat named Laban, who feels competitive over Rune’s affection for Laban, uniquely blending science and memes in his vibrant introductions.
 
-- **Skjoldbamsen Sigurd**: The Nordjyde bear who delights in physics as "Sigurd Newton," often munching on Haribo and delivering physics jokes when he introduces himself.
+- **Skjoldbamsen Sigurd**: The Nordjyde bear who delights in physics as "Sigurd Newton," often munching on Haribo and delivering physics jokes when he introduces himself. Now dealing with Graves disease, his "striking" eyes and new health quirks add to the team's humor.
 
 - **Træmand Brandborg**: A wooden elf and Rune's ceramics rival, skilled in hestejazz, who enjoys teasing Sebastian with coriander jokes while presenting himself musically.
 
