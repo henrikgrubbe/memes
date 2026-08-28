@@ -7,6 +7,7 @@ import {ConfigProvider, Effect, Layer} from "effect";
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
 import {AppConfigService, type AppConfig} from "./config.js";
 import {SagaServiceTag, SagaLayer} from "./saga.js";
+import {GitLayer} from "./git.js";
 
 // Exercises the real read -> compress(fallback) -> write -> commit -> push loop
 // against a throwaway git repo. OPENAI_API_KEY is left unset so compression
@@ -46,12 +47,13 @@ afterEach(() => {
 });
 
 const contribute = (saga: string, prompt: string) => {
-    const layer = SagaLayer.pipe(Layer.provide(Layer.mergeAll(
+    const infra = Layer.mergeAll(
         NodeFileSystem.layer,
         NodePath.layer,
         NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
         Layer.succeed(AppConfigService, dummyConfig),
-    )));
+    );
+    const layer = SagaLayer.pipe(Layer.provide(Layer.mergeAll(infra, GitLayer.pipe(Layer.provide(infra)))));
     const program = SagaServiceTag.pipe(Effect.flatMap((s) => s.contribute(saga, prompt)));
     return Effect.runPromise(
         program.pipe(

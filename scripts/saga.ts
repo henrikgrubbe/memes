@@ -1,7 +1,8 @@
 import OpenAI from "openai";
-import {Command, CommandExecutor, FileSystem, Path} from "@effect/platform";
-import {Config, Context, Effect, Layer, Option, Schedule} from "effect";
+import {FileSystem, Path} from "@effect/platform";
+import {Config, Context, Effect, Layer, Option} from "effect";
 import {AppConfigService} from "./config.js";
+import {GitServiceTag} from "./git.js";
 
 // ---- Tunables ---------------------------------------------------------------
 
@@ -16,8 +17,6 @@ export const COMPRESSION_MODEL = "gpt-4o-mini";
 export const MAX_CANON_TOKENS = 900;
 // Directory (repo-relative) holding one markdown file per saga.
 export const CONTEXT_DIR = "context";
-
-const MAX_PUSH_RETRIES = 5;
 
 // ---- Pure helpers -----------------------------------------------------------
 
@@ -170,16 +169,14 @@ export const SagaNoOpLayer: Layer.Layer<SagaServiceTag> =
 
 // ---- Real adapter -----------------------------------------------------------
 
-class SagaGitError { readonly _tag = "SagaGitError" as const; }
-
-export const SagaLayer: Layer.Layer<SagaServiceTag, never, CommandExecutor.CommandExecutor | FileSystem.FileSystem | Path.Path | AppConfigService> =
+export const SagaLayer: Layer.Layer<SagaServiceTag, never, FileSystem.FileSystem | Path.Path | AppConfigService | GitServiceTag> =
     Layer.effect(
         SagaServiceTag,
         Effect.gen(function* () {
-            const executor = yield* CommandExecutor.CommandExecutor;
-            const fs       = yield* FileSystem.FileSystem;
-            const pathSvc  = yield* Path.Path;
-            const config   = yield* AppConfigService;
+            const fs      = yield* FileSystem.FileSystem;
+            const pathSvc = yield* Path.Path;
+            const config  = yield* AppConfigService;
+            const git     = yield* GitServiceTag;
 
             const apiKey = yield* Config.option(Config.string("OPENAI_API_KEY")).pipe(Effect.orDie);
             const client = Option.isSome(apiKey) && apiKey.value.trim() !== ""
@@ -187,14 +184,6 @@ export const SagaLayer: Layer.Layer<SagaServiceTag, never, CommandExecutor.Comma
                 : null;
 
             const absPath = (saga: string) => pathSvc.join(process.cwd(), CONTEXT_DIR, `${saga}.md`);
-
-            const git = (cmd: string): Effect.Effect<string, SagaGitError> =>
-                Command.make("sh", "-c", cmd).pipe(
-                    Command.string,
-                    Effect.mapError(() => new SagaGitError()),
-                    Effect.map((s) => s.trim()),
-                    Effect.provideService(CommandExecutor.CommandExecutor, executor),
-                );
 
             const readCanon = (saga: string): Effect.Effect<string | null> =>
                 fs.readFileString(absPath(saga)).pipe(Effect.orElseSucceed(() => null));
@@ -227,34 +216,27 @@ export const SagaLayer: Layer.Layer<SagaServiceTag, never, CommandExecutor.Comma
                     ? Effect.succeed(appendFallback(canon, prompt))
                     : foldCanon(callModel, saga, canon, prompt);
 
-            // One read-compress-write-commit-push attempt. Each attempt starts
-            // from a freshly pulled tree and re-reads the canon, so concurrent
-            // writers to the same saga serialize cleanly (last writer folds its
-            // prompt into the other's already-committed canon). On push rejection
-            // the local commit is dropped so the next attempt re-derives.
-            const attempt = (saga: string, prompt: string): Effect.Effect<void, SagaGitError> =>
+            // Re-read the canon and fold in the new prompt, then write it back.
+            // Runs inside GitService.commitToMain's per-attempt loop, so it sees
+            // a freshly rebased tree: concurrent writers to the same saga
+            // serialize, the last one folding its prompt into the other's
+            // already-committed canon.
+            const stage = (saga: string, prompt: string): Effect.Effect<ReadonlyArray<string>> =>
                 Effect.gen(function* () {
-                    yield* git(`git config user.name "github-actions[bot]"`);
-                    yield* git(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
-                    yield* git(`git pull --rebase origin main`);
-
                     const canon    = (yield* readCanon(saga)) ?? "";
                     const newCanon = yield* compress(saga, canon, prompt);
-
                     yield* fs.makeDirectory(pathSvc.join(process.cwd(), CONTEXT_DIR), {recursive: true}).pipe(Effect.ignore);
-                    yield* fs.writeFileString(absPath(saga), `${newCanon}\n`).pipe(Effect.mapError(() => new SagaGitError()));
-
-                    yield* git(`git add "${sagaPath(saga)}"`);
-                    yield* git(`git commit -m "Update saga ${saga} for issue #${config.issueNumber}"`);
-                    yield* git(`git push origin HEAD`).pipe(
-                        Effect.tapError(() => git(`git reset --hard HEAD~1`).pipe(Effect.ignore)),
-                    );
+                    yield* fs.writeFileString(absPath(saga), `${newCanon}\n`).pipe(Effect.orDie);
+                    return [sagaPath(saga)];
                 });
 
             return {
                 read: (saga) => readCanon(saga),
                 contribute: (saga, prompt) =>
-                    Effect.retry(attempt(saga, prompt), Schedule.recurs(MAX_PUSH_RETRIES - 1)).pipe(
+                    git.commitToMain({
+                        message: `Update saga ${saga} for issue #${config.issueNumber}`,
+                        stage:   stage(saga, prompt),
+                    }).pipe(
                         Effect.tap(() => Effect.log(`Saga "${saga}" updated.`)),
                         Effect.catchAll(() => Effect.logWarning(`Saga "${saga}" update failed - meme delivery unaffected.`)),
                     ),
