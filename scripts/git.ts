@@ -1,7 +1,6 @@
-import {Command, CommandExecutor} from "@effect/platform";
 import {Context, Effect, Layer, Schedule} from "effect";
 import {PushFailedError} from "./errors.js";
-import {AppConfigService} from "./config.js";
+import {ShellTag} from "./shell.js";
 
 // ---- GitService -------------------------------------------------------------
 // Deep interface: the single concurrency-safe way to land a change on `main`.
@@ -42,22 +41,12 @@ const MAX_PUSH_RETRIES = 5;
 // Internal: one rejected attempt — sentinel for the retry loop.
 class PushAttemptError { readonly _tag = "PushAttemptError" as const; }
 
-const exec = (executor: CommandExecutor.CommandExecutor, cmd: string): Effect.Effect<string, PushAttemptError> =>
-    Command.make("sh", "-c", cmd).pipe(
-        Command.string,
-        Effect.mapError(() => new PushAttemptError()),
-        Effect.map((s) => s.trim()),
-        Effect.provideService(CommandExecutor.CommandExecutor, executor),
-    );
-
-export const GitLayer: Layer.Layer<GitServiceTag, never, CommandExecutor.CommandExecutor | AppConfigService> =
+export const GitLayer: Layer.Layer<GitServiceTag, never, ShellTag> =
     Layer.effect(
         GitServiceTag,
         Effect.gen(function* () {
-            // Capture the executor once, at layer construction, so the service
-            // method itself requires nothing from context (R = never).
-            const executor = yield* CommandExecutor.CommandExecutor;
-            const run      = (cmd: string) => exec(executor, cmd);
+            const shell = yield* ShellTag;
+            const run   = (cmd: string) => shell.run(cmd).pipe(Effect.mapError(() => new PushAttemptError()));
 
             const configureIdentity = run(`git config user.name "github-actions[bot]"`).pipe(
                 Effect.zipRight(run(`git config user.email "github-actions[bot]@users.noreply.github.com"`)),
