@@ -167,6 +167,18 @@ export const ProvidersLayer = Layer.effect(ProvidersServiceTag, Effect.gen(funct
 
 type GenerateError = ModerationFailedError | AllProvidersExhaustedError | ProviderError | RateLimitError | QuotaExhaustedError;
 type AttemptError = ModerationBlockedError | ProviderError | RateLimitError | QuotaExhaustedError;
+type HistoryError = Exclude<AttemptError, ModerationBlockedError>;
+
+function reconstructWithHistory(error: HistoryError, history: ReadonlyArray<HistoryEntry>): HistoryError {
+    switch (error._tag) {
+        case "ProviderError":
+            return new ProviderError({...error, history});
+        case "RateLimitError":
+            return new RateLimitError({...error, history});
+        case "QuotaExhaustedError":
+            return new QuotaExhaustedError({...error, history});
+    }
+}
 
 function withAttemptHistory<A>(
     effect: Effect.Effect<A, AttemptError>,
@@ -181,14 +193,7 @@ function withAttemptHistory<A>(
 
             const attempt: HistoryEntry = {provider, status: "failed", message: error.message};
             const history = [...prior, attempt, ...(error.history ?? [])];
-            switch (error._tag) {
-                case "ProviderError":
-                    return new ProviderError({provider: error.provider, detail: error.detail, history});
-                case "RateLimitError":
-                    return new RateLimitError({provider: error.provider, attempts: error.attempts, history});
-                case "QuotaExhaustedError":
-                    return new QuotaExhaustedError({provider: error.provider, detail: error.detail, history});
-            }
+            return reconstructWithHistory(error, history);
         }),
     );
 }
