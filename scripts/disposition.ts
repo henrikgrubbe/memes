@@ -1,4 +1,4 @@
-import type {HistoryEntry} from "./providers.js";
+import type {HistoryEntry} from "./history.js";
 
 export interface FailureDisposition {
     readonly message:          string;

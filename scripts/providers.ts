@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import {Config, Context, Duration, Effect, Layer, Option, Random, Ref, Schedule} from "effect";
 import type {ConfigError} from "effect/ConfigError";
 import {AllProvidersExhaustedError, ModerationFailedError, ModerationBlockedError, ProviderError, QuotaExhaustedError, RateLimitError} from "./errors.js";
+import type {HistoryEntry} from "./history.js";
 
 export const MAX_RETRIES            = 10;
 const        RETRY_DELAY_PADDING_MS = 1_000;
@@ -67,14 +68,6 @@ export const MODERATION_FALLBACK_PROVIDER: ProviderConfig = {
         {model: "grok-imagine-image", params: {response_format: "b64_json"}},
     ],
 };
-
-// ---- HistoryEntry -----------------------------------------------------------
-
-export interface HistoryEntry {
-    provider: string;
-    status:   "success" | "rate-limited" | "failed";
-    message?: string;
-}
 
 export interface UsageEntry {
     inputTokens:  number;

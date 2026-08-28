@@ -2,7 +2,8 @@ import {Context, Effect, Layer} from "effect";
 import * as Schema from "effect/Schema";
 import {AppConfigService} from "./config.js";
 import {ShellTag} from "./shell.js";
-import type {GenerationMetadata, HistoryEntry} from "./providers.js";
+import type {GenerationMetadata} from "./providers.js";
+import {renderProviderAttempts, type HistoryEntry} from "./history.js";
 
 // ---- Types ------------------------------------------------------------------
 
@@ -64,17 +65,6 @@ const postSlack = (data: SlackPayload): Effect.Effect<void, never, NotifierDeps>
 export function formatCostCents(metadata?: GenerationMetadata): string | null {
     const costCents = metadata?.costCents;
     return costCents == null ? null : `${costCents.toFixed(3)}¢`;
-}
-
-/** Render the shared "Provider attempts" bullet list from an attempt history. */
-export function renderProviderAttempts(history: ReadonlyArray<HistoryEntry>): string[] {
-    return history.map(({provider, status, message}) => {
-        switch (status) {
-            case "success":      return `- ${provider} ✅`;
-            case "rate-limited": return `- ${provider} ⏳ rate limited`;
-            default:             return `- ${provider} ❌ (${message})`;
-        }
-    });
 }
 
 export function buildSuccessComment({memeId, provider, history, prompt, requester, channel, slackLink, repo, metadata}: {

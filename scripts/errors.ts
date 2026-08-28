@@ -5,7 +5,7 @@
  */
 
 import {Data} from "effect";
-import type {HistoryEntry} from "./providers.js";
+import type {HistoryEntry} from "./history.js";
 
 // Terminal errors surfaced by generateWithFallback optionally carry the full
 // list of provider attempts that led to the failure, so the failure notifier
