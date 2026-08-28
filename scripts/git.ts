@@ -41,6 +41,25 @@ const MAX_PUSH_RETRIES = 5;
 // Internal: one rejected attempt — sentinel for the retry loop.
 class PushAttemptError { readonly _tag = "PushAttemptError" as const; }
 
+type GitCommand = (command: string) => Effect.Effect<string, PushAttemptError>;
+
+// Re-derive staged content from a freshly pulled tree on every attempt. Only a
+// rejected push needs a reset because the preceding steps have not made a commit.
+const commitAttempt = (run: GitCommand, plan: CommitPlan): Effect.Effect<void, PushAttemptError> =>
+    Effect.gen(function* () {
+        yield* run(`git config user.name "github-actions[bot]"`);
+        yield* run(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
+        yield* run(`git pull --rebase origin main`);
+        const paths = yield* plan.stage;
+        for (const path of paths) {
+            yield* run(`git add "${path}"`);
+        }
+        yield* run(`git commit -m "${plan.message}"`);
+        yield* run(`git push origin HEAD`).pipe(
+            Effect.tapError(() => run(`git reset --hard HEAD~1`).pipe(Effect.ignore)),
+        );
+    });
+
 export const GitLayer: Layer.Layer<GitServiceTag, never, ShellTag> =
     Layer.effect(
         GitServiceTag,
@@ -48,30 +67,10 @@ export const GitLayer: Layer.Layer<GitServiceTag, never, ShellTag> =
             const shell = yield* ShellTag;
             const run   = (cmd: string) => shell.run(cmd).pipe(Effect.mapError(() => new PushAttemptError()));
 
-            const configureIdentity = run(`git config user.name "github-actions[bot]"`).pipe(
-                Effect.zipRight(run(`git config user.email "github-actions[bot]@users.noreply.github.com"`)),
-            );
-
-            // One pull-fresh-tree, stage, commit, push. On push rejection the
-            // local commit is dropped so the next attempt re-derives from the
-            // updated remote; any earlier failure (pull/stage/commit) simply
-            // retries without a reset, since nothing was committed yet.
-            const attempt = (plan: CommitPlan): Effect.Effect<void, PushAttemptError> =>
-                Effect.gen(function* () {
-                    yield* configureIdentity;
-                    yield* run(`git pull --rebase origin main`);
-                    const paths = yield* plan.stage;
-                    for (const path of paths) { yield* run(`git add "${path}"`); }
-                    yield* run(`git commit -m "${plan.message}"`);
-                    yield* run(`git push origin HEAD`).pipe(
-                        Effect.tapError(() => run(`git reset --hard HEAD~1`).pipe(Effect.ignore)),
-                    );
-                });
-
             return {
                 commitToMain: (plan: CommitPlan): Effect.Effect<void, PushFailedError> =>
                     Effect.retry(
-                        attempt(plan).pipe(Effect.tapError(() => Effect.log("Push failed - retrying..."))),
+                        commitAttempt(run, plan).pipe(Effect.tapError(() => Effect.log("Push failed - retrying..."))),
                         Schedule.recurs(MAX_PUSH_RETRIES - 1),
                     ).pipe(
                         Effect.tap(() => Effect.log(`Pushed to main: ${plan.message}`)),
