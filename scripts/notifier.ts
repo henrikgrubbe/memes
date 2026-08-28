@@ -73,20 +73,9 @@ const postSlack = (data: SlackPayload): Effect.Effect<void, never, NotifierDeps>
         );
     });
 
-// gpt-image-2 token prices derived from empirical cost/usage data: $5/M input, $30/M output
-const INPUT_TOKEN_PRICE_PER_M  = 5;
-const OUTPUT_TOKEN_PRICE_PER_M = 30;
-
-/** Estimated generation cost in cents, or null when token usage is unknown. */
-export function estimateCostCents(metadata?: GenerationMetadata): number | null {
-    const usage = metadata?.usage;
-    if (usage == null) { return null; }
-    return (usage.inputTokens * INPUT_TOKEN_PRICE_PER_M + usage.outputTokens * OUTPUT_TOKEN_PRICE_PER_M) / 1_000_000 * 100;
-}
-
-/** Display-ready cost string (e.g. "0.108¢"), or null when token usage is unknown. */
+/** Display-ready cost string (e.g. "0.108¢"), or null when cost is unknown. */
 export function formatCostCents(metadata?: GenerationMetadata): string | null {
-    const costCents = estimateCostCents(metadata);
+    const costCents = metadata?.costCents;
     return costCents == null ? null : `${costCents.toFixed(3)}¢`;
 }
 
