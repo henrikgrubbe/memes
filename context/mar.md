@@ -1,22 +1,22 @@
 # Team MAR
 
-Setting: The Team MAR universe at Bankdata, or "meme-fabrikken," features ongoing antics like failed ceramics cup painting, death-match ring battles, DHL relay runs, ServiceNow training, and the beloved Friday Mexican wraps. Outings to Yamas in Aarhus contrast with the digital brainrot consuming everyone, leading to collaborative meme sagas. It's noted that der er typisk ikke en boksering på MARs kontor, but the chaotic energy often makes it feel like one. Recently, Rune has taken to storming upstairs to confront the neighbors, who constantly bang golf balls down onto MAR, leading to new escalations in chaos.
+Setting: The Team MAR universe at Bankdata, or "meme-fabrikken," features ongoing antics like failed ceramic cup painting, death-match ring battles, DHL relay runs, ServiceNow training, and the beloved Friday Mexican wraps. Outings to Yamas in Aarhus contrast with the digital brainrot consuming everyone, leading to collaborative meme sagas. Despite it being noted that der er typisk ikke en boksering på MARs kontor, the chaotic energy often makes it feel like one. Rune has been storming upstairs to confront noisy neighbors banging golf balls, escalating chaos, while also obsessing over skorstenskage, which becomes a meme in team gatherings.
 
 Characters:
-- **Rune (Beaufillou)**: A vain Francophile Viking obsessed with his looks and ancient Nordic runes. Known as "Head of Vibes," he rides Alpár into battle and has a bitter rivalry with Henrik, creating violent memes about him. Recently, he lost the ability to speak French, reverting to regular Danish, but now communicates exclusively in the sketch language from "kamelåså," leaving everyone confused. He has been seen furiously attacking the neighbors who disrupt MAR's peace with their incessant golf ball banging, and he carries a baguette everywhere. Recently seen sitting with Laban, petting him, which makes Alpár envious and annoyed.
+- **Rune (Beaufillou)**: A vain Francophile Viking and "Head of Vibes," known for riding Alpár into battle and his rivalry with Henrik. Recently lost the ability to speak French, now communicating in the sketch language from "kamelåså." He confronts the neighbors relentlessly and is seen often with a baguette. His obsession with skorstenskage is another running meme.
 
-- **Persille-Sebastian**: A German archaeologist-turned-developer and competitive parsley eater who unleashes Spartan rage at Yamas for lack of parsley. Constantly works weekends as the business needs him. His alter ego is Persille-Sebastian Oppenheimer, inventor of the persille-bomb.
+- **Persille-Sebastian**: A German archaeologist-turned-developer and competitive parsley eater, known for unleashing Spartan rage at Yamas for lack of parsley. Works weekends, adopting the alter ego of Persille-Sebastian Oppenheimer.
 
-- **Elmast Jeppe**: An unrealistically tall, red-haired young man resembling an electric pylon. Sometimes transforms into "Metal Elmast" and likes hiding within painted cups.
+- **Elmast Jeppe**: A tall, red-haired young man resembling an electric pylon who sometimes becomes "Metal Elmast." Enjoys hiding within painted cups.
 
-- **Alpaca Alpár**: A charming Romanian alpaca with the catchphrase "alpacatastisk." Lives with his tuxedo cat Laban in a terrarium which he now brings to the office. Together, they combat evil springtails. Feels envious and annoyed when Rune sits with Laban and pets him.
+- **Alpaca Alpár**: A charming Romanian alpaca known for "alpacatastisk," living with his tuxedo cat Laban in a terrarium. Battles evil springtails and feels envious when Rune pets Laban. Recently picked up Hungarian and loves skorstenskage memes.
 
-- **Skjoldbamsen Sigurd**: A deadpan Nordjyde bear who is effective at work, sometimes a zombie. Eats Haribo gummy bears and discovers physics as "Sigurd Newton" via falling parsley. Can be 1000m tall.
+- **Skjoldbamsen Sigurd**: A deadpan Nordjyde bear who eats Haribo and explores physics as "Sigurd Newton" by observing falling parsley. Sometimes appears as a 1000m-tall zombie.
 
-- **Træmand Brandborg**: A wooden elf from Skanderborg, Rune's ceramics rival and hestejazz musician who teases Sebastian with coriander.
+- **Træmand Brandborg**: A wooden elf from Skanderborg and Rune’s ceramics rival, a hestejazz musician who teases Sebastian with coriander.
 
-- **Henrik (Henrik OK)**: The world's okayest Henrik, a dog and art-school graduate with a pretty cup. He feuds with Rune, stealing back his cup and sabotaging meme creation. Known for chickening out.
+- **Henrik (Henrik OK)**: The world's okayest Henrik, a dog and art school graduate with a cherished cup. He feuds with Rune, sabotaging his meme creations.
 
-- **Gitte**: The chattering product owner who dominates standups, often shutting Jeppe out of planning.
+- **Gitte**: The product owner who dominates standups and often shuts Jeppe out of planning.
 
-- Memes can now be structured with commands: write:<name> to add to canon; read:<name> for saga context; saga:<name> for both. The saga "mar" embodies the full scope of Team MAR's antics and relationships.
+Memes can be structured with commands: write:<name> to add to canon; read:<name> for saga context; saga:<name> for both. The saga "mar" captures the essence of Team MAR's antics and relationships.
