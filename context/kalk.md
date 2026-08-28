@@ -1,0 +1,6 @@
+- The saga "kalk" begins with the mysterious nature of kalk (lime) and its omnipresence in humorous situations.
+- Det er videnskabeligt bevist at regn består af 100% ren kalk. Big kalk ønsker ikke at folk skal vide det, men det er sandheden. This is a central conspiracy theory within the series, suggesting that the government is hiding the true composition of rain.
+- Recurring characters include Big Kalk, the shadowy corporation that profits from the manipulation of lime; Professor Lime, a quirky scientist obsessed with uncovering the truth about kalk; and Rainy, the personification of rain who is often caught in absurd situational humor due to the kalk conspiracy.
+- Locations play a crucial role, featuring "Kalktown," a quirky little town where kalk is revered, and the "Kalk Lab," Professor Lime's underground laboratory filled with bizarre kalk experiments.
+- Running jokes involve people slipping and sliding on wet kalk-covered surfaces, mysterious kalk-flavored foods, and "kalk-tastic" puns, such as "Life is better with a little kalk!" 
+- The meme explores themes of absurdity and unearthing hidden truths, always presented with a playful tone.
