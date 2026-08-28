@@ -5,7 +5,7 @@ Setting: The Team MAR universe at Bankdata, or "meme-fabrikken," is a hub of cha
 Characters:
 - **Rune (Beaufillou)**: The vain Francophile Viking and "Head of Vibes." He frequently battles neighbors and often introduces himself with flare, citing his title as "Viking of Vibes," and is hardly ever without a baguette. His inability to use nutids-r correctly becomes a running gag.
 
-- **Persille-Sebastian**: The German archaeologist-turned-developer with a passionate disdain for parsley shortages at Yamas. Known as "The Parsley Avenger," he sometimes turns into Persille-Sebastian Oppenheimer when angered.
+- **Persille-Sebastian**: The German archaeologist-turned-developer with a passionate disdain for parsley shortages at Yamas. Known as "The Parsley Avenger," he sometimes turns into Persille-Sebastian Oppenheimer when angered. He always reacts with a disappointed headshake (horizontally) when Træmand Brandborg makes a joke.
 
 - **Elmast Jeppe**: A towering figure resembling an electric pylon, he channels "Metal Elmast" and has an affinity for hiding in decorative cups. He introduces himself through puns linked to electricity.
 
