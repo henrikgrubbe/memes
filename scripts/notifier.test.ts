@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {buildFailureComment, buildSlackSuccessPayload, buildSuccessComment, estimateCostCents, formatCostCents} from "./notifier.js";
+import {buildFailureComment, buildSlackSuccessPayload, buildSuccessComment, formatCostCents} from "./notifier.js";
 
 describe("buildSuccessComment", () => {
     it("includes repo-backed image links without crashing", () => {
@@ -34,12 +34,12 @@ describe("buildSuccessComment", () => {
             metadata: {
                 revisedPrompt: "revised prompt text",
                 usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46},
+                costCents: 0.108,
             },
         });
 
         expect(comment).toContain("**Revised prompt:** `revised prompt text`");
         expect(comment).toContain("**Usage:** 12 input, 34 output, 46 total tokens");
-        // 12 * $5/M + 34 * $30/M = $0.00108 = 0.108¢
         expect(comment).toContain("**Estimated cost:** 0.108¢");
         expect(comment).toContain("- xAI ⏳ rate limited");
         expect(comment).toContain("- OpenAI ✅");
@@ -86,27 +86,14 @@ describe("buildFailureComment", () => {
     });
 });
 
-describe("estimateCostCents", () => {
-    it("returns null when token usage is unknown", () => {
-        expect(estimateCostCents(undefined)).toBeNull();
-        expect(estimateCostCents({revisedPrompt: "x"})).toBeNull();
-    });
-
-    it("computes cost in cents from input/output token usage", () => {
-        // 12 * $5/M + 34 * $30/M = $0.00108 = 0.108¢
-        expect(estimateCostCents({usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46}}))
-            .toBeCloseTo(0.108, 6);
-    });
-});
-
 describe("formatCostCents", () => {
-    it("returns null when token usage is unknown", () => {
+    it("returns null when cost is unknown", () => {
         expect(formatCostCents(undefined)).toBeNull();
+        expect(formatCostCents({usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46}})).toBeNull();
     });
 
     it("formats cost as a cents string with three decimals", () => {
-        expect(formatCostCents({usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46}}))
-            .toBe("0.108¢");
+        expect(formatCostCents({costCents: 0.108})).toBe("0.108¢");
     });
 });
 
@@ -120,10 +107,10 @@ describe("buildSlackSuccessPayload", () => {
         repo: "henrikgrubbe/memes",
     };
 
-    it("includes a display-ready cost_cents string when usage is present", () => {
+    it("includes a display-ready cost_cents string when cost is present", () => {
         const payload = buildSlackSuccessPayload({
             ...base,
-            metadata: {usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46}},
+            metadata: {usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46}, costCents: 0.108},
         });
         expect(payload.status).toBe("success");
         expect(payload.provider).toBe("OpenAI");
@@ -131,7 +118,7 @@ describe("buildSlackSuccessPayload", () => {
         expect(payload.cost_cents).toBe("0.108¢");
     });
 
-    it("omits cost_cents when usage is unavailable", () => {
+    it("omits cost_cents when cost is unavailable", () => {
         const payload = buildSlackSuccessPayload(base);
         expect(payload.cost_cents).toBeUndefined();
         expect("cost_cents" in payload).toBe(false);

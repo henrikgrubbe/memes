@@ -6,12 +6,21 @@ import {AllProvidersExhaustedError, ModerationFailedError, ModerationBlockedErro
 export const MAX_RETRIES            = 10;
 const        RETRY_DELAY_PADDING_MS = 1_000;
 
+export interface ModelPricing {
+    // USD per 1,000,000 tokens, used to estimate per-image cost from usage.
+    inputPerMillion:  number;
+    outputPerMillion: number;
+}
+
 export interface ModelConfig {
     // The model identifier sent to the API (e.g. "gpt-image-2").
     model:   string;
     // Extra image-generation params for this model (size, quality, etc.).
     // Values may be strings or numbers (e.g. output_compression: 80).
     params?: Record<string, string | number>;
+    // Token pricing for this model, so cost is estimated where the model is
+    // known. Omit when unpriced; cost is then simply not reported.
+    pricing?: ModelPricing;
     // Optional display label; defaults to "<provider> (<model>)".
     label?:  string;
 }
@@ -41,7 +50,7 @@ export const PRIMARY_PROVIDERS: ProviderConfig[] = [
             // moderation:"low" relaxes the content filter so fewer requests are
             // blocked and diverted to the pricey xAI fallback. output_compression
             // shrinks the committed JPEGs (every meme lands in the repo forever).
-            {model: "gpt-image-2", params: {size: "1024x1024", quality: "low", output_format: "jpeg", moderation: "low", output_compression: 80}},
+            {model: "gpt-image-2", params: {size: "1024x1024", quality: "low", output_format: "jpeg", moderation: "low", output_compression: 80}, pricing: {inputPerMillion: 5, outputPerMillion: 30}},
         ],
     },
 ];
@@ -76,6 +85,14 @@ export interface UsageEntry {
 export interface GenerationMetadata {
     revisedPrompt?: string;
     usage?:         UsageEntry;
+    // Estimated generation cost in cents, computed from usage and the winning
+    // model's pricing. Absent when the model is unpriced or usage is unknown.
+    costCents?:     number;
+}
+
+/** Estimated cost in cents for a generation, from its token usage and pricing. */
+export function computeCostCents(usage: UsageEntry, pricing: ModelPricing): number {
+    return (usage.inputTokens * pricing.inputPerMillion + usage.outputTokens * pricing.outputPerMillion) / 1_000_000 * 100;
 }
 
 export interface GenerationResult {
@@ -121,7 +138,7 @@ export const makeCandidates = (cfg: ProviderConfig, apiKey: string): ReadonlyArr
     const client = new OpenAI({apiKey, ...(cfg.baseURL != null ? {baseURL: cfg.baseURL} : {})});
     return cfg.models.map((m) => {
         const label = modelLabel(cfg, m);
-        const fn: ProviderFn = (prompt, user) => callWithRetry(label, client, m.model, m.params ?? {}, prompt, user);
+        const fn: ProviderFn = (prompt, user) => callWithRetry(label, client, m.model, m.params ?? {}, prompt, user, m.pricing);
         return [label, fn] as const;
     });
 };
@@ -333,6 +350,7 @@ export function callWithRetry(
     params: Record<string, string | number>,
     prompt: string,
     user?: string,
+    pricing?: ModelPricing,
 ): Effect.Effect<GenerationResult, ModerationBlockedError | RateLimitError | ProviderError | QuotaExhaustedError> {
     return Effect.gen(function* () {
         const rateLimitHitsRef = yield* Ref.make(0);
@@ -364,8 +382,9 @@ export function callWithRetry(
                     }
                     : undefined;
                 const revisedPrompt = result.data?.[0]?.revised_prompt;
+                const costCents = usage != null && pricing != null ? computeCostCents(usage, pricing) : undefined;
                 const metadata = usage != null || revisedPrompt != null
-                    ? {usage, revisedPrompt}
+                    ? {usage, revisedPrompt, costCents}
                     : undefined;
                 return Effect.succeed({buffer: Buffer.from(b64, "base64"), metadata});
             }),

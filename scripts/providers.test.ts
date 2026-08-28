@@ -4,7 +4,7 @@ import * as TestContext from "effect/TestContext";
 import type OpenAI from "openai";
 import {describe, expect, it} from "vitest";
 import {ModerationBlockedError, ProviderError, QuotaExhaustedError, RateLimitError} from "./errors.js";
-import {callWithRetry, makeCandidates, MAX_RETRIES, modelLabel, PRIMARY_PROVIDERS, ProvidersLayer, ProvidersServiceTag} from "./providers.js";
+import {callWithRetry, computeCostCents, makeCandidates, MAX_RETRIES, modelLabel, PRIMARY_PROVIDERS, ProvidersLayer, ProvidersServiceTag} from "./providers.js";
 
 const PROVIDER = "test-provider";
 const call = (client: OpenAI) => callWithRetry(PROVIDER, client, "m", {}, "prompt");
@@ -64,6 +64,31 @@ describe("callWithRetry", () => {
                 revisedPrompt: "revised prompt text",
                 usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46},
             });
+        }
+    });
+
+    it("estimates cost from usage and the model's pricing", async () => {
+        const client = makeClient([() => Promise.resolve({
+            data: [{b64_json: "aGVsbG8="}],
+            usage: {input_tokens: 12, output_tokens: 34, total_tokens: 46},
+        })]);
+        // 12 * $5/M + 34 * $30/M = $0.00108 = 0.108¢
+        const exit = await run(callWithRetry(PROVIDER, client, "m", {}, "prompt", undefined, {inputPerMillion: 5, outputPerMillion: 30}));
+        expect(Exit.isSuccess(exit)).toBe(true);
+        if (Exit.isSuccess(exit)) {
+            expect(exit.value.metadata?.costCents).toBeCloseTo(0.108, 6);
+        }
+    });
+
+    it("leaves cost unset when the model is unpriced", async () => {
+        const client = makeClient([() => Promise.resolve({
+            data: [{b64_json: "aGVsbG8="}],
+            usage: {input_tokens: 12, output_tokens: 34, total_tokens: 46},
+        })]);
+        const exit = await run(call(client));
+        expect(Exit.isSuccess(exit)).toBe(true);
+        if (Exit.isSuccess(exit)) {
+            expect(exit.value.metadata?.costCents).toBeUndefined();
         }
     });
 
@@ -251,6 +276,15 @@ describe("model candidates", () => {
         expect(model!.params?.moderation).toBe("low");
         expect(model!.params?.output_compression).toBe(80);
         expect(model!.params?.output_format).toBe("jpeg");
+        expect(model!.pricing).toEqual({inputPerMillion: 5, outputPerMillion: 30});
+    });
+});
+
+describe("computeCostCents", () => {
+    it("prices a generation from its token usage", () => {
+        // 12 * $5/M + 34 * $30/M = $0.00108 = 0.108¢
+        expect(computeCostCents({inputTokens: 12, outputTokens: 34, totalTokens: 46}, {inputPerMillion: 5, outputPerMillion: 30}))
+            .toBeCloseTo(0.108, 6);
     });
 });
 
