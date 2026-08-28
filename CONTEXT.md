@@ -33,5 +33,5 @@ never lost. Concurrent writes to the same saga serialize via
 `git pull --rebase` + re-derive (see `scripts/saga.ts`).
 
 Relevant code: `scripts/saga.ts` (service, compression, prompt assembly),
-`scripts/config.ts` (`extractSagaDirectives`), `scripts/generate-meme.ts`
-(pipeline wiring).
+`scripts/saga-directives.ts` (`parseSagaDirectives`), `scripts/config.ts`
+(configuration wiring), `scripts/generate-meme.ts` (pipeline wiring).

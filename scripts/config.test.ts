@@ -1,6 +1,6 @@
-import {Effect, Exit} from "effect";
+import {ConfigProvider, Effect, Exit} from "effect";
 import {describe, expect, it} from "vitest";
-import {extractSagaDirectives, IssueFields, parseIssueBody} from "./config.js";
+import {AppConfigLayer, AppConfigService, IssueFields, parseIssueBody} from "./config.js";
 
 const run = (body: string) => Effect.runPromise(Effect.exit(parseIssueBody(body)));
 
@@ -132,77 +132,24 @@ describe("parseIssueBody", () => {
     });
 });
 
-describe("extractSagaDirectives", () => {
-    it("returns no sagas and the untouched prompt when there are no directives", () => {
-        const r = extractSagaDirectives("a cat riding a bike");
-        expect(r).toEqual({readSaga: null, writeSaga: null, prompt: "a cat riding a bike"});
-    });
+describe("AppConfigLayer", () => {
+    it("parses saga directives from the issue message", async () => {
+        const issueBody = "sender: hhb\nmessage: read:origin make a sequel write:next\nchannel: #memes\nlink: https://slack.com/x";
+        const provider = ConfigProvider.fromMap(new Map([
+            ["REPO", "henrikgrubbe/memes"],
+            ["SLACK_WEBHOOK_URL", "https://slack.com/webhook"],
+            ["ISSUE_NUMBER", "823"],
+            ["ISSUE_BODY", issueBody],
+        ]));
+        const config = await Effect.runPromise(
+            AppConfigService.pipe(
+                Effect.provide(AppConfigLayer),
+                Effect.withConfigProvider(provider),
+            ),
+        );
 
-    it("extracts read and write sagas and strips the tokens from the prompt", () => {
-        const r = extractSagaDirectives("read:heist a cat cracks a safe write:heist");
-        expect(r.readSaga).toBe("heist");
-        expect(r.writeSaga).toBe("heist");
-        expect(r.prompt).toBe("a cat cracks a safe");
-    });
-
-    it("lower-cases saga names and is case-insensitive on the keyword", () => {
-        const r = extractSagaDirectives("READ:StarWars luke as a cat");
-        expect(r.readSaga).toBe("starwars");
-        expect(r.writeSaga).toBeNull();
-        expect(r.prompt).toBe("luke as a cat");
-    });
-
-    it("allows reading one saga while contributing to another", () => {
-        const r = extractSagaDirectives("write:sequel read:origin a plot twist");
-        expect(r.readSaga).toBe("origin");
-        expect(r.writeSaga).toBe("sequel");
-        expect(r.prompt).toBe("a plot twist");
-    });
-
-    it("keeps the first directive of each kind when several are present", () => {
-        const r = extractSagaDirectives("read:one read:two write:a write:b hello");
-        expect(r.readSaga).toBe("one");
-        expect(r.writeSaga).toBe("a");
-        expect(r.prompt).toBe("hello");
-    });
-
-    it("does not treat 'read: the news' (space after colon) as a directive", () => {
-        const r = extractSagaDirectives("read: the news headline");
-        expect(r.readSaga).toBeNull();
-        expect(r.prompt).toBe("read: the news headline");
-    });
-
-    it("accepts slug names with digits, dashes and underscores", () => {
-        const r = extractSagaDirectives("write:saga_2-b something");
-        expect(r.writeSaga).toBe("saga_2-b");
-        expect(r.prompt).toBe("something");
-    });
-
-    it("treats saga:<name> as both a read and a write of that saga", () => {
-        const r = extractSagaDirectives("saga:mar rune paints a cup");
-        expect(r.readSaga).toBe("mar");
-        expect(r.writeSaga).toBe("mar");
-        expect(r.prompt).toBe("rune paints a cup");
-    });
-
-    it("is case-insensitive on the saga: shorthand and lower-cases the name", () => {
-        const r = extractSagaDirectives("SAGA:StarWars luke as a cat");
-        expect(r.readSaga).toBe("starwars");
-        expect(r.writeSaga).toBe("starwars");
-        expect(r.prompt).toBe("luke as a cat");
-    });
-
-    it("lets an explicit read/write override the saga: shorthand target", () => {
-        const r = extractSagaDirectives("read:origin saga:mar a plot twist");
-        expect(r.readSaga).toBe("origin");
-        expect(r.writeSaga).toBe("mar");
-        expect(r.prompt).toBe("a plot twist");
-    });
-
-    it("does not treat 'saga: the epic' (space after colon) as a directive", () => {
-        const r = extractSagaDirectives("saga: the epic tale");
-        expect(r.readSaga).toBeNull();
-        expect(r.writeSaga).toBeNull();
-        expect(r.prompt).toBe("saga: the epic tale");
+        expect(config.memePrompt).toBe("make a sequel");
+        expect(config.readSaga).toBe("origin");
+        expect(config.writeSaga).toBe("next");
     });
 });
