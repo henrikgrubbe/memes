@@ -105,6 +105,10 @@ describe("generateImage", () => {
             expect(exit.cause.error).toBeInstanceOf(ModerationFailedError);
             // @ts-expect-error accessing .error on Cause.Fail
             expect(exit.cause.error.fallbackProvider).toBeNull();
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error.message).toContain("blocked by moderation");
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error.message).toContain("no fallback provider available");
         }
     });
 
@@ -158,7 +162,7 @@ describe("generateImage", () => {
         }
     });
 
-    it("propagates QuotaExhaustedError when the moderation fallback is out of credits", async () => {
+    it("surfaces the moderation reason (not the fallback's error) when the fallback is out of credits", async () => {
         const exit = await run(
             generateImage("make a meme"),
             makeProvidersLayer({[PRIMARY]: modFn(PRIMARY)}, quotaFn(FALLBACK)),
@@ -166,7 +170,14 @@ describe("generateImage", () => {
         expect(Exit.isFailure(exit)).toBe(true);
         if (Exit.isFailure(exit)) {
             // @ts-expect-error accessing .error on Cause.Fail
-            expect(exit.cause.error).toBeInstanceOf(QuotaExhaustedError);
+            const error = exit.cause.error;
+            expect(error).toBeInstanceOf(ModerationFailedError);
+            // The headline is the primary moderation block, with the dead fallback
+            // relegated to a parenthetical note.
+            expect(error.provider).toBe(PRIMARY);
+            expect(error.message).toContain("blocked by moderation");
+            expect(error.message).toContain("out of credits/quota");
+            expect(error.fallbackProvider).toBe(FALLBACK);
         }
     });
 
@@ -181,7 +192,7 @@ describe("generateImage", () => {
         if (Exit.isFailure(exit)) {
             // @ts-expect-error accessing .error on Cause.Fail
             const error = exit.cause.error;
-            expect(error).toBeInstanceOf(QuotaExhaustedError);
+            expect(error).toBeInstanceOf(ModerationFailedError);
             expect(error.history).toHaveLength(2);
             expect(error.history[0]).toMatchObject({provider: PRIMARY, status: "failed"});
             expect(error.history[1]).toMatchObject({provider: FALLBACK, status: "failed"});
