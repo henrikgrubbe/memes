@@ -10,7 +10,8 @@ export interface ModelConfig {
     // The model identifier sent to the API (e.g. "gpt-image-2").
     model:   string;
     // Extra image-generation params for this model (size, quality, etc.).
-    params?: Record<string, string>;
+    // Values may be strings or numbers (e.g. output_compression: 80).
+    params?: Record<string, string | number>;
     // Optional display label; defaults to "<provider> (<model>)".
     label?:  string;
 }
@@ -37,7 +38,10 @@ export const PRIMARY_PROVIDERS: ProviderConfig[] = [
         name:   "OpenAI",
         envKey: "OPENAI_API_KEY",
         models: [
-            {model: "gpt-image-2", params: {size: "1024x1024", quality: "low", output_format: "jpeg"}},
+            // moderation:"low" relaxes the content filter so fewer requests are
+            // blocked and diverted to the pricey xAI fallback. output_compression
+            // shrinks the committed JPEGs (every meme lands in the repo forever).
+            {model: "gpt-image-2", params: {size: "1024x1024", quality: "low", output_format: "jpeg", moderation: "low", output_compression: 80}},
         ],
     },
 ];
@@ -84,10 +88,10 @@ export interface GenerationResult {
 // Deep interface: callers ask for an image; provider selection, retry, and
 // moderation fallback are entirely behind the seam.
 
-export type ProviderFn = (prompt: string) => Effect.Effect<GenerationResult, ModerationBlockedError | RateLimitError | ProviderError | QuotaExhaustedError>;
+export type ProviderFn = (prompt: string, user?: string) => Effect.Effect<GenerationResult, ModerationBlockedError | RateLimitError | ProviderError | QuotaExhaustedError>;
 
 export interface ProvidersService {
-    generateWithFallback(prompt: string): Effect.Effect<GenerationResult, ModerationFailedError | AllProvidersExhaustedError | ProviderError | RateLimitError | QuotaExhaustedError>;
+    generateWithFallback(prompt: string, user?: string): Effect.Effect<GenerationResult, ModerationFailedError | AllProvidersExhaustedError | ProviderError | RateLimitError | QuotaExhaustedError>;
 }
 
 export class ProvidersServiceTag extends Context.Tag("ProvidersService")<ProvidersServiceTag, ProvidersService>() {}
@@ -102,7 +106,7 @@ export const makeProvidersLayer = (
     fallback?: ProviderFn,
 ): Layer.Layer<ProvidersServiceTag> =>
     Layer.succeed(ProvidersServiceTag, {
-        generateWithFallback: (prompt) => generateWithFallback(primaries, fallback ?? null, prompt),
+        generateWithFallback: (prompt, user) => generateWithFallback(primaries, fallback ?? null, prompt, user),
     });
 
 export const modelLabel = (cfg: ProviderConfig, model: ModelConfig): string =>
@@ -117,7 +121,7 @@ export const makeCandidates = (cfg: ProviderConfig, apiKey: string): ReadonlyArr
     const client = new OpenAI({apiKey, ...(cfg.baseURL != null ? {baseURL: cfg.baseURL} : {})});
     return cfg.models.map((m) => {
         const label = modelLabel(cfg, m);
-        const fn: ProviderFn = (prompt) => callWithRetry(label, client, m.model, m.params ?? {}, prompt);
+        const fn: ProviderFn = (prompt, user) => callWithRetry(label, client, m.model, m.params ?? {}, prompt, user);
         return [label, fn] as const;
     });
 };
@@ -142,10 +146,10 @@ export const ProvidersLayer = Layer.effect(ProvidersServiceTag, Effect.gen(funct
     const fallbackCandidates = (yield* loadProvider(MODERATION_FALLBACK_PROVIDER)).map(([, fn]) => fn);
     const fallback: ProviderFn | null = fallbackCandidates.length === 0
         ? null
-        : (prompt) => Random.choice(fallbackCandidates).pipe(Effect.orDie, Effect.flatMap((fn) => fn(prompt)));
+        : (prompt, user) => Random.choice(fallbackCandidates).pipe(Effect.orDie, Effect.flatMap((fn) => fn(prompt, user)));
 
     return {
-        generateWithFallback: (prompt: string) => generateWithFallback(primaries, fallback, prompt),
+        generateWithFallback: (prompt: string, user?: string) => generateWithFallback(primaries, fallback, prompt, user),
     };
 }));
 
@@ -157,10 +161,11 @@ function generateWithFallback(
     primaries: Record<string, ProviderFn>,
     fallback: ProviderFn | null,
     prompt: string,
+    user?: string,
 ): Effect.Effect<GenerationResult, GenerateError> {
     // Object.keys is non-empty for the real layer (guarded above) and for every
     // test; an empty map is a programmer error, surfaced as a defect below.
-    return tryPrimaries(primaries, Object.keys(primaries), [], fallback, prompt);
+    return tryPrimaries(primaries, Object.keys(primaries), [], fallback, prompt, user);
 }
 
 /**
@@ -175,6 +180,7 @@ function tryPrimaries(
     skipped: HistoryEntry[],
     fallback: ProviderFn | null,
     prompt: string,
+    user?: string,
 ): Effect.Effect<GenerationResult, GenerateError> {
     return Effect.gen(function* () {
         if (remaining.length === 0) {
@@ -185,15 +191,15 @@ function tryPrimaries(
         const rest    = remaining.filter((name) => name !== primary);
         yield* Effect.log(`Selected ${primary} as primary provider...`);
 
-        return yield* primaries[primary](prompt).pipe(
+        return yield* primaries[primary](prompt, user).pipe(
             Effect.map((result) => ({...result, history: [...skipped, ...result.history]})),
             Effect.catchTag("QuotaExhaustedError", (err) => Effect.gen(function* () {
                 yield* Effect.logWarning(`${primary} is out of credits/quota - skipping. ${err.detail}`);
                 const entry: HistoryEntry = {provider: primary, status: "failed", message: err.message};
-                return yield* tryPrimaries(primaries, rest, [...skipped, entry], fallback, prompt);
+                return yield* tryPrimaries(primaries, rest, [...skipped, entry], fallback, prompt, user);
             })),
             Effect.catchTag("ModerationBlockedError", (err) =>
-                runModerationFallback(primary, err, skipped, fallback, prompt)),
+                runModerationFallback(primary, err, skipped, fallback, prompt, user)),
             // RateLimitError / ProviderError are terminal: attach the accumulated
             // history (including this primary's failure) so the notifier can report it.
             Effect.catchTags({
@@ -216,6 +222,7 @@ function runModerationFallback(
     skipped: HistoryEntry[],
     fallback: ProviderFn | null,
     prompt: string,
+    user?: string,
 ): Effect.Effect<GenerationResult, GenerateError> {
     return Effect.gen(function* () {
         const primaryEntry: HistoryEntry = {provider: primary, status: "failed", message: primaryErr.message};
@@ -228,7 +235,7 @@ function runModerationFallback(
 
         yield* Effect.log(`Moderation block on ${primary} - falling back to ${MODERATION_FALLBACK_PROVIDER.name}...`);
 
-        return yield* fallback(prompt).pipe(
+        return yield* fallback(prompt, user).pipe(
             Effect.map((result) => ({...result, history: [...priorHistory, ...result.history]})),
             Effect.catchTag("ModerationBlockedError", (fallbackErr) =>
                 Effect.fail(new ModerationFailedError({
@@ -317,15 +324,25 @@ export function callWithRetry(
     providerName: string,
     client: OpenAI,
     model: string,
-    params: Record<string, string>,
+    params: Record<string, string | number>,
     prompt: string,
+    user?: string,
 ): Effect.Effect<GenerationResult, ModerationBlockedError | RateLimitError | ProviderError | QuotaExhaustedError> {
     return Effect.gen(function* () {
         const rateLimitHitsRef = yield* Ref.make(0);
 
+        // `user` is a stable, opaque end-user id (the Slack sender) forwarded to
+        // OpenAI for abuse monitoring; omitted when not provided.
+        const body = {
+            model,
+            prompt,
+            ...params,
+            ...(user != null ? {user} : {}),
+        } as OpenAI.Images.ImageGenerateParamsNonStreaming;
+
         // attempt: pure — no side-effects in the error path
         const attempt = Effect.tryPromise({
-            try:   () => client.images.generate({model, prompt, ...params}),
+            try:   () => client.images.generate(body),
             catch: (err) => classifyApiError(err, model),
         }).pipe(
             Effect.flatMap((result) => {
