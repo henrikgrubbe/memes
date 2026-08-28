@@ -33,13 +33,20 @@ export class PushFailedError extends Data.TaggedError("PushFailedError")<{
 }
 
 export class ModerationFailedError extends Data.TaggedError("ModerationFailedError")<{
+    // The primary provider that flagged the content, and its moderation reason.
+    readonly provider:         string;
+    readonly detail:           string;
+    // The fallback provider that could not rescue the request (null when none is
+    // configured), plus a short note on why it couldn't help.
     readonly fallbackProvider: string | null;
-    readonly history?: ReadonlyArray<HistoryEntry>;
+    readonly fallbackDetail?:  string;
+    readonly history?:         ReadonlyArray<HistoryEntry>;
 }> {
     get message() {
+        const base = `${this.provider} blocked by moderation: ${this.detail}`;
         return this.fallbackProvider == null
-            ? "Blocked by moderation and no fallback provider is available"
-            : `Both primary and fallback provider (${this.fallbackProvider}) were blocked by moderation`;
+            ? `${base} (no fallback provider available)`
+            : `${base} (fallback ${this.fallbackProvider} could not help: ${this.fallbackDetail ?? "unavailable"})`;
     }
 }
 

@@ -228,35 +228,41 @@ function runModerationFallback(
         const primaryEntry: HistoryEntry = {provider: primary, status: "failed", message: primaryErr.message};
         const priorHistory = [...skipped, primaryEntry];
 
+        // The primary flagged the content, so the moderation block is the real,
+        // actionable reason for the failure. Whatever happens to the fallback, we
+        // surface *that* reason (with a short note on why the fallback couldn't
+        // rescue it) rather than letting a fallback billing/rate error bury it.
+        const moderationFailure = (fallbackProvider: string | null, fallbackDetail: string | undefined, fallbackEntry?: HistoryEntry) =>
+            new ModerationFailedError({
+                provider: primaryErr.provider,
+                detail:   primaryErr.detail,
+                fallbackProvider,
+                fallbackDetail,
+                history:  fallbackEntry != null ? [...priorHistory, fallbackEntry] : priorHistory,
+            });
+
         if (fallback == null) {
             yield* Effect.log(`Moderation block on ${primary} - no fallback provider available.`);
-            return yield* Effect.fail(new ModerationFailedError({fallbackProvider: null, history: priorHistory}));
+            return yield* Effect.fail(moderationFailure(null, undefined));
         }
 
         yield* Effect.log(`Moderation block on ${primary} - falling back to ${MODERATION_FALLBACK_PROVIDER.name}...`);
 
         return yield* fallback(prompt, user).pipe(
             Effect.map((result) => ({...result, history: [...priorHistory, ...result.history]})),
-            Effect.catchTag("ModerationBlockedError", (fallbackErr) =>
-                Effect.fail(new ModerationFailedError({
-                    fallbackProvider: MODERATION_FALLBACK_PROVIDER.name,
-                    history: [...priorHistory, {provider: fallbackErr.provider, status: "failed", message: fallbackErr.message}],
-                }))),
-            // The fallback ran out of credits (or otherwise failed): keep the
-            // primary's moderation attempt in the reported history.
+            Effect.catchTag("ModerationBlockedError", (err) =>
+                Effect.fail(moderationFailure(err.provider, "also blocked by moderation",
+                    {provider: err.provider, status: "failed", message: err.message}))),
+            // The fallback couldn't help (out of credits, rate-limited, or errored):
+            // report the primary moderation reason, noting why the fallback failed,
+            // and keep the fallback attempt in the history.
             Effect.catchTags({
-                QuotaExhaustedError: (err) => Effect.fail(new QuotaExhaustedError({
-                    provider: err.provider, detail: err.detail,
-                    history: [...priorHistory, {provider: err.provider, status: "failed", message: err.message}],
-                })),
-                RateLimitError: (err) => Effect.fail(new RateLimitError({
-                    provider: err.provider, attempts: err.attempts,
-                    history: [...priorHistory, {provider: err.provider, status: "failed", message: err.message}],
-                })),
-                ProviderError: (err) => Effect.fail(new ProviderError({
-                    provider: err.provider, detail: err.detail,
-                    history: [...priorHistory, {provider: err.provider, status: "failed", message: err.message}],
-                })),
+                QuotaExhaustedError: (err) => Effect.fail(moderationFailure(err.provider, "out of credits/quota",
+                    {provider: err.provider, status: "failed", message: err.message})),
+                RateLimitError: (err) => Effect.fail(moderationFailure(err.provider, "rate-limit retries exhausted",
+                    {provider: err.provider, status: "failed", message: err.message})),
+                ProviderError: (err) => Effect.fail(moderationFailure(err.provider, err.detail,
+                    {provider: err.provider, status: "failed", message: err.message})),
             }),
         );
     });
