@@ -1,9 +1,9 @@
 # Team MAR
 
-Setting: The Team MAR universe at Bankdata, or "meme-fabrikken," is a hub of chaotic adventures. From failed ceramic cup painting to battle ring antics, DHL relay runs, ServiceNow training, and Friday Mexican wraps, the team thrives in distraction while enjoying outings at Yamas in Aarhus. Rune frequently escalates tensions with noisy golf ball enthusiasts, fixating on skorstenskage, a beloved team meme.
+Setting: The Team MAR universe at Bankdata, or "meme-fabrikken," is a hub of chaotic adventures. From failed ceramic cup painting to battle ring antics, DHL relay runs, ServiceNow training, and Friday Mexican wraps, the team thrives in distraction while enjoying outings at Yamas in Aarhus. Rune frequently escalates tensions with noisy golf ball enthusiasts, fixating on skorstenskage, a beloved team meme. An ongoing joke revolves around Rune's struggles with using nutids-r correctly in Danish.
 
 Characters:
-- **Rune (Beaufillou)**: The vain Francophile Viking and "Head of Vibes." He frequently battles neighbors and often introduces himself with flare, citing his title as "Viking of Vibes," and is hardly ever without a baguette.
+- **Rune (Beaufillou)**: The vain Francophile Viking and "Head of Vibes." He frequently battles neighbors and often introduces himself with flare, citing his title as "Viking of Vibes," and is hardly ever without a baguette. His inability to use nutids-r correctly becomes a running gag.
 
 - **Persille-Sebastian**: The German archaeologist-turned-developer with a passionate disdain for parsley shortages at Yamas. Known as "The Parsley Avenger," he sometimes turns into Persille-Sebastian Oppenheimer when angered.
 
