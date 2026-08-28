@@ -3,11 +3,17 @@ import * as Schema from "effect/Schema";
 import {AppConfigService} from "./config.js";
 import {ShellTag} from "./shell.js";
 import type {GenerationMetadata} from "./providers.js";
-import {renderProviderAttempts, type HistoryEntry} from "./history.js";
+import type {HistoryEntry} from "./history.js";
+import {
+    formatFailureComment,
+    formatSlackFailurePayload,
+    formatSlackSuccessPayload,
+    formatSuccessComment,
+} from "./notification-format.js";
 
 // ---- Types ------------------------------------------------------------------
 
-const SlackPayload = Schema.Struct({
+const SlackPayloadSchema = Schema.Struct({
     status:     Schema.Literal("success", "failure"),
     image_url:  Schema.String,
     title:      Schema.String,
@@ -18,7 +24,7 @@ const SlackPayload = Schema.Struct({
     // Slack webhooks are text-only, so this is a display-ready string (e.g. "0.108¢").
     cost_cents: Schema.optional(Schema.String),
 });
-type SlackPayload = Schema.Schema.Type<typeof SlackPayload>;
+type SlackPayload = Schema.Schema.Type<typeof SlackPayloadSchema>;
 
 export interface NotifySuccessParams {
     memeId:   string;
@@ -28,8 +34,8 @@ export interface NotifySuccessParams {
 }
 
 // ---- NotifierService --------------------------------------------------------
-// Deep interface: callers describe what happened; how to post, format, and
-// encode all lives behind this seam.
+// Deep interface: callers describe what happened; delivery orchestration
+// remains behind this seam.
 
 export interface NotifierService {
     notifySuccess(params: NotifySuccessParams): Effect.Effect<void>;
@@ -55,82 +61,11 @@ const postSlack = (data: SlackPayload): Effect.Effect<void, never, NotifierDeps>
     Effect.gen(function* () {
         const config = yield* AppConfigService;
         const shell  = yield* ShellTag;
-        const json   = yield* Schema.encode(Schema.parseJson(SlackPayload))(data).pipe(Effect.orDie);
+        const json   = yield* Schema.encode(Schema.parseJson(SlackPayloadSchema))(data).pipe(Effect.orDie);
         yield* shell.runWithBodyFile("json", json, (tmp) =>
             `curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${config.slackWebhookUrl}'`,
         ).pipe(Effect.ignore);
     });
-
-/** Display-ready cost string (e.g. "0.108¢"), or null when cost is unknown. */
-export function formatCostCents(metadata?: GenerationMetadata): string | null {
-    const costCents = metadata?.costCents;
-    return costCents == null ? null : `${costCents.toFixed(3)}¢`;
-}
-
-export function buildSuccessComment({memeId, provider, history, prompt, requester, channel, slackLink, repo, metadata}: {
-    memeId: string; provider: string; history: HistoryEntry[];
-    prompt: string; requester: string; channel: string; slackLink: string; repo: string; metadata?: GenerationMetadata;
-}): string {
-    const providerNote  = ` _(${provider})_`;
-    const promptDisplay = prompt.includes("`") ? `\`\`${prompt}\`\`` : `\`${prompt}\``;
-    const revisedPrompt = metadata?.revisedPrompt;
-    const revisedPromptDisplay = revisedPrompt == null
-        ? null
-        : (revisedPrompt.includes("`") ? `\`\`${revisedPrompt}\`\`` : `\`${revisedPrompt}\``);
-    const usageSummary = metadata?.usage == null
-        ? null
-        : `${metadata.usage.inputTokens} input, ${metadata.usage.outputTokens} output, ${metadata.usage.totalTokens} total tokens`;
-    const costCents = formatCostCents(metadata);
-    const blobUrl       = `https://github.com/${repo}/blob/main/memes/${memeId}.jpg`;
-    const imageUrl      = `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`;
-    return [
-        `🎉 Meme generated and committed to [memes/${memeId}.jpg](${blobUrl})${providerNote}`,
-        ``,
-        `![Generated meme](${imageUrl})`,
-        ``,
-        `**Requested by:** ${requester} in ${channel} - [View in Slack](${slackLink})`,
-        `**Prompt:** ${promptDisplay}`,
-        ...(revisedPromptDisplay == null ? [] : [`**Revised prompt:** ${revisedPromptDisplay}`]),
-        ...(usageSummary == null ? [] : [`**Usage:** ${usageSummary}`]),
-        ...(costCents == null ? [] : [`**Estimated cost:** ${costCents}`]),
-        ``,
-        `**Provider attempts:**`,
-        ...renderProviderAttempts(history),
-    ].join("\n");
-}
-
-/** Build the issue comment for a failed generation, including any attempt history. */
-export function buildFailureComment(message: string, history?: ReadonlyArray<HistoryEntry>): string {
-    const attempts = history != null && history.length > 0
-        ? [``, `**Provider attempts:**`, ...renderProviderAttempts(history)]
-        : [];
-    return [
-        `❌ Meme generation failed.`,
-        ``,
-        "```",
-        message,
-        "```",
-        ...attempts,
-    ].join("\n");
-}
-
-/** Build the Slack webhook payload for a successful generation. */
-export function buildSlackSuccessPayload({memeId, provider, title, requester, channel, repo, metadata}: {
-    memeId: string; provider: string; title: string; requester: string; channel: string; repo: string; metadata?: GenerationMetadata;
-}): SlackPayload {
-    const costCents = formatCostCents(metadata);
-    return {
-        status:    "success",
-        image_url: `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`,
-        title,
-        requester,
-        channel,
-        error:     "",
-        provider,
-        // Slack renders text only; send the pre-formatted display string.
-        ...(costCents == null ? {} : {cost_cents: costCents}),
-    };
-}
 
 interface RawNotifier {
     notifySuccess(params: NotifySuccessParams): Effect.Effect<void, never, NotifierDeps>;
@@ -142,17 +77,17 @@ const makeNotifier = (): RawNotifier => ({
         const config   = yield* AppConfigService;
         const shell    = yield* ShellTag;
         const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
-        yield* postComment(buildSuccessComment({memeId, provider, history, prompt, requester: config.requester, channel: config.channel, slackLink: config.slackLink, repo: config.repo, metadata}));
+        yield* postComment(formatSuccessComment({memeId, provider, history, prompt, requester: config.requester, channel: config.channel, slackLink: config.slackLink, repo: config.repo, metadata}));
         yield* shell.run(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.ignore);
         yield* Effect.log(`Issue #${config.issueNumber} closed.`);
-        yield* postSlack(buildSlackSuccessPayload({memeId, provider, title: config.memePrompt, requester: config.requester, channel: config.channel, repo: config.repo, metadata}));
+        yield* postSlack(formatSlackSuccessPayload({memeId, provider, title: config.memePrompt, requester: config.requester, channel: config.channel, repo: config.repo, metadata}));
     }),
 
     notifyFailure: (message, closeNotPlanned = false, history) => Effect.gen(function* () {
         const config = yield* AppConfigService;
         const shell  = yield* ShellTag;
-        yield* postComment(buildFailureComment(message, history));
-        yield* postSlack({status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, channel: config.channel, error: message});
+        yield* postComment(formatFailureComment(message, history));
+        yield* postSlack(formatSlackFailurePayload({title: config.memePrompt, requester: config.requester, channel: config.channel, error: message}));
         if (closeNotPlanned) {
             yield* shell.run(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`).pipe(Effect.ignore);
         }
