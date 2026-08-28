@@ -1,7 +1,7 @@
-import {Command, CommandExecutor, FileSystem} from "@effect/platform";
 import {Context, Effect, Layer} from "effect";
 import * as Schema from "effect/Schema";
 import {AppConfigService} from "./config.js";
+import {ShellTag} from "./shell.js";
 import type {GenerationMetadata, HistoryEntry} from "./providers.js";
 
 // ---- Types ------------------------------------------------------------------
@@ -39,38 +39,25 @@ export class NotifierServiceTag extends Context.Tag("NotifierService")<NotifierS
 
 // ---- Real adapter -----------------------------------------------------------
 
-type NotifierDeps = CommandExecutor.CommandExecutor | AppConfigService | FileSystem.FileSystem;
-
-const exec = (cmd: string): Effect.Effect<string, never, CommandExecutor.CommandExecutor> =>
-    Command.make("sh", "-c", cmd).pipe(
-        Command.string,
-        Effect.orDie,
-        Effect.map((s) => s.trim()),
-    );
-
-const withTmpFile = <A>(ext: string, content: string, use: (path: string) => Effect.Effect<A, never, CommandExecutor.CommandExecutor>): Effect.Effect<A, never, CommandExecutor.CommandExecutor | FileSystem.FileSystem> =>
-    Effect.gen(function* () {
-        const fs  = yield* FileSystem.FileSystem;
-        const tmp = yield* fs.makeTempFileScoped({suffix: `.${ext}`}).pipe(Effect.orDie);
-        yield* fs.writeFileString(tmp, content).pipe(Effect.orDie);
-        return yield* use(tmp);
-    }).pipe(Effect.scoped);
+type NotifierDeps = ShellTag | AppConfigService;
 
 const postComment = (body: string): Effect.Effect<void, never, NotifierDeps> =>
     Effect.gen(function* () {
         const config = yield* AppConfigService;
-        yield* withTmpFile("txt", body, (tmp) =>
-            exec(`gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${tmp}`).pipe(Effect.ignore),
-        );
+        const shell  = yield* ShellTag;
+        yield* shell.runWithBodyFile("txt", body, (tmp) =>
+            `gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${tmp}`,
+        ).pipe(Effect.ignore);
     });
 
 const postSlack = (data: SlackPayload): Effect.Effect<void, never, NotifierDeps> =>
     Effect.gen(function* () {
         const config = yield* AppConfigService;
+        const shell  = yield* ShellTag;
         const json   = yield* Schema.encode(Schema.parseJson(SlackPayload))(data).pipe(Effect.orDie);
-        yield* withTmpFile("json", json, (tmp) =>
-            exec(`curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${config.slackWebhookUrl}'`).pipe(Effect.ignore),
-        );
+        yield* shell.runWithBodyFile("json", json, (tmp) =>
+            `curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${config.slackWebhookUrl}'`,
+        ).pipe(Effect.ignore);
     });
 
 /** Display-ready cost string (e.g. "0.108¢"), or null when cost is unknown. */
@@ -163,37 +150,37 @@ interface RawNotifier {
 const makeNotifier = (): RawNotifier => ({
     notifySuccess: ({memeId, history, prompt, metadata}) => Effect.gen(function* () {
         const config   = yield* AppConfigService;
+        const shell    = yield* ShellTag;
         const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
         yield* postComment(buildSuccessComment({memeId, provider, history, prompt, requester: config.requester, channel: config.channel, slackLink: config.slackLink, repo: config.repo, metadata}));
-        yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.ignore);
+        yield* shell.run(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.ignore);
         yield* Effect.log(`Issue #${config.issueNumber} closed.`);
         yield* postSlack(buildSlackSuccessPayload({memeId, provider, title: config.memePrompt, requester: config.requester, channel: config.channel, repo: config.repo, metadata}));
     }),
 
     notifyFailure: (message, closeNotPlanned = false, history) => Effect.gen(function* () {
         const config = yield* AppConfigService;
+        const shell  = yield* ShellTag;
         yield* postComment(buildFailureComment(message, history));
         yield* postSlack({status: "failure", image_url: "", title: config.memePrompt, requester: config.requester, channel: config.channel, error: message});
         if (closeNotPlanned) {
-            yield* exec(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`).pipe(Effect.ignore);
+            yield* shell.run(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`).pipe(Effect.ignore);
         }
     }),
 });
 
-export const NotifierLayer: Layer.Layer<NotifierServiceTag, never, CommandExecutor.CommandExecutor | AppConfigService | FileSystem.FileSystem> =
+export const NotifierLayer: Layer.Layer<NotifierServiceTag, never, ShellTag | AppConfigService> =
     Layer.effect(
         NotifierServiceTag,
         Effect.gen(function* () {
             // Capture dependencies once, at layer construction, and provide them
             // to the service methods so their effects require nothing (R = never).
-            const executor = yield* CommandExecutor.CommandExecutor;
-            const config   = yield* AppConfigService;
-            const fs       = yield* FileSystem.FileSystem;
+            const shell  = yield* ShellTag;
+            const config = yield* AppConfigService;
             const provideDeps = <A>(effect: Effect.Effect<A, never, NotifierDeps>): Effect.Effect<A> =>
                 effect.pipe(
-                    Effect.provideService(CommandExecutor.CommandExecutor, executor),
+                    Effect.provideService(ShellTag, shell),
                     Effect.provideService(AppConfigService, config),
-                    Effect.provideService(FileSystem.FileSystem, fs),
                 );
             const notifier = makeNotifier();
             return {

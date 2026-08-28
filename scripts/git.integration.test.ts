@@ -7,6 +7,7 @@ import {Effect, Layer} from "effect";
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
 import {AppConfigService, type AppConfig} from "./config.js";
 import {GitServiceTag, GitLayer} from "./git.js";
+import {ShellLayer} from "./shell.js";
 
 // Exercises the real configure -> pull --rebase -> stage -> commit -> push loop
 // against a throwaway git repo, through the GitService seam. The staged file is
@@ -51,7 +52,7 @@ const commit = (message: string, stage: () => ReadonlyArray<string>) => {
         NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
         Layer.succeed(AppConfigService, dummyConfig),
     );
-    const layer = GitLayer.pipe(Layer.provide(infra));
+    const layer = GitLayer.pipe(Layer.provide(ShellLayer.pipe(Layer.provide(infra))));
     const program = GitServiceTag.pipe(Effect.flatMap((g) =>
         g.commitToMain({message, stage: Effect.sync(stage)})));
     return Effect.runPromise(program.pipe(Effect.provide(layer)));

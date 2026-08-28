@@ -7,6 +7,7 @@ import {ProvidersServiceTag, ProvidersLayer} from "./providers.js";
 import type {HistoryEntry} from "./providers.js";
 import {NotifierServiceTag, NotifierLayer} from "./notifier.js";
 import {GitServiceTag, GitLayer} from "./git.js";
+import {ShellLayer} from "./shell.js";
 import {SagaServiceTag, SagaLayer, buildMemePrompt} from "./saga.js";
 
 // ---- Pipeline steps -------------------------------------------------------
@@ -76,6 +77,9 @@ const PlatformLayer = Layer.mergeAll(
     NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
 );
 
+// The one shell seam, self-contained: captures the platform's executor + fs.
+const ShellLive = ShellLayer.pipe(Layer.provide(PlatformLayer));
+
 const AppLayer = Layer.mergeAll(
     AppConfigLayer,
     PlatformLayer,
@@ -84,6 +88,7 @@ const AppLayer = Layer.mergeAll(
     GitLayer,
     SagaLayer.pipe(Layer.provide(GitLayer)),
 ).pipe(
+    Layer.provide(ShellLive),
     Layer.provide(Layer.mergeAll(AppConfigLayer, PlatformLayer)),
 );
 
