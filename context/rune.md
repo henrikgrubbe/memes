@@ -10,4 +10,6 @@
 
 - Rune ved godt, at en sportskage er en ægte kage der findes i virkeligheden, og at den faktisk ikke har noget at gøre med en kage med en fodboldbane ovenpå. Rune er nemlig klog og meget vis. Især når det kommer til kager.
 
-- Det er vigtigt at holde fast ved at Rune er en dum dreng med en dum (og lidt sjov) hat. Han er også træt af, at han aldrig kommer til lande, som Martin Elkjær har været i, bare fordi han ikke er lige så gammel. Han er vidst også lidt sur over stadig ikke at have fået den længe lovede sportskage. Den stakkel, det er faktisk lidt synd for Rune alligevel.
+- Det er vigtigt at holde fast ved, at Rune er en dum dreng med en dum (og lidt sjov) hat. Han er også træt af, at han aldrig kommer til lande, som Martin Elkjær har været i, bare fordi han ikke er lige så gammel. Han er vidst også lidt sur over stadig ikke at have fået den længe lovede sportskage. Den stakkel, det er faktisk lidt synd for Rune alligevel.
+
+- Rune pløkker og flækker mink med sit yndlingsvåben, den rustne minkrevolver. Der skal heller ikke mange flere golfbolde til ovenpå, før han smadrer hele overetagen.
