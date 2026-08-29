@@ -2,20 +2,42 @@ import {fileURLToPath} from "node:url";
 import {FileSystem, Path} from "@effect/platform";
 import {NodeCommandExecutor, NodeFileSystem, NodePath} from "@effect/platform-node";
 import {Effect, Layer} from "effect";
-import {AppConfigService, AppConfigLayer} from "./config.js";
-import {ProvidersServiceTag, ProvidersLayer} from "./providers.js";
-import {NotifierServiceTag, NotifierLayer} from "./notifier.js";
-import {GitServiceTag, GitLayer} from "./git.js";
-import {ShellLayer} from "./shell.js";
-import {SagaServiceTag, SagaLayer, buildMemePrompt} from "./saga.js";
+import {AppConfigLayer, AppConfigService} from "./config.js";
 import {failureDisposition, type FailureDisposition} from "./disposition.js";
+import {GitLayer, GitServiceTag} from "./git.js";
+import {NotifierLayer, NotifierServiceTag} from "./notifier.js";
+import {ProvidersLayer, ProvidersServiceTag} from "./providers.js";
+import {buildMemePrompt, SagaLayer, SagaServiceTag} from "./saga.js";
+import {ShellLayer} from "./shell.js";
 
-// ---- Pipeline steps -------------------------------------------------------
+// ---- Pipeline steps ---------------------------------------------------------
 
 export const generateImage = (prompt: string, user?: string) =>
-    ProvidersServiceTag.pipe(Effect.flatMap((p) => p.generateWithFallback(prompt, user)));
+    ProvidersServiceTag.pipe(
+        Effect.flatMap(({generateWithFallback}) => generateWithFallback(prompt, user)),
+    );
 
-// ---- Failure handling -----------------------------------------------------
+const sagaReadLog = (
+    saga: string | null,
+    canon: string | null,
+): Effect.Effect<void> =>
+    saga == null
+        ? Effect.void
+        : Effect.log(
+            canon == null
+                ? `Saga "${saga}" has no canon yet - generating without context.`
+                : `Reading saga "${saga}" (${canon.length} chars of canon).`,
+        );
+
+const sagaContext = (
+    saga: string | null,
+    canon: string | null,
+): {name: string; canon: string} | null =>
+    saga != null && canon != null
+        ? {name: saga, canon}
+        : null;
+
+// ---- Failure handling -------------------------------------------------------
 
 const handleFailure = ({message, closeNotPlanned, history}: FailureDisposition) =>
     Effect.gen(function* () {
@@ -25,50 +47,64 @@ const handleFailure = ({message, closeNotPlanned, history}: FailureDisposition) 
         return yield* Effect.die("failure-handled");
     });
 
-// ---- Program --------------------------------------------------------------
+// ---- Program ----------------------------------------------------------------
 
 const program = Effect.gen(function* () {
-    const config   = yield* AppConfigService;
-    const fsys     = yield* FileSystem.FileSystem;
-    const pathSvc  = yield* Path.Path;
-    const memeId   = crypto.randomUUID();
-    const memesDir = pathSvc.join(process.cwd(), "memes");
-    const outFile  = pathSvc.join(memesDir, `${memeId}.jpg`);
-
+    const config = yield* AppConfigService;
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const saga = yield* SagaServiceTag;
-    const canon = config.readSaga != null ? yield* saga.read(config.readSaga) : null;
-    if (config.readSaga != null) {
-        yield* Effect.log(canon != null
-            ? `Reading saga "${config.readSaga}" (${canon.length} chars of canon).`
-            : `Saga "${config.readSaga}" has no canon yet - generating without context.`);
-    }
-    const prompt = buildMemePrompt(config.memePrompt, config.readSaga != null && canon != null ? {name: config.readSaga, canon} : null);
-    yield* fsys.makeDirectory(memesDir, {recursive: true});
-
-    yield* Effect.log(`Starting generation for issue #${config.issueNumber}: "${config.memePrompt}"`);
-    const {buffer, history, metadata} = yield* generateImage(prompt, config.requester);
     const git = yield* GitServiceTag;
+    const notifier = yield* NotifierServiceTag;
+
+    const memeId = crypto.randomUUID();
+    const memesDir = path.join(process.cwd(), "memes");
+    const outFile = path.join(memesDir, `${memeId}.jpg`);
+    const canon = config.readSaga == null
+        ? null
+        : yield* saga.read(config.readSaga);
+    const prompt = buildMemePrompt(
+        config.memePrompt,
+        sagaContext(config.readSaga, canon),
+    );
+
+    yield* sagaReadLog(config.readSaga, canon);
+    yield* fs.makeDirectory(memesDir, {recursive: true});
+    yield* Effect.log(
+        `Starting generation for issue #${config.issueNumber}: "${config.memePrompt}"`,
+    );
+
+    const {buffer, history, metadata} = yield* generateImage(
+        prompt,
+        config.requester,
+    );
+
+    const stageMeme = fs.writeFile(outFile, buffer).pipe(
+        Effect.orDie,
+        Effect.tap(() => Effect.log(`Image saved: ${outFile}`)),
+        Effect.as([`memes/${memeId}.jpg`]),
+    );
+
     yield* git.commitToMain({
         message: `Add meme for issue #${config.issueNumber} (${memeId})`,
-        // Re-materialised on every push attempt so a rebase-and-retry re-writes
-        // the image against the freshly pulled tree.
-        stage: fsys.writeFile(outFile, buffer).pipe(
-            Effect.orDie,
-            Effect.tap(() => Effect.log(`Image saved: ${outFile}`)),
-            Effect.as([`memes/${memeId}.jpg`]),
-        ),
+        stage: stageMeme,
     });
-    const notifier = yield* NotifierServiceTag;
-    yield* notifier.notifySuccess({memeId, history, prompt: config.memePrompt, metadata});
-    if (config.writeSaga != null) {
-        yield* saga.contribute(config.writeSaga, config.memePrompt);
-    }
+    yield* notifier.notifySuccess({
+        memeId,
+        history,
+        prompt: config.memePrompt,
+        metadata,
+    });
+    yield* config.writeSaga == null
+        ? Effect.void
+        : saga.contribute(config.writeSaga, config.memePrompt);
     yield* Effect.log("Done.");
 }).pipe(
-    // A moderation failure is a terminal content problem: close the issue.
-    Effect.catchTag("ModerationFailedError", (e) => handleFailure(failureDisposition(e))),
-    // Everything else is transient/infra: report but leave the issue open.
-    Effect.catchAll((e) => handleFailure(failureDisposition(e))),
+    Effect.catchTag(
+        "ModerationFailedError",
+        (error) => handleFailure(failureDisposition(error)),
+    ),
+    Effect.catchAll((error) => handleFailure(failureDisposition(error))),
 );
 
 const PlatformLayer = Layer.mergeAll(
@@ -77,25 +113,34 @@ const PlatformLayer = Layer.mergeAll(
     NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
 );
 
-// The one shell seam, self-contained: captures the platform's executor + fs.
 const ShellLive = ShellLayer.pipe(Layer.provide(PlatformLayer));
+const GitLive = GitLayer.pipe(Layer.provide(ShellLive));
+const NotifierLive = NotifierLayer.pipe(
+    Layer.provide(Layer.mergeAll(AppConfigLayer, ShellLive)),
+);
+const SagaLive = SagaLayer.pipe(
+    Layer.provide(
+        Layer.mergeAll(
+            AppConfigLayer,
+            PlatformLayer,
+            GitLive,
+        ),
+    ),
+);
 
 const AppLayer = Layer.mergeAll(
     AppConfigLayer,
     PlatformLayer,
     ProvidersLayer,
-    NotifierLayer,
-    GitLayer,
-    SagaLayer.pipe(Layer.provide(GitLayer)),
-).pipe(
-    Layer.provide(ShellLive),
-    Layer.provide(Layer.mergeAll(AppConfigLayer, PlatformLayer)),
+    GitLive,
+    NotifierLive,
+    SagaLive,
 );
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
     Effect.runPromise(
         Effect.provide(program, AppLayer).pipe(
-            Effect.tapError((e) => Effect.logError(e.message)),
+            Effect.tapError((error) => Effect.logError(error.message)),
         ),
     ).catch(() => process.exit(1));
 }

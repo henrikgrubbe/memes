@@ -120,6 +120,19 @@ describe("callWithRetry", () => {
         }
     });
 
+    it("turns a null rejection into ProviderError", async () => {
+        const client = makeClient([
+            () => Promise.reject(null),
+        ]);
+        const exit = await run(call(client));
+
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+            // @ts-expect-error accessing .error on Cause.Fail
+            expect(exit.cause.error).toBeInstanceOf(ProviderError);
+        }
+    });
+
     it("fails with QuotaExhaustedError on a 403 credit/spending-limit error", async () => {
         const exit = await run(call(makeClient([xaiCredits()])));
         expect(Exit.isFailure(exit)).toBe(true);

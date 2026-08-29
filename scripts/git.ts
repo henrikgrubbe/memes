@@ -15,11 +15,13 @@ import {ShellTag} from "./shell.js";
 
 export interface CommitPlan {
     readonly message: string;
-    readonly stage:   Effect.Effect<ReadonlyArray<string>>;
+    readonly stage: Effect.Effect<ReadonlyArray<string>>;
 }
 
 export interface GitService {
-    commitToMain(plan: CommitPlan): Effect.Effect<void, PushFailedError>;
+    readonly commitToMain: (
+        plan: CommitPlan,
+    ) => Effect.Effect<void, PushFailedError>;
 }
 
 export class GitServiceTag extends Context.Tag("GitService")<GitServiceTag, GitService>() {}
@@ -38,8 +40,9 @@ export const GitNoOpLayer: Layer.Layer<GitServiceTag> =
 
 const MAX_PUSH_RETRIES = 5;
 
-// Internal: one rejected attempt — sentinel for the retry loop.
-class PushAttemptError { readonly _tag = "PushAttemptError" as const; }
+class PushAttemptError {
+    public readonly _tag = "PushAttemptError" as const;
+}
 
 type GitCommand = (command: string) => Effect.Effect<string, PushAttemptError>;
 
@@ -47,13 +50,22 @@ type GitCommand = (command: string) => Effect.Effect<string, PushAttemptError>;
 // rejected push needs a reset because the preceding steps have not made a commit.
 const commitAttempt = (run: GitCommand, plan: CommitPlan): Effect.Effect<void, PushAttemptError> =>
     Effect.gen(function* () {
-        yield* run(`git config user.name "github-actions[bot]"`);
-        yield* run(`git config user.email "github-actions[bot]@users.noreply.github.com"`);
-        yield* run(`git pull --rebase origin main`);
+        yield* Effect.forEach(
+            [
+                `git config user.name "github-actions[bot]"`,
+                `git config user.email "github-actions[bot]@users.noreply.github.com"`,
+                `git pull --rebase origin main`,
+            ],
+            run,
+            {discard: true},
+        );
+
         const paths = yield* plan.stage;
-        for (const path of paths) {
-            yield* run(`git add "${path}"`);
-        }
+        yield* Effect.forEach(
+            paths,
+            (path) => run(`git add "${path}"`),
+            {discard: true},
+        );
         yield* run(`git commit -m "${plan.message}"`);
         yield* run(`git push origin HEAD`).pipe(
             Effect.tapError(() => run(`git reset --hard HEAD~1`).pipe(Effect.ignore)),
@@ -65,12 +77,18 @@ export const GitLayer: Layer.Layer<GitServiceTag, never, ShellTag> =
         GitServiceTag,
         Effect.gen(function* () {
             const shell = yield* ShellTag;
-            const run   = (cmd: string) => shell.run(cmd).pipe(Effect.mapError(() => new PushAttemptError()));
+            const run = (command: string) =>
+                shell.run(command).pipe(
+                    Effect.mapError(() => new PushAttemptError()),
+                );
 
             return {
-                commitToMain: (plan: CommitPlan): Effect.Effect<void, PushFailedError> =>
+                commitToMain: (plan) =>
                     Effect.retry(
-                        commitAttempt(run, plan).pipe(Effect.tapError(() => Effect.log("Push failed - retrying..."))),
+                        commitAttempt(run, plan).pipe(
+                            Effect.tapError(() =>
+                                Effect.log("Push failed - retrying...")),
+                        ),
                         Schedule.recurs(MAX_PUSH_RETRIES - 1),
                     ).pipe(
                         Effect.tap(() => Effect.log(`Pushed to main: ${plan.message}`)),

@@ -1,7 +1,6 @@
 import {Context, Effect, Layer} from "effect";
 import * as Schema from "effect/Schema";
-import {AppConfigService} from "./config.js";
-import {ShellTag} from "./shell.js";
+import {type AppConfig, AppConfigService} from "./config.js";
 import type {GenerationMetadata} from "./providers.js";
 import type {HistoryEntry} from "./history.js";
 import {
@@ -10,27 +9,28 @@ import {
     formatSlackSuccessPayload,
     formatSuccessComment,
 } from "./notification-format.js";
+import {type Shell, ShellTag} from "./shell.js";
 
 // ---- Types ------------------------------------------------------------------
 
 const SlackPayloadSchema = Schema.Struct({
-    status:     Schema.Literal("success", "failure"),
-    image_url:  Schema.String,
-    title:      Schema.String,
-    requester:  Schema.String,
-    channel:    Schema.String,
-    error:      Schema.String,
-    provider:   Schema.optional(Schema.String),
-    // Slack webhooks are text-only, so this is a display-ready string (e.g. "0.108¢").
+    status: Schema.Literal("success", "failure"),
+    image_url: Schema.String,
+    title: Schema.String,
+    requester: Schema.String,
+    channel: Schema.String,
+    error: Schema.String,
+    provider: Schema.optional(Schema.String),
     cost_cents: Schema.optional(Schema.String),
 });
+
 type SlackPayload = Schema.Schema.Type<typeof SlackPayloadSchema>;
 
 export interface NotifySuccessParams {
-    memeId:   string;
-    history:  HistoryEntry[];
-    prompt:   string;
-    metadata?: GenerationMetadata;
+    readonly memeId: string;
+    readonly history: ReadonlyArray<HistoryEntry>;
+    readonly prompt: string;
+    readonly metadata?: GenerationMetadata;
 }
 
 // ---- NotifierService --------------------------------------------------------
@@ -38,79 +38,131 @@ export interface NotifySuccessParams {
 // remains behind this seam.
 
 export interface NotifierService {
-    notifySuccess(params: NotifySuccessParams): Effect.Effect<void>;
-    notifyFailure(message: string, closeNotPlanned?: boolean, history?: ReadonlyArray<HistoryEntry>): Effect.Effect<void>;
+    readonly notifySuccess: (
+        params: NotifySuccessParams,
+    ) => Effect.Effect<void>;
+    readonly notifyFailure: (
+        message: string,
+        closeNotPlanned?: boolean,
+        history?: ReadonlyArray<HistoryEntry>,
+    ) => Effect.Effect<void>;
 }
 
 export class NotifierServiceTag extends Context.Tag("NotifierService")<NotifierServiceTag, NotifierService>() {}
 
 // ---- Real adapter -----------------------------------------------------------
 
-type NotifierDeps = ShellTag | AppConfigService;
+const postComment = (
+    config: AppConfig,
+    shell: Shell,
+    body: string,
+): Effect.Effect<void> =>
+    shell.runWithBodyFile(
+        "txt",
+        body,
+        (file) =>
+            `gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${file}`,
+    ).pipe(Effect.ignore);
 
-const postComment = (body: string): Effect.Effect<void, never, NotifierDeps> =>
-    Effect.gen(function* () {
-        const config = yield* AppConfigService;
-        const shell  = yield* ShellTag;
-        yield* shell.runWithBodyFile("txt", body, (tmp) =>
-            `gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${tmp}`,
-        ).pipe(Effect.ignore);
-    });
+const postSlack = (
+    config: AppConfig,
+    shell: Shell,
+    payload: SlackPayload,
+): Effect.Effect<void> =>
+    Schema.encode(Schema.parseJson(SlackPayloadSchema))(payload).pipe(
+        Effect.orDie,
+        Effect.flatMap((json) =>
+            shell.runWithBodyFile(
+                "json",
+                json,
+                (file) =>
+                    `curl -s -X POST -H 'Content-Type: application/json' -d @${file} '${config.slackWebhookUrl}'`,
+            )),
+        Effect.ignore,
+    );
 
-const postSlack = (data: SlackPayload): Effect.Effect<void, never, NotifierDeps> =>
-    Effect.gen(function* () {
-        const config = yield* AppConfigService;
-        const shell  = yield* ShellTag;
-        const json   = yield* Schema.encode(Schema.parseJson(SlackPayloadSchema))(data).pipe(Effect.orDie);
-        yield* shell.runWithBodyFile("json", json, (tmp) =>
-            `curl -s -X POST -H 'Content-Type: application/json' -d @${tmp} '${config.slackWebhookUrl}'`,
-        ).pipe(Effect.ignore);
-    });
+const closeIssue = (
+    config: AppConfig,
+    shell: Shell,
+    reason?: "not_planned",
+): Effect.Effect<void> =>
+    shell.run(
+        `gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`
+        + (reason == null ? "" : ` -f state_reason=${reason}`),
+    ).pipe(Effect.ignore);
 
-interface RawNotifier {
-    notifySuccess(params: NotifySuccessParams): Effect.Effect<void, never, NotifierDeps>;
-    notifyFailure(message: string, closeNotPlanned?: boolean, history?: ReadonlyArray<HistoryEntry>): Effect.Effect<void, never, NotifierDeps>;
-}
+const makeNotifier = (
+    config: AppConfig,
+    shell: Shell,
+): NotifierService => ({
+    notifySuccess: ({memeId, history, prompt, metadata}) =>
+        Effect.gen(function* () {
+            const provider = history.find(
+                ({status}) => status === "success",
+            )?.provider ?? "unknown";
 
-const makeNotifier = (): RawNotifier => ({
-    notifySuccess: ({memeId, history, prompt, metadata}) => Effect.gen(function* () {
-        const config   = yield* AppConfigService;
-        const shell    = yield* ShellTag;
-        const provider = history.find((e) => e.status === "success")?.provider ?? "unknown";
-        yield* postComment(formatSuccessComment({memeId, provider, history, prompt, requester: config.requester, channel: config.channel, slackLink: config.slackLink, repo: config.repo, metadata}));
-        yield* shell.run(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`).pipe(Effect.ignore);
-        yield* Effect.log(`Issue #${config.issueNumber} closed.`);
-        yield* postSlack(formatSlackSuccessPayload({memeId, provider, title: config.memePrompt, requester: config.requester, channel: config.channel, repo: config.repo, metadata}));
-    }),
+            yield* postComment(
+                config,
+                shell,
+                formatSuccessComment({
+                    memeId,
+                    provider,
+                    history,
+                    prompt,
+                    requester: config.requester,
+                    channel: config.channel,
+                    slackLink: config.slackLink,
+                    repo: config.repo,
+                    metadata,
+                }),
+            );
+            yield* closeIssue(config, shell);
+            yield* Effect.log(`Issue #${config.issueNumber} closed.`);
+            yield* postSlack(
+                config,
+                shell,
+                formatSlackSuccessPayload({
+                    memeId,
+                    provider,
+                    title: config.memePrompt,
+                    requester: config.requester,
+                    channel: config.channel,
+                    repo: config.repo,
+                    metadata,
+                }),
+            );
+        }),
 
-    notifyFailure: (message, closeNotPlanned = false, history) => Effect.gen(function* () {
-        const config = yield* AppConfigService;
-        const shell  = yield* ShellTag;
-        yield* postComment(formatFailureComment(message, history));
-        yield* postSlack(formatSlackFailurePayload({title: config.memePrompt, requester: config.requester, channel: config.channel, error: message}));
-        if (closeNotPlanned) {
-            yield* shell.run(`gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed -f state_reason=not_planned`).pipe(Effect.ignore);
-        }
-    }),
+    notifyFailure: (message, closeNotPlanned = false, history) =>
+        Effect.gen(function* () {
+            yield* postComment(
+                config,
+                shell,
+                formatFailureComment(message, history),
+            );
+            yield* postSlack(
+                config,
+                shell,
+                formatSlackFailurePayload({
+                    title: config.memePrompt,
+                    requester: config.requester,
+                    channel: config.channel,
+                    error: message,
+                }),
+            );
+            yield* closeNotPlanned
+                ? closeIssue(config, shell, "not_planned")
+                : Effect.void;
+        }),
 });
 
 export const NotifierLayer: Layer.Layer<NotifierServiceTag, never, ShellTag | AppConfigService> =
     Layer.effect(
         NotifierServiceTag,
         Effect.gen(function* () {
-            // Capture dependencies once, at layer construction, and provide them
-            // to the service methods so their effects require nothing (R = never).
-            const shell  = yield* ShellTag;
+            const shell = yield* ShellTag;
             const config = yield* AppConfigService;
-            const provideDeps = <A>(effect: Effect.Effect<A, never, NotifierDeps>): Effect.Effect<A> =>
-                effect.pipe(
-                    Effect.provideService(ShellTag, shell),
-                    Effect.provideService(AppConfigService, config),
-                );
-            const notifier = makeNotifier();
-            return {
-                notifySuccess: (params) => provideDeps(notifier.notifySuccess(params)),
-                notifyFailure: (message, closeNotPlanned, history) => provideDeps(notifier.notifyFailure(message, closeNotPlanned, history)),
-            } satisfies NotifierService;
+
+            return makeNotifier(config, shell);
         }),
     );

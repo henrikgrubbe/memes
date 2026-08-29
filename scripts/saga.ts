@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import {FileSystem, Path} from "@effect/platform";
-import {Config, Context, Effect, Layer, Option} from "effect";
+import {Config, Context, Data, Effect, Layer, Option} from "effect";
 import {AppConfigService} from "./config.js";
 import {GitServiceTag} from "./git.js";
 
@@ -9,7 +9,7 @@ import {GitServiceTag} from "./git.js";
 // Hard cap on the image-generation prompt (matches the provider limit).
 export const MAX_PROMPT_CHARS = 4000;
 // Target ceiling for a saga's canon so it always leaves room for the prompt.
-export const MAX_CANON_CHARS  = 3000;
+export const MAX_CANON_CHARS = 3000;
 // Cheap text model used to fold each new meme into a saga's canon.
 export const COMPRESSION_MODEL = "gpt-4o-mini";
 // Upper bound on compression output, so a runaway response can't balloon the
@@ -30,7 +30,10 @@ export const sagaPath = (saga: string): string => `${CONTEXT_DIR}/${saga}.md`;
  * so the canon isn't left dangling mid-word.
  */
 export function capCanon(text: string): string {
-    if (text.length <= MAX_CANON_CHARS) { return text; }
+    if (text.length <= MAX_CANON_CHARS) {
+        return text;
+    }
+
     const slice = text.slice(0, MAX_CANON_CHARS);
     const boundary = Math.max(
         slice.lastIndexOf("\n"),
@@ -38,7 +41,6 @@ export function capCanon(text: string): string {
         slice.lastIndexOf("! "),
         slice.lastIndexOf("? "),
     );
-    // Only honour a boundary that keeps most of the budget; otherwise hard-cut.
     const end = boundary > MAX_CANON_CHARS * 0.6 ? boundary : slice.length;
     return slice.slice(0, end).trimEnd();
 }
@@ -48,7 +50,10 @@ export function capCanon(text: string): string {
  * prepended for continuity, but the meme instruction and user prompt are kept
  * whole and the canon is trimmed to whatever budget remains under the cap.
  */
-export function buildMemePrompt(memePrompt: string, saga?: {name: string; canon: string} | null): string {
+export function buildMemePrompt(
+    memePrompt: string,
+    saga?: {readonly name: string; readonly canon: string} | null,
+): string {
     const base = `Make a meme: ${memePrompt}.`;
     if (saga == null || saga.canon.trim() === "") {
         return base.slice(0, MAX_PROMPT_CHARS);
@@ -56,15 +61,26 @@ export function buildMemePrompt(memePrompt: string, saga?: {name: string; canon:
     const prefix = `Continuing the "${saga.name}" saga. Canon so far:\n`;
     const suffix = `\n\n${base}`;
     const budget = MAX_PROMPT_CHARS - prefix.length - suffix.length;
-    if (budget <= 0) { return base.slice(0, MAX_PROMPT_CHARS); }
-    const canon = saga.canon.length > budget ? saga.canon.slice(0, budget) : saga.canon;
+
+    if (budget <= 0) {
+        return base.slice(0, MAX_PROMPT_CHARS);
+    }
+
+    const canon = saga.canon.slice(0, budget);
     return prefix + canon + suffix;
 }
 
-interface ChatMessage { role: "system" | "user"; content: string; }
+interface ChatMessage {
+    readonly role: "system" | "user";
+    readonly content: string;
+}
 
 /** Build the chat messages that fold a new meme idea into a saga's canon. */
-export function buildCompressionMessages(saga: string, canon: string, prompt: string): ChatMessage[] {
+export function buildCompressionMessages(
+    saga: string,
+    canon: string,
+    prompt: string,
+): ReadonlyArray<ChatMessage> {
     const system = [
         `You maintain a running "canon": a compact, evolving summary of a series of`,
         `user-submitted meme ideas that all belong to the saga "${saga}".`,
@@ -87,14 +103,20 @@ export function buildCompressionMessages(saga: string, canon: string, prompt: st
 }
 
 /** Ask the model to shrink an over-budget canon without losing key elements. */
-export function buildShortenMessages(saga: string, overlong: string): ChatMessage[] {
+export function buildShortenMessages(
+    saga: string,
+    overlong: string,
+): ReadonlyArray<ChatMessage> {
     const system = [
         `You are editing the canon for the saga "${saga}".`,
         `Rewrite it to be SHORTER without losing recurring characters, running`,
         `jokes, locations or key story beats. It MUST be under ${MAX_CANON_CHARS}`,
         `characters. Keep the same language. Output ONLY the canon text.`,
     ].join("\n");
-    return [{role: "system", content: system}, {role: "user", content: `Canon to shorten:\n${overlong}`}];
+    return [
+        {role: "system", content: system},
+        {role: "user", content: `Canon to shorten:\n${overlong}`},
+    ];
 }
 
 /** Fallback used when the compression model is unavailable: raw append, capped. */
@@ -106,19 +128,30 @@ export const appendFallback = (canon: string, prompt: string): string =>
  * throws rich `APIError`s (status/code/message); without this they collapse to
  * an opaque "UnknownException" once wrapped by Effect.tryPromise.
  */
-export function describeModelError(err: unknown): string {
-    const e = err as {
-        status?:  number;
-        code?:    string;
-        type?:    string;
-        message?: string;
-        error?:   {message?: string; code?: string; type?: string};
-        cause?:   {message?: string};
+export function describeModelError(error: unknown): string {
+    const value = error as {
+        readonly status?: number;
+        readonly code?: string;
+        readonly type?: string;
+        readonly message?: string;
+        readonly error?: {
+            readonly message?: string;
+            readonly code?: string;
+            readonly type?: string;
+        };
+        readonly cause?: {readonly message?: string};
     };
-    const status = e?.status != null ? `HTTP ${e.status} ` : "";
-    const code   = e?.code ?? e?.error?.code ?? e?.type ?? e?.error?.type;
-    const msg    = e?.error?.message ?? e?.message ?? e?.cause?.message ?? String(err);
-    return `${status}${code != null ? `[${code}] ` : ""}${msg}`.trim();
+    const status = value?.status == null ? "" : `HTTP ${value.status} `;
+    const code = value?.code
+        ?? value?.error?.code
+        ?? value?.type
+        ?? value?.error?.type;
+    const message = value?.error?.message
+        ?? value?.message
+        ?? value?.cause?.message
+        ?? String(error);
+
+    return `${status}${code == null ? "" : `[${code}] `}${message}`.trim();
 }
 
 /**
@@ -129,7 +162,9 @@ export function describeModelError(err: unknown): string {
  * so it is unit-tested without the network.
  */
 export function foldCanon<E>(
-    callModel: (messages: ChatMessage[]) => Effect.Effect<string, E>,
+    callModel: (
+        messages: ReadonlyArray<ChatMessage>,
+    ) => Effect.Effect<string, E>,
     saga: string,
     canon: string,
     prompt: string,
@@ -138,10 +173,14 @@ export function foldCanon<E>(
         Effect.flatMap((first) =>
             first.length <= MAX_CANON_CHARS
                 ? Effect.succeed(first)
-                : callModel(buildShortenMessages(saga, first)).pipe(Effect.orElseSucceed(() => first))),
+                : callModel(buildShortenMessages(saga, first)).pipe(
+                    Effect.orElseSucceed(() => first),
+                )),
         Effect.map(capCanon),
-        Effect.catchAll((err) =>
-            Effect.logWarning(`Saga compression failed - appending raw. ${String(err)}`).pipe(
+        Effect.catchAll((error) =>
+            Effect.logWarning(
+                `Saga compression failed - appending raw. ${String(error)}`,
+            ).pipe(
                 Effect.as(appendFallback(canon, prompt)),
             )),
     );
@@ -153,8 +192,11 @@ export function foldCanon<E>(
 // the seam. Both methods are total - a saga hiccup never breaks meme delivery.
 
 export interface SagaService {
-    read(saga: string): Effect.Effect<string | null>;
-    contribute(saga: string, prompt: string): Effect.Effect<void>;
+    readonly read: (saga: string) => Effect.Effect<string | null>;
+    readonly contribute: (
+        saga: string,
+        prompt: string,
+    ) => Effect.Effect<void>;
 }
 
 export class SagaServiceTag extends Context.Tag("SagaService")<SagaServiceTag, SagaService>() {}
@@ -164,81 +206,122 @@ export const makeSagaLayer = (impl: SagaService): Layer.Layer<SagaServiceTag> =>
     Layer.succeed(SagaServiceTag, impl);
 
 /** No-op layer for tests/deployments that don't exercise sagas. */
-export const SagaNoOpLayer: Layer.Layer<SagaServiceTag> =
-    makeSagaLayer({read: () => Effect.succeed(null), contribute: () => Effect.void});
+export const SagaNoOpLayer: Layer.Layer<SagaServiceTag> = makeSagaLayer({
+    read: () => Effect.succeed(null),
+    contribute: () => Effect.void,
+});
 
 // ---- Real adapter -----------------------------------------------------------
+
+class CompressionError extends Data.TaggedError("CompressionError")<{
+    readonly detail: string;
+}> {
+    public get message(): string {
+        return this.detail;
+    }
+}
+
+type ModelCall = (
+    messages: ReadonlyArray<ChatMessage>,
+) => Effect.Effect<string, CompressionError>;
+
+const toOpenAiMessage = (
+    message: ChatMessage,
+): OpenAI.Chat.Completions.ChatCompletionMessageParam =>
+    message.role === "system"
+        ? {role: "system", content: message.content}
+        : {role: "user", content: message.content};
+
+const makeModelCall = (client: OpenAI): ModelCall =>
+    (messages) =>
+        Effect.tryPromise({
+            try: () => client.chat.completions.create({
+                model: COMPRESSION_MODEL,
+                messages: messages.map(toOpenAiMessage),
+                max_completion_tokens: MAX_CANON_TOKENS,
+            }),
+            catch: (error) =>
+                new CompressionError({detail: describeModelError(error)}),
+        }).pipe(
+            Effect.flatMap((response) => {
+                const content = response.choices[0]?.message?.content?.trim();
+                return content == null || content === ""
+                    ? Effect.fail(
+                        new CompressionError({
+                            detail: "empty compression response",
+                        }),
+                    )
+                    : Effect.succeed(content);
+            }),
+        );
 
 export const SagaLayer: Layer.Layer<SagaServiceTag, never, FileSystem.FileSystem | Path.Path | AppConfigService | GitServiceTag> =
     Layer.effect(
         SagaServiceTag,
         Effect.gen(function* () {
-            const fs      = yield* FileSystem.FileSystem;
-            const pathSvc = yield* Path.Path;
-            const config  = yield* AppConfigService;
-            const git     = yield* GitServiceTag;
+            const fs = yield* FileSystem.FileSystem;
+            const path = yield* Path.Path;
+            const config = yield* AppConfigService;
+            const git = yield* GitServiceTag;
+            const apiKey = yield* Config.option(
+                Config.string("OPENAI_API_KEY"),
+            ).pipe(Effect.orDie);
+            const callModel = Option.match(apiKey, {
+                onNone: (): ModelCall | null => null,
+                onSome: (value): ModelCall | null =>
+                    value.trim() === ""
+                        ? null
+                        : makeModelCall(new OpenAI({apiKey: value})),
+            });
 
-            const apiKey = yield* Config.option(Config.string("OPENAI_API_KEY")).pipe(Effect.orDie);
-            const client = Option.isSome(apiKey) && apiKey.value.trim() !== ""
-                ? new OpenAI({apiKey: apiKey.value})
-                : null;
-
-            const absPath = (saga: string) => pathSvc.join(process.cwd(), CONTEXT_DIR, `${saga}.md`);
+            const absPath = (saga: string) =>
+                path.join(process.cwd(), CONTEXT_DIR, `${saga}.md`);
 
             const readCanon = (saga: string): Effect.Effect<string | null> =>
-                fs.readFileString(absPath(saga)).pipe(Effect.orElseSucceed(() => null));
-
-            // Raw model call: returns trimmed content, or fails on empty output
-            // or transport error so foldCanon can retry / fall back. The catch
-            // surfaces the real OpenAI error (status/code/message) instead of an
-            // opaque UnknownException, so a failure is actually diagnosable.
-            const callModel = (messages: ReadonlyArray<{role: "system" | "user"; content: string}>) =>
-                Effect.tryPromise({
-                    try: () => client!.chat.completions.create({
-                        model:                 COMPRESSION_MODEL,
-                        messages:              messages as {role: "system" | "user"; content: string}[],
-                        max_completion_tokens: MAX_CANON_TOKENS,
-                    }),
-                    catch: (err) => new Error(describeModelError(err)),
-                }).pipe(
-                    Effect.flatMap((res) => {
-                        const content = res.choices[0]?.message?.content?.trim();
-                        return content != null && content !== ""
-                            ? Effect.succeed(content)
-                            : Effect.fail(new Error("empty compression response"));
-                    }),
+                fs.readFileString(absPath(saga)).pipe(
+                    Effect.orElseSucceed(() => null),
                 );
 
-            // Fold the new prompt into the canon via the text model, falling back
-            // to a raw capped append when no client is configured or the call fails.
-            const compress = (saga: string, canon: string, prompt: string): Effect.Effect<string> =>
-                client == null
+            const compress = (
+                saga: string,
+                canon: string,
+                prompt: string,
+            ): Effect.Effect<string> =>
+                callModel == null
                     ? Effect.succeed(appendFallback(canon, prompt))
                     : foldCanon(callModel, saga, canon, prompt);
 
-            // Re-read the canon and fold in the new prompt, then write it back.
-            // Runs inside GitService.commitToMain's per-attempt loop, so it sees
-            // a freshly rebased tree: concurrent writers to the same saga
-            // serialize, the last one folding its prompt into the other's
-            // already-committed canon.
-            const stage = (saga: string, prompt: string): Effect.Effect<ReadonlyArray<string>> =>
+            const stage = (
+                saga: string,
+                prompt: string,
+            ): Effect.Effect<ReadonlyArray<string>> =>
                 Effect.gen(function* () {
-                    const canon    = (yield* readCanon(saga)) ?? "";
+                    const canon = (yield* readCanon(saga)) ?? "";
                     const newCanon = yield* compress(saga, canon, prompt);
-                    yield* fs.makeDirectory(pathSvc.join(process.cwd(), CONTEXT_DIR), {recursive: true}).pipe(Effect.ignore);
-                    yield* fs.writeFileString(absPath(saga), `${newCanon}\n`).pipe(Effect.orDie);
+                    yield* fs.makeDirectory(
+                        path.join(process.cwd(), CONTEXT_DIR),
+                        {recursive: true},
+                    ).pipe(Effect.ignore);
+                    yield* fs.writeFileString(
+                        absPath(saga),
+                        `${newCanon}\n`,
+                    ).pipe(Effect.orDie);
+
                     return [sagaPath(saga)];
                 });
 
             return {
-                read: (saga) => readCanon(saga),
+                read: readCanon,
                 contribute: (saga, prompt) =>
                     git.commitToMain({
                         message: `Update saga ${saga} for issue #${config.issueNumber}`,
-                        stage:   stage(saga, prompt),
+                        stage: stage(saga, prompt),
                     }).pipe(
                         Effect.tap(() => Effect.log(`Saga "${saga}" updated.`)),
-                        Effect.catchAll(() => Effect.logWarning(`Saga "${saga}" update failed - meme delivery unaffected.`)),
+                        Effect.catchAll(() =>
+                            Effect.logWarning(
+                                `Saga "${saga}" update failed - meme delivery unaffected.`,
+                            )),
                     ),
             } satisfies SagaService;
         }),
