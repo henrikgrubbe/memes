@@ -3,46 +3,55 @@ import {Config, Context, Effect, Layer, Schema} from "effect";
 import {parseSagaDirectives} from "./saga-directives.js";
 
 export interface AppConfig {
-    issueNumber:     string;
-    repo:            string;
-    slackWebhookUrl: string;
-    requester:       string;
-    memePrompt:      string;
-    channel:         string;
-    slackLink:       string;
-    // Optional saga (continuous-context) directives parsed from the message.
-    // readSaga:  prepend that saga's canon to the prompt for continuity.
-    // writeSaga: fold this meme into that saga's canon after generating.
-    readSaga:        string | null;
-    writeSaga:       string | null;
+    readonly issueNumber: string;
+    readonly repo: string;
+    readonly slackWebhookUrl: string;
+    readonly requester: string;
+    readonly memePrompt: string;
+    readonly channel: string;
+    readonly slackLink: string;
+    readonly readSaga: string | null;
+    readonly writeSaga: string | null;
 }
 
 export class AppConfigService extends Context.Tag("AppConfigService")<AppConfigService, AppConfig>() {}
-export const AppConfigLayer = Layer.effect(AppConfigService, Effect.gen(function* () {
-    const {repo, slackWebhookUrl, issueNumber, issueBody} = yield* Config.all({
-        repo:            Config.string("REPO"),
+
+const loadAppConfig = Effect.gen(function* () {
+    const env = yield* Config.all({
+        repo: Config.string("REPO"),
         slackWebhookUrl: Config.string("SLACK_WEBHOOK_URL"),
-        issueNumber:     Config.string("ISSUE_NUMBER"),
-        issueBody:       Config.string("ISSUE_BODY"),
+        issueNumber: Config.string("ISSUE_NUMBER"),
+        issueBody: Config.string("ISSUE_BODY"),
     });
-
-    const fields = yield* parseIssueBody(issueBody).pipe(
-        Effect.mapError((e) => ConfigError.InvalidData(["ISSUE_BODY"], e.message)),
+    const fields = yield* parseIssueBody(env.issueBody).pipe(
+        Effect.mapError((error) =>
+            ConfigError.InvalidData(["ISSUE_BODY"], error.message)),
     );
+    const directives = parseSagaDirectives(fields.message);
 
-    const {readSaga, writeSaga, prompt} = parseSagaDirectives(fields.message);
+    return {
+        issueNumber: env.issueNumber,
+        repo: env.repo,
+        slackWebhookUrl: env.slackWebhookUrl,
+        requester: fields.sender,
+        memePrompt: directives.prompt,
+        channel: fields.channel,
+        slackLink: fields.link,
+        readSaga: directives.readSaga,
+        writeSaga: directives.writeSaga,
+    } satisfies AppConfig;
+});
 
-    return {issueNumber, repo, slackWebhookUrl, requester: fields.sender, memePrompt: prompt, channel: fields.channel, slackLink: fields.link, readSaga, writeSaga};
-}));
+export const AppConfigLayer = Layer.effect(AppConfigService, loadAppConfig);
 
-export const parseIssueBody = (body: string) => Schema.decodeUnknown(IssueFields)(tokenizeIssueBody(body));
-
+export const parseIssueBody = (body: string) =>
+    Schema.decodeUnknown(IssueFields)(tokenizeIssueBody(body));
 
 export class IssueFields extends Schema.Class<IssueFields>("IssueFields")({
-    sender:  Schema.NonEmptyTrimmedString,
+    sender: Schema.NonEmptyTrimmedString,
     message: Schema.NonEmptyTrimmedString,
     channel: Schema.NonEmptyTrimmedString,
-    link:    Schema.NonEmptyTrimmedString,
+    link: Schema.NonEmptyTrimmedString,
 }) {}
 
 // Keys emitted by the Slack workflow that files these issues. Only these start a
@@ -51,19 +60,41 @@ export class IssueFields extends Schema.Class<IssueFields>("IssueFields")({
 // "Rune: :sadpepe:") are preserved instead of being truncated at the first line.
 const KNOWN_KEYS = new Set(["sender", "channel", "message", "link", "timestamp"]);
 
-function tokenizeIssueBody(body: string): Record<string, string> {
-    const result: Record<string, string> = {};
-    let currentKey: string | null = null;
-    for (const rawLine of (body ?? "").split("\n")) {
+interface TokenizerState {
+    readonly fields: Readonly<Record<string, string>>;
+    readonly currentKey: string | null;
+}
+
+function tokenizeIssueBody(body: string): Readonly<Record<string, string>> {
+    const initial: TokenizerState = {fields: {}, currentKey: null};
+
+    return body.split("\n").reduce<TokenizerState>((state, rawLine) => {
         const line = rawLine.replace(/\r$/, "");
-        const sep = line.indexOf(": ");
-        const potentialKey = sep !== -1 ? line.slice(0, sep).trim().toLowerCase() : null;
+        const separator = line.indexOf(": ");
+        const potentialKey = separator === -1
+            ? null
+            : line.slice(0, separator).trim().toLowerCase();
+
         if (potentialKey != null && KNOWN_KEYS.has(potentialKey)) {
-            currentKey = potentialKey;
-            result[currentKey] = line.slice(sep + 2).trim();
-        } else if (currentKey != null && line.trim() !== "") {
-            result[currentKey] += "\n" + line;
+            return {
+                currentKey: potentialKey,
+                fields: {
+                    ...state.fields,
+                    [potentialKey]: line.slice(separator + 2).trim(),
+                },
+            };
         }
-    }
-    return result;
+
+        if (state.currentKey == null || line.trim() === "") {
+            return state;
+        }
+
+        return {
+            ...state,
+            fields: {
+                ...state.fields,
+                [state.currentKey]: `${state.fields[state.currentKey]}\n${line}`,
+            },
+        };
+    }, initial).fields;
 }

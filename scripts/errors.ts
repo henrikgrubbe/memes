@@ -13,9 +13,11 @@ import type {HistoryEntry} from "./history.js";
 
 export class ModerationBlockedError extends Data.TaggedError("ModerationBlockedError")<{
     readonly provider: string;
-    readonly detail:   string;
+    readonly detail: string;
 }> {
-    get message() { return `${this.provider} blocked by moderation: ${this.detail}`; }
+    public get message(): string {
+        return `${this.provider} blocked by moderation: ${this.detail}`;
+    }
 }
 
 export class RateLimitError extends Data.TaggedError("RateLimitError")<{
@@ -23,26 +25,30 @@ export class RateLimitError extends Data.TaggedError("RateLimitError")<{
     readonly attempts: number;
     readonly history?: ReadonlyArray<HistoryEntry>;
 }> {
-    get message() { return `${this.provider} rate-limit retries exhausted after ${this.attempts} attempts`; }
+    public get message(): string {
+        return `${this.provider} rate-limit retries exhausted after ${this.attempts} attempts`;
+    }
 }
 
 export class PushFailedError extends Data.TaggedError("PushFailedError")<{
     readonly attempts: number;
 }> {
-    get message() { return `Failed to push after ${this.attempts} attempts`; }
+    public get message(): string {
+        return `Failed to push after ${this.attempts} attempts`;
+    }
 }
 
 export class ModerationFailedError extends Data.TaggedError("ModerationFailedError")<{
     // The primary provider that flagged the content, and its moderation reason.
-    readonly provider:         string;
-    readonly detail:           string;
+    readonly provider: string;
+    readonly detail: string;
     // The fallback provider that could not rescue the request (null when none is
     // configured), plus a short note on why it couldn't help.
     readonly fallbackProvider: string | null;
-    readonly fallbackDetail?:  string;
-    readonly history?:         ReadonlyArray<HistoryEntry>;
+    readonly fallbackDetail?: string;
+    readonly history?: ReadonlyArray<HistoryEntry>;
 }> {
-    get message() {
+    public get message(): string {
         const base = `${this.provider} blocked by moderation: ${this.detail}`;
         return this.fallbackProvider == null
             ? `${base} (no fallback provider available)`
@@ -55,7 +61,9 @@ export class ProviderError extends Data.TaggedError("ProviderError")<{
     readonly detail:   string;
     readonly history?: ReadonlyArray<HistoryEntry>;
 }> {
-    get message() { return `${this.provider} failed: ${this.detail}`; }
+    public get message(): string {
+        return `${this.provider} failed: ${this.detail}`;
+    }
 }
 
 export class QuotaExhaustedError extends Data.TaggedError("QuotaExhaustedError")<{
@@ -63,12 +71,16 @@ export class QuotaExhaustedError extends Data.TaggedError("QuotaExhaustedError")
     readonly detail:   string;
     readonly history?: ReadonlyArray<HistoryEntry>;
 }> {
-    get message() { return `${this.provider} is out of credits/quota: ${this.detail}`; }
+    public get message(): string {
+        return `${this.provider} is out of credits/quota: ${this.detail}`;
+    }
 }
 
 export class AllProvidersExhaustedError extends Data.TaggedError("AllProvidersExhaustedError")<{
     readonly providers: ReadonlyArray<string>;
     readonly history?: ReadonlyArray<HistoryEntry>;
 }> {
-    get message() { return `All image providers are out of credits/quota: ${this.providers.join(", ")}`; }
+    public get message(): string {
+        return `All image providers are out of credits/quota: ${this.providers.join(", ")}`;
+    }
 }

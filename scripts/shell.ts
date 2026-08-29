@@ -9,22 +9,29 @@ import {Context, Data, Effect, Layer} from "effect";
 // failure policy (retry, ignore) on a single typed error.
 
 export class ShellError extends Data.TaggedError("ShellError")<{
-    command: string;
-    detail:  string;
-}> {}
+    readonly command: string;
+    readonly detail: string;
+}> {
+    public get message(): string {
+        return `${this.command}: ${this.detail}`;
+    }
+}
 
 export interface Shell {
-    run(command: string): Effect.Effect<string, ShellError>;
-    // Write `content` to a scoped temp file with the given extension, then run
-    // the command built from its path. The file is removed when the effect ends.
-    runWithBodyFile(ext: string, content: string, command: (path: string) => string): Effect.Effect<string, ShellError>;
+    readonly run: (
+        command: string,
+    ) => Effect.Effect<string, ShellError>;
+    readonly runWithBodyFile: (
+        extension: string,
+        content: string,
+        command: (path: string) => string,
+    ) => Effect.Effect<string, ShellError>;
 }
 
 export class ShellTag extends Context.Tag("Shell")<ShellTag, Shell>() {}
 
 // ---- Test helper ------------------------------------------------------------
 
-/** Build a Layer from a pre-constructed Shell implementation (bypasses real subprocesses). */
 export const makeShellLayer = (impl: Shell): Layer.Layer<ShellTag> =>
     Layer.succeed(ShellTag, impl);
 
@@ -32,40 +39,70 @@ export const makeShellLayer = (impl: Shell): Layer.Layer<ShellTag> =>
 
 type ShellDeps = CommandExecutor.CommandExecutor | FileSystem.FileSystem;
 
-const rawRun = (command: string): Effect.Effect<string, ShellError, CommandExecutor.CommandExecutor> =>
+const rawRun = (
+    command: string,
+): Effect.Effect<string, ShellError, CommandExecutor.CommandExecutor> =>
     Command.make("sh", "-c", command).pipe(
         Command.string,
-        Effect.mapError((e) => new ShellError({command, detail: String(e)})),
-        Effect.map((s) => s.trim()),
+        Effect.mapError((error) =>
+            new ShellError({command, detail: String(error)})),
+        Effect.map((output) => output.trim()),
     );
 
-const rawRunWithBodyFile = (ext: string, content: string, command: (path: string) => string): Effect.Effect<string, ShellError, ShellDeps> =>
+const rawRunWithBodyFile = (
+    extension: string,
+    content: string,
+    command: (path: string) => string,
+): Effect.Effect<string, ShellError, ShellDeps> =>
     Effect.gen(function* () {
-        const fs  = yield* FileSystem.FileSystem;
-        const tmp = yield* fs.makeTempFileScoped({suffix: `.${ext}`}).pipe(
-            Effect.mapError((e) => new ShellError({command: "makeTempFile", detail: String(e)})),
+        const fs = yield* FileSystem.FileSystem;
+        const file = yield* fs.makeTempFileScoped({
+            suffix: `.${extension}`,
+        }).pipe(
+            Effect.mapError((error) =>
+                new ShellError({
+                    command: "makeTempFile",
+                    detail: String(error),
+                })),
         );
-        yield* fs.writeFileString(tmp, content).pipe(
-            Effect.mapError((e) => new ShellError({command: "writeFile", detail: String(e)})),
+        yield* fs.writeFileString(file, content).pipe(
+            Effect.mapError((error) =>
+                new ShellError({
+                    command: "writeFile",
+                    detail: String(error),
+                })),
         );
-        return yield* rawRun(command(tmp));
+
+        return yield* rawRun(command(file));
     }).pipe(Effect.scoped);
 
 export const ShellLayer: Layer.Layer<ShellTag, never, ShellDeps> =
     Layer.effect(
         ShellTag,
         Effect.gen(function* () {
-            // Capture dependencies once so the service methods require nothing (R = never).
             const executor = yield* CommandExecutor.CommandExecutor;
-            const fs       = yield* FileSystem.FileSystem;
-            const provide  = <A>(effect: Effect.Effect<A, ShellError, ShellDeps>): Effect.Effect<A, ShellError> =>
+            const fs = yield* FileSystem.FileSystem;
+            const provide = <A>(
+                effect: Effect.Effect<A, ShellError, ShellDeps>,
+            ): Effect.Effect<A, ShellError> =>
                 effect.pipe(
-                    Effect.provideService(CommandExecutor.CommandExecutor, executor),
+                    Effect.provideService(
+                        CommandExecutor.CommandExecutor,
+                        executor,
+                    ),
                     Effect.provideService(FileSystem.FileSystem, fs),
                 );
+
             return {
-                run:             (command)               => provide(rawRun(command)),
-                runWithBodyFile: (ext, content, command) => provide(rawRunWithBodyFile(ext, content, command)),
+                run: (command) => provide(rawRun(command)),
+                runWithBodyFile: (extension, content, command) =>
+                    provide(
+                        rawRunWithBodyFile(
+                            extension,
+                            content,
+                            command,
+                        ),
+                    ),
             } satisfies Shell;
         }),
     );

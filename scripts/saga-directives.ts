@@ -1,8 +1,7 @@
 export interface SagaDirectives {
-    readSaga:  string | null;
-    writeSaga: string | null;
-    // The message with any read:/write:/saga: tokens removed.
-    prompt:    string;
+    readonly readSaga: string | null;
+    readonly writeSaga: string | null;
+    readonly prompt: string;
 }
 
 // Matches inline saga directives like "read:heist", "write:my-saga_2" or the
@@ -10,6 +9,12 @@ export interface SagaDirectives {
 // a filename-safe slug; a space after the colon (e.g. "read: the news") does
 // not match, avoiding false positives.
 const SAGA_DIRECTIVE = /\b(read|write|saga):([A-Za-z0-9_-]+)/gi;
+
+const hasRead = (kind: string): boolean =>
+    kind === "read" || kind === "saga";
+
+const hasWrite = (kind: string): boolean =>
+    kind === "write" || kind === "saga";
 
 /**
  * Pull the first `read:` and `write:` saga directives out of a message and
@@ -19,17 +24,29 @@ const SAGA_DIRECTIVE = /\b(read|write|saga):([A-Za-z0-9_-]+)/gi;
  * kept.
  */
 export function parseSagaDirectives(message: string): SagaDirectives {
-    let readSaga:  string | null = null;
-    let writeSaga: string | null = null;
-    for (const match of message.matchAll(SAGA_DIRECTIVE)) {
+    const sagas = Array.from(message.matchAll(SAGA_DIRECTIVE)).reduce<{
+        readonly readSaga: string | null;
+        readonly writeSaga: string | null;
+    }>((state, match) => {
         const kind = match[1].toLowerCase();
         const name = match[2].toLowerCase();
-        const isRead  = kind === "read"  || kind === "saga";
-        const isWrite = kind === "write" || kind === "saga";
-        if (isRead  && readSaga  == null) { readSaga  = name; }
-        if (isWrite && writeSaga == null) { writeSaga = name; }
-    }
-    const stripped = message.replace(SAGA_DIRECTIVE, "").replace(/[ \t]{2,}/g, " ").replace(/[ \t]+\n/g, "\n").trim();
-    const prompt = stripped === "" ? message.trim() : stripped;
-    return {readSaga, writeSaga, prompt};
+
+        return {
+            readSaga: state.readSaga ?? (hasRead(kind) ? name : null),
+            writeSaga: state.writeSaga ?? (hasWrite(kind) ? name : null),
+        };
+    }, {
+        readSaga: null,
+        writeSaga: null,
+    });
+    const stripped = message
+        .replace(SAGA_DIRECTIVE, "")
+        .replace(/[ \t]{2,}/g, " ")
+        .replace(/[ \t]+\n/g, "\n")
+        .trim();
+
+    return {
+        ...sagas,
+        prompt: stripped === "" ? message.trim() : stripped,
+    };
 }

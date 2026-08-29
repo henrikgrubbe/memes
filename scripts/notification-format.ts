@@ -1,28 +1,70 @@
 import type {GenerationMetadata} from "./providers.js";
 import {renderProviderAttempts, type HistoryEntry} from "./history.js";
 
+interface SuccessCommentParams {
+    readonly memeId: string;
+    readonly provider: string;
+    readonly history: ReadonlyArray<HistoryEntry>;
+    readonly prompt: string;
+    readonly requester: string;
+    readonly channel: string;
+    readonly slackLink: string;
+    readonly repo: string;
+    readonly metadata?: GenerationMetadata;
+}
+
+interface SlackSuccessParams {
+    readonly memeId: string;
+    readonly provider: string;
+    readonly title: string;
+    readonly requester: string;
+    readonly channel: string;
+    readonly repo: string;
+    readonly metadata?: GenerationMetadata;
+}
+
+interface SlackFailureParams {
+    readonly title: string;
+    readonly requester: string;
+    readonly channel: string;
+    readonly error: string;
+}
+
 /** Display-ready cost string (e.g. "0.108¢"), or null when cost is unknown. */
 export function formatCostCents(metadata?: GenerationMetadata): string | null {
     const costCents = metadata?.costCents;
     return costCents == null ? null : `${costCents.toFixed(3)}¢`;
 }
 
-export function formatSuccessComment({memeId, provider, history, prompt, requester, channel, slackLink, repo, metadata}: {
-    memeId: string; provider: string; history: HistoryEntry[];
-    prompt: string; requester: string; channel: string; slackLink: string; repo: string; metadata?: GenerationMetadata;
-}): string {
-    const providerNote  = ` _(${provider})_`;
-    const promptDisplay = prompt.includes("`") ? `\`\`${prompt}\`\`` : `\`${prompt}\``;
+const inlineCode = (value: string): string =>
+    value.includes("`")
+        ? `\`\`${value}\`\``
+        : `\`${value}\``;
+
+export function formatSuccessComment({
+    memeId,
+    provider,
+    history,
+    prompt,
+    requester,
+    channel,
+    slackLink,
+    repo,
+    metadata,
+}: SuccessCommentParams): string {
+    const providerNote = ` _(${provider})_`;
+    const promptDisplay = inlineCode(prompt);
     const revisedPrompt = metadata?.revisedPrompt;
     const revisedPromptDisplay = revisedPrompt == null
         ? null
-        : (revisedPrompt.includes("`") ? `\`\`${revisedPrompt}\`\`` : `\`${revisedPrompt}\``);
+        : inlineCode(revisedPrompt);
     const usageSummary = metadata?.usage == null
         ? null
         : `${metadata.usage.inputTokens} input, ${metadata.usage.outputTokens} output, ${metadata.usage.totalTokens} total tokens`;
     const costCents = formatCostCents(metadata);
-    const blobUrl       = `https://github.com/${repo}/blob/main/memes/${memeId}.jpg`;
-    const imageUrl      = `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`;
+    const blobUrl = `https://github.com/${repo}/blob/main/memes/${memeId}.jpg`;
+    const imageUrl = `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`;
+
     return [
         `🎉 Meme generated and committed to [memes/${memeId}.jpg](${blobUrl})${providerNote}`,
         ``,
@@ -40,7 +82,10 @@ export function formatSuccessComment({memeId, provider, history, prompt, request
 }
 
 /** Format the issue comment for a failed generation, including any attempt history. */
-export function formatFailureComment(message: string, history?: ReadonlyArray<HistoryEntry>): string {
+export function formatFailureComment(
+    message: string,
+    history?: ReadonlyArray<HistoryEntry>,
+): string {
     const attempts = history != null && history.length > 0
         ? [``, `**Provider attempts:**`, ...renderProviderAttempts(history)]
         : [];
@@ -55,27 +100,35 @@ export function formatFailureComment(message: string, history?: ReadonlyArray<Hi
 }
 
 /** Format the Slack webhook payload for a successful generation. */
-export function formatSlackSuccessPayload({memeId, provider, title, requester, channel, repo, metadata}: {
-    memeId: string; provider: string; title: string; requester: string; channel: string; repo: string; metadata?: GenerationMetadata;
-}) {
+export function formatSlackSuccessPayload({
+    memeId,
+    provider,
+    title,
+    requester,
+    channel,
+    repo,
+    metadata,
+}: SlackSuccessParams) {
     const costCents = formatCostCents(metadata);
     return {
-        status:    "success" as const,
+        status: "success" as const,
         image_url: `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`,
         title,
         requester,
         channel,
-        error:     "",
+        error: "",
         provider,
-        // Slack renders text only; send the pre-formatted display string.
         ...(costCents == null ? {} : {cost_cents: costCents}),
     };
 }
 
 /** Format the Slack webhook payload for a failed generation. */
-export function formatSlackFailurePayload({title, requester, channel, error}: {
-    title: string; requester: string; channel: string; error: string;
-}) {
+export function formatSlackFailurePayload({
+    title,
+    requester,
+    channel,
+    error,
+}: SlackFailureParams) {
     return {
         status: "failure" as const,
         image_url: "",
