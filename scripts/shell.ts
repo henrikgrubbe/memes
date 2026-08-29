@@ -18,9 +18,7 @@ export class ShellError extends Data.TaggedError("ShellError")<{
 }
 
 export interface Shell {
-    readonly run: (
-        command: string,
-    ) => Effect.Effect<string, ShellError>;
+    readonly run: (command: string) => Effect.Effect<string, ShellError>;
     readonly runWithBodyFile: (
         extension: string,
         content: string,
@@ -32,8 +30,7 @@ export class ShellTag extends Context.Tag("Shell")<ShellTag, Shell>() {}
 
 // ---- Test helper ------------------------------------------------------------
 
-export const makeShellLayer = (impl: Shell): Layer.Layer<ShellTag> =>
-    Layer.succeed(ShellTag, impl);
+export const makeShellLayer = (impl: Shell): Layer.Layer<ShellTag> => Layer.succeed(ShellTag, impl);
 
 // ---- Real adapter -----------------------------------------------------------
 
@@ -44,8 +41,7 @@ const rawRun = (
 ): Effect.Effect<string, ShellError, CommandExecutor.CommandExecutor> =>
     Command.make("sh", "-c", command).pipe(
         Command.string,
-        Effect.mapError((error) =>
-            new ShellError({command, detail: String(error)})),
+        Effect.mapError((error) => new ShellError({command, detail: String(error)})),
         Effect.map((output) => output.trim()),
     );
 
@@ -56,53 +52,49 @@ const rawRunWithBodyFile = (
 ): Effect.Effect<string, ShellError, ShellDeps> =>
     Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const file = yield* fs.makeTempFileScoped({
-            suffix: `.${extension}`,
-        }).pipe(
-            Effect.mapError((error) =>
-                new ShellError({
-                    command: "makeTempFile",
-                    detail: String(error),
-                })),
-        );
+        const file = yield* fs
+            .makeTempFileScoped({
+                suffix: `.${extension}`,
+            })
+            .pipe(
+                Effect.mapError(
+                    (error) =>
+                        new ShellError({
+                            command: "makeTempFile",
+                            detail: String(error),
+                        }),
+                ),
+            );
         yield* fs.writeFileString(file, content).pipe(
-            Effect.mapError((error) =>
-                new ShellError({
-                    command: "writeFile",
-                    detail: String(error),
-                })),
+            Effect.mapError(
+                (error) =>
+                    new ShellError({
+                        command: "writeFile",
+                        detail: String(error),
+                    }),
+            ),
         );
 
         return yield* rawRun(command(file));
     }).pipe(Effect.scoped);
 
-export const ShellLayer: Layer.Layer<ShellTag, never, ShellDeps> =
-    Layer.effect(
-        ShellTag,
-        Effect.gen(function* () {
-            const executor = yield* CommandExecutor.CommandExecutor;
-            const fs = yield* FileSystem.FileSystem;
-            const provide = <A>(
-                effect: Effect.Effect<A, ShellError, ShellDeps>,
-            ): Effect.Effect<A, ShellError> =>
-                effect.pipe(
-                    Effect.provideService(
-                        CommandExecutor.CommandExecutor,
-                        executor,
-                    ),
-                    Effect.provideService(FileSystem.FileSystem, fs),
-                );
+export const ShellLayer: Layer.Layer<ShellTag, never, ShellDeps> = Layer.effect(
+    ShellTag,
+    Effect.gen(function* () {
+        const executor = yield* CommandExecutor.CommandExecutor;
+        const fs = yield* FileSystem.FileSystem;
+        const provide = <A>(
+            effect: Effect.Effect<A, ShellError, ShellDeps>,
+        ): Effect.Effect<A, ShellError> =>
+            effect.pipe(
+                Effect.provideService(CommandExecutor.CommandExecutor, executor),
+                Effect.provideService(FileSystem.FileSystem, fs),
+            );
 
-            return {
-                run: (command) => provide(rawRun(command)),
-                runWithBodyFile: (extension, content, command) =>
-                    provide(
-                        rawRunWithBodyFile(
-                            extension,
-                            content,
-                            command,
-                        ),
-                    ),
-            } satisfies Shell;
-        }),
-    );
+        return {
+            run: (command) => provide(rawRun(command)),
+            runWithBodyFile: (extension, content, command) =>
+                provide(rawRunWithBodyFile(extension, content, command)),
+        } satisfies Shell;
+    }),
+);

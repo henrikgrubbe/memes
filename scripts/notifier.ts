@@ -38,9 +38,7 @@ export interface NotifySuccessParams {
 // remains behind this seam.
 
 export interface NotifierService {
-    readonly notifySuccess: (
-        params: NotifySuccessParams,
-    ) => Effect.Effect<void>;
+    readonly notifySuccess: (params: NotifySuccessParams) => Effect.Effect<void>;
     readonly notifyFailure: (
         message: string,
         closeNotPlanned?: boolean,
@@ -48,27 +46,24 @@ export interface NotifierService {
     ) => Effect.Effect<void>;
 }
 
-export class NotifierServiceTag extends Context.Tag("NotifierService")<NotifierServiceTag, NotifierService>() {}
+export class NotifierServiceTag extends Context.Tag("NotifierService")<
+    NotifierServiceTag,
+    NotifierService
+>() {}
 
 // ---- Real adapter -----------------------------------------------------------
 
-const postComment = (
-    config: AppConfig,
-    shell: Shell,
-    body: string,
-): Effect.Effect<void> =>
-    shell.runWithBodyFile(
-        "txt",
-        body,
-        (file) =>
-            `gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${file}`,
-    ).pipe(Effect.ignore);
+const postComment = (config: AppConfig, shell: Shell, body: string): Effect.Effect<void> =>
+    shell
+        .runWithBodyFile(
+            "txt",
+            body,
+            (file) =>
+                `gh issue comment ${config.issueNumber} --repo ${config.repo} --body-file ${file}`,
+        )
+        .pipe(Effect.ignore);
 
-const postSlack = (
-    config: AppConfig,
-    shell: Shell,
-    payload: SlackPayload,
-): Effect.Effect<void> =>
+const postSlack = (config: AppConfig, shell: Shell, payload: SlackPayload): Effect.Effect<void> =>
     Schema.encode(Schema.parseJson(SlackPayloadSchema))(payload).pipe(
         Effect.orDie,
         Effect.flatMap((json) =>
@@ -77,29 +72,24 @@ const postSlack = (
                 json,
                 (file) =>
                     `curl -s -X POST -H 'Content-Type: application/json' -d @${file} '${config.slackWebhookUrl}'`,
-            )),
+            ),
+        ),
         Effect.ignore,
     );
 
-const closeIssue = (
-    config: AppConfig,
-    shell: Shell,
-    reason?: "not_planned",
-): Effect.Effect<void> =>
-    shell.run(
-        `gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed`
-        + (reason == null ? "" : ` -f state_reason=${reason}`),
-    ).pipe(Effect.ignore);
+const closeIssue = (config: AppConfig, shell: Shell, reason?: "not_planned"): Effect.Effect<void> =>
+    shell
+        .run(
+            `gh api repos/${config.repo}/issues/${config.issueNumber} -X PATCH -f state=closed` +
+                (reason == null ? "" : ` -f state_reason=${reason}`),
+        )
+        .pipe(Effect.ignore);
 
-const makeNotifier = (
-    config: AppConfig,
-    shell: Shell,
-): NotifierService => ({
+const makeNotifier = (config: AppConfig, shell: Shell): NotifierService => ({
     notifySuccess: ({memeId, history, prompt, metadata}) =>
         Effect.gen(function* () {
-            const provider = history.find(
-                ({status}) => status === "success",
-            )?.provider ?? "unknown";
+            const provider =
+                history.find(({status}) => status === "success")?.provider ?? "unknown";
 
             yield* postComment(
                 config,
@@ -135,11 +125,7 @@ const makeNotifier = (
 
     notifyFailure: (message, closeNotPlanned = false, history) =>
         Effect.gen(function* () {
-            yield* postComment(
-                config,
-                shell,
-                formatFailureComment(message, history),
-            );
+            yield* postComment(config, shell, formatFailureComment(message, history));
             yield* postSlack(
                 config,
                 shell,
@@ -150,9 +136,7 @@ const makeNotifier = (
                     error: message,
                 }),
             );
-            yield* closeNotPlanned
-                ? closeIssue(config, shell, "not_planned")
-                : Effect.void;
+            yield* closeNotPlanned ? closeIssue(config, shell, "not_planned") : Effect.void;
         }),
 });
 

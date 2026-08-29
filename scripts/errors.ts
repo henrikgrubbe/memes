@@ -58,7 +58,7 @@ export class ModerationFailedError extends Data.TaggedError("ModerationFailedErr
 
 export class ProviderError extends Data.TaggedError("ProviderError")<{
     readonly provider: string;
-    readonly detail:   string;
+    readonly detail: string;
     readonly history?: ReadonlyArray<HistoryEntry>;
 }> {
     public get message(): string {
@@ -68,7 +68,7 @@ export class ProviderError extends Data.TaggedError("ProviderError")<{
 
 export class QuotaExhaustedError extends Data.TaggedError("QuotaExhaustedError")<{
     readonly provider: string;
-    readonly detail:   string;
+    readonly detail: string;
     readonly history?: ReadonlyArray<HistoryEntry>;
 }> {
     public get message(): string {

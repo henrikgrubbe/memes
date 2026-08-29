@@ -37,9 +37,7 @@ export function formatCostCents(metadata?: GenerationMetadata): string | null {
 }
 
 const inlineCode = (value: string): string =>
-    value.includes("`")
-        ? `\`\`${value}\`\``
-        : `\`${value}\``;
+    value.includes("`") ? `\`\`${value}\`\`` : `\`${value}\``;
 
 export function formatSuccessComment({
     memeId,
@@ -55,12 +53,11 @@ export function formatSuccessComment({
     const providerNote = ` _(${provider})_`;
     const promptDisplay = inlineCode(prompt);
     const revisedPrompt = metadata?.revisedPrompt;
-    const revisedPromptDisplay = revisedPrompt == null
-        ? null
-        : inlineCode(revisedPrompt);
-    const usageSummary = metadata?.usage == null
-        ? null
-        : `${metadata.usage.inputTokens} input, ${metadata.usage.outputTokens} output, ${metadata.usage.totalTokens} total tokens`;
+    const revisedPromptDisplay = revisedPrompt == null ? null : inlineCode(revisedPrompt);
+    const usageSummary =
+        metadata?.usage == null
+            ? null
+            : `${metadata.usage.inputTokens} input, ${metadata.usage.outputTokens} output, ${metadata.usage.totalTokens} total tokens`;
     const costCents = formatCostCents(metadata);
     const blobUrl = `https://github.com/${repo}/blob/main/memes/${memeId}.jpg`;
     const imageUrl = `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`;
@@ -86,17 +83,11 @@ export function formatFailureComment(
     message: string,
     history?: ReadonlyArray<HistoryEntry>,
 ): string {
-    const attempts = history != null && history.length > 0
-        ? [``, `**Provider attempts:**`, ...renderProviderAttempts(history)]
-        : [];
-    return [
-        `❌ Meme generation failed.`,
-        ``,
-        "```",
-        message,
-        "```",
-        ...attempts,
-    ].join("\n");
+    const attempts =
+        history != null && history.length > 0
+            ? [``, `**Provider attempts:**`, ...renderProviderAttempts(history)]
+            : [];
+    return [`❌ Meme generation failed.`, ``, "```", message, "```", ...attempts].join("\n");
 }
 
 /** Format the Slack webhook payload for a successful generation. */
@@ -123,12 +114,7 @@ export function formatSlackSuccessPayload({
 }
 
 /** Format the Slack webhook payload for a failed generation. */
-export function formatSlackFailurePayload({
-    title,
-    requester,
-    channel,
-    error,
-}: SlackFailureParams) {
+export function formatSlackFailurePayload({title, requester, channel, error}: SlackFailureParams) {
     return {
         status: "failure" as const,
         image_url: "",

@@ -3,8 +3,22 @@ import * as TestClock from "effect/TestClock";
 import * as TestContext from "effect/TestContext";
 import type OpenAI from "openai";
 import {describe, expect, it} from "vitest";
-import {ModerationBlockedError, ProviderError, QuotaExhaustedError, RateLimitError} from "./errors.js";
-import {callWithRetry, computeCostCents, makeCandidates, MAX_RETRIES, modelLabel, PRIMARY_PROVIDERS, ProvidersLayer, ProvidersServiceTag} from "./providers.js";
+import {
+    ModerationBlockedError,
+    ProviderError,
+    QuotaExhaustedError,
+    RateLimitError,
+} from "./errors.js";
+import {
+    callWithRetry,
+    computeCostCents,
+    makeCandidates,
+    MAX_RETRIES,
+    modelLabel,
+    PRIMARY_PROVIDERS,
+    ProvidersLayer,
+    ProvidersServiceTag,
+} from "./providers.js";
 
 const PROVIDER = "test-provider";
 const call = (client: OpenAI) => callWithRetry(PROVIDER, client, "m", {}, "prompt");
@@ -29,14 +43,38 @@ function makeClient(responses: Array<() => Promise<ImageResponse>>): OpenAI {
     } as unknown as OpenAI;
 }
 
-const ok    = (b64 = "aGVsbG8=") => (): Promise<ImageResponse> => Promise.resolve({data: [{b64_json: b64}]});
-const rl    = (delayS = 0.001)   => (): Promise<ImageResponse> => Promise.reject({status: 429, message: `try again in ${delayS}s`, headers: {}});
-const mod   = ()                  => (): Promise<ImageResponse> => Promise.reject({status: 400, message: "blocked", error: {code: "moderation_blocked", moderation_details: {moderation_stage: "input"}}});
-const fail  = (msg = "boom")     => (): Promise<ImageResponse> => Promise.reject({status: 500, message: msg});
-const xaiCredits        = ()     => (): Promise<ImageResponse> => Promise.reject({status: 403, message: "Your team abc has either used all available credits or reached its monthly spending limit."});
-const insufficientQuota = ()     => (): Promise<ImageResponse> => Promise.reject({status: 429, message: "You exceeded your current quota", error: {code: "insufficient_quota"}});
+const ok =
+    (b64 = "aGVsbG8=") =>
+    (): Promise<ImageResponse> =>
+        Promise.resolve({data: [{b64_json: b64}]});
+const rl =
+    (delayS = 0.001) =>
+    (): Promise<ImageResponse> =>
+        Promise.reject({status: 429, message: `try again in ${delayS}s`, headers: {}});
+const mod = () => (): Promise<ImageResponse> =>
+    Promise.reject({
+        status: 400,
+        message: "blocked",
+        error: {code: "moderation_blocked", moderation_details: {moderation_stage: "input"}},
+    });
+const fail =
+    (msg = "boom") =>
+    (): Promise<ImageResponse> =>
+        Promise.reject({status: 500, message: msg});
+const xaiCredits = () => (): Promise<ImageResponse> =>
+    Promise.reject({
+        status: 403,
+        message:
+            "Your team abc has either used all available credits or reached its monthly spending limit.",
+    });
+const insufficientQuota = () => (): Promise<ImageResponse> =>
+    Promise.reject({
+        status: 429,
+        message: "You exceeded your current quota",
+        error: {code: "insufficient_quota"},
+    });
 
-const run   = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(Effect.exit(effect));
+const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(Effect.exit(effect));
 const runTC = <A, E>(effect: Effect.Effect<A, E, never>) =>
     Effect.runPromise(Effect.exit(effect).pipe(Effect.provide(TestContext.TestContext)));
 
@@ -53,10 +91,13 @@ describe("callWithRetry", () => {
     });
 
     it("captures revised prompt and usage metadata when returned", async () => {
-        const client = makeClient([() => Promise.resolve({
-            data: [{b64_json: "aGVsbG8=", revised_prompt: "revised prompt text"}],
-            usage: {input_tokens: 12, output_tokens: 34, total_tokens: 46},
-        })]);
+        const client = makeClient([
+            () =>
+                Promise.resolve({
+                    data: [{b64_json: "aGVsbG8=", revised_prompt: "revised prompt text"}],
+                    usage: {input_tokens: 12, output_tokens: 34, total_tokens: 46},
+                }),
+        ]);
         const exit = await run(call(client));
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
@@ -68,12 +109,20 @@ describe("callWithRetry", () => {
     });
 
     it("estimates cost from usage and the model's pricing", async () => {
-        const client = makeClient([() => Promise.resolve({
-            data: [{b64_json: "aGVsbG8="}],
-            usage: {input_tokens: 12, output_tokens: 34, total_tokens: 46},
-        })]);
+        const client = makeClient([
+            () =>
+                Promise.resolve({
+                    data: [{b64_json: "aGVsbG8="}],
+                    usage: {input_tokens: 12, output_tokens: 34, total_tokens: 46},
+                }),
+        ]);
         // 12 * $5/M + 34 * $30/M = $0.00108 = 0.108¢
-        const exit = await run(callWithRetry(PROVIDER, client, "m", {}, "prompt", undefined, {inputPerMillion: 5, outputPerMillion: 30}));
+        const exit = await run(
+            callWithRetry(PROVIDER, client, "m", {}, "prompt", undefined, {
+                inputPerMillion: 5,
+                outputPerMillion: 30,
+            }),
+        );
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
             expect(exit.value.metadata?.costCents).toBeCloseTo(0.108, 6);
@@ -81,10 +130,13 @@ describe("callWithRetry", () => {
     });
 
     it("leaves cost unset when the model is unpriced", async () => {
-        const client = makeClient([() => Promise.resolve({
-            data: [{b64_json: "aGVsbG8="}],
-            usage: {input_tokens: 12, output_tokens: 34, total_tokens: 46},
-        })]);
+        const client = makeClient([
+            () =>
+                Promise.resolve({
+                    data: [{b64_json: "aGVsbG8="}],
+                    usage: {input_tokens: 12, output_tokens: 34, total_tokens: 46},
+                }),
+        ]);
         const exit = await run(call(client));
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
@@ -121,9 +173,7 @@ describe("callWithRetry", () => {
     });
 
     it("turns a null rejection into ProviderError", async () => {
-        const client = makeClient([
-            () => Promise.reject(null),
-        ]);
+        const client = makeClient([() => Promise.reject(null)]);
         const exit = await run(call(client));
 
         expect(Exit.isFailure(exit)).toBe(true);
@@ -155,7 +205,7 @@ describe("callWithRetry", () => {
 
     it("retries after rate limit and succeeds", async () => {
         const client = makeClient([rl(), ok()]);
-        const test   = Effect.gen(function* () {
+        const test = Effect.gen(function* () {
             const fiber = yield* Effect.fork(call(client));
             yield* TestClock.adjust(Duration.seconds(2));
             return yield* Fiber.join(fiber);
@@ -172,11 +222,9 @@ describe("callWithRetry", () => {
 
     it(`fails with RateLimitError after ${MAX_RETRIES} rate-limit retries`, async () => {
         const responses = Array.from({length: MAX_RETRIES + 1}, rl);
-        const client    = makeClient(responses);
-        const test      = Effect.gen(function* () {
-            const fiber = yield* Effect.fork(
-                Effect.exit(call(client)),
-            );
+        const client = makeClient(responses);
+        const test = Effect.gen(function* () {
+            const fiber = yield* Effect.fork(Effect.exit(call(client)));
             yield* TestClock.adjust(Duration.seconds(MAX_RETRIES * 2));
             return yield* Fiber.join(fiber);
         });
@@ -204,7 +252,9 @@ describe("callWithRetry", () => {
                 },
             },
         } as unknown as OpenAI;
-        await run(callWithRetry(PROVIDER, client, "dall-e-3", {size: "1024x1024", quality: "hd"}, "cat"));
+        await run(
+            callWithRetry(PROVIDER, client, "dall-e-3", {size: "1024x1024", quality: "hd"}, "cat"),
+        );
         expect(capturedParams["size"]).toBe("1024x1024");
         expect(capturedParams["quality"]).toBe("hd");
         expect(capturedParams["model"]).toBe("dall-e-3");
@@ -256,19 +306,24 @@ describe("callWithRetry", () => {
 
 describe("model candidates", () => {
     it("defaults a candidate label to '<provider> (<model>)'", () => {
-        expect(modelLabel({name: "OpenAI", envKey: "K", models: []}, {model: "gpt-image-2"}))
-            .toBe("OpenAI (gpt-image-2)");
+        expect(modelLabel({name: "OpenAI", envKey: "K", models: []}, {model: "gpt-image-2"})).toBe(
+            "OpenAI (gpt-image-2)",
+        );
     });
 
     it("honours an explicit label override", () => {
-        expect(modelLabel({name: "OpenAI", envKey: "K", models: []}, {model: "gpt-image-2", label: "Fast"}))
-            .toBe("Fast");
+        expect(
+            modelLabel(
+                {name: "OpenAI", envKey: "K", models: []},
+                {model: "gpt-image-2", label: "Fast"},
+            ),
+        ).toBe("Fast");
     });
 
     it("expands each model into its own uniquely-labelled candidate", () => {
         const candidates = makeCandidates(
             {
-                name:   "OpenAI",
+                name: "OpenAI",
                 envKey: "OPENAI_API_KEY",
                 models: [
                     {model: "gpt-image-2", params: {quality: "low"}},
@@ -296,8 +351,12 @@ describe("model candidates", () => {
 describe("computeCostCents", () => {
     it("prices a generation from its token usage", () => {
         // 12 * $5/M + 34 * $30/M = $0.00108 = 0.108¢
-        expect(computeCostCents({inputTokens: 12, outputTokens: 34, totalTokens: 46}, {inputPerMillion: 5, outputPerMillion: 30}))
-            .toBeCloseTo(0.108, 6);
+        expect(
+            computeCostCents(
+                {inputTokens: 12, outputTokens: 34, totalTokens: 46},
+                {inputPerMillion: 5, outputPerMillion: 30},
+            ),
+        ).toBeCloseTo(0.108, 6);
     });
 });
 
@@ -325,6 +384,8 @@ describe("ProvidersLayer (disable-by-omission)", () => {
 
     it("builds when the primary key is set, with or without the fallback key", async () => {
         expect(Exit.isSuccess(await buildWith({OPENAI_API_KEY: "sk-primary"}))).toBe(true);
-        expect(Exit.isSuccess(await buildWith({OPENAI_API_KEY: "sk-primary", XAI_API_KEY: "xai-key"}))).toBe(true);
+        expect(
+            Exit.isSuccess(await buildWith({OPENAI_API_KEY: "sk-primary", XAI_API_KEY: "xai-key"})),
+        ).toBe(true);
     });
 });

@@ -15,8 +15,15 @@ import {ShellLayer} from "./shell.js";
 // the saga hand their content to commitToMain.
 
 const dummyConfig: AppConfig = {
-    issueNumber: "7", repo: "o/r", slackWebhookUrl: "", requester: "u",
-    memePrompt: "", channel: "#c", slackLink: "", readSaga: null, writeSaga: null,
+    issueNumber: "7",
+    repo: "o/r",
+    slackWebhookUrl: "",
+    requester: "u",
+    memePrompt: "",
+    channel: "#c",
+    slackLink: "",
+    readSaga: null,
+    writeSaga: null,
 };
 
 const git = (cwd: string, cmd: string) => execSync(`git ${cmd}`, {cwd, stdio: "pipe"}).toString();
@@ -28,9 +35,9 @@ let originalCwd: string;
 
 beforeEach(() => {
     originalCwd = process.cwd();
-    root   = mkdtempSync(join(tmpdir(), "git-"));
+    root = mkdtempSync(join(tmpdir(), "git-"));
     remote = join(root, "remote.git");
-    work   = join(root, "work");
+    work = join(root, "work");
     execSync(`git init --bare -b main "${remote}"`);
     execSync(`git clone "${remote}" "${work}"`, {stdio: "pipe"});
     git(work, `config user.name test`);
@@ -53,8 +60,9 @@ const commit = (message: string, stage: () => ReadonlyArray<string>) => {
         Layer.succeed(AppConfigService, dummyConfig),
     );
     const layer = GitLayer.pipe(Layer.provide(ShellLayer.pipe(Layer.provide(infra))));
-    const program = GitServiceTag.pipe(Effect.flatMap((g) =>
-        g.commitToMain({message, stage: Effect.sync(stage)})));
+    const program = GitServiceTag.pipe(
+        Effect.flatMap((g) => g.commitToMain({message, stage: Effect.sync(stage)})),
+    );
     return Effect.runPromise(program.pipe(Effect.provide(layer)));
 };
 

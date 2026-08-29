@@ -10,11 +10,9 @@ export interface SagaDirectives {
 // not match, avoiding false positives.
 const SAGA_DIRECTIVE = /\b(read|write|saga):([A-Za-z0-9_-]+)/gi;
 
-const hasRead = (kind: string): boolean =>
-    kind === "read" || kind === "saga";
+const hasRead = (kind: string): boolean => kind === "read" || kind === "saga";
 
-const hasWrite = (kind: string): boolean =>
-    kind === "write" || kind === "saga";
+const hasWrite = (kind: string): boolean => kind === "write" || kind === "saga";
 
 /**
  * Pull the first `read:` and `write:` saga directives out of a message and
@@ -27,18 +25,21 @@ export function parseSagaDirectives(message: string): SagaDirectives {
     const sagas = Array.from(message.matchAll(SAGA_DIRECTIVE)).reduce<{
         readonly readSaga: string | null;
         readonly writeSaga: string | null;
-    }>((state, match) => {
-        const kind = match[1].toLowerCase();
-        const name = match[2].toLowerCase();
+    }>(
+        (state, match) => {
+            const kind = match[1].toLowerCase();
+            const name = match[2].toLowerCase();
 
-        return {
-            readSaga: state.readSaga ?? (hasRead(kind) ? name : null),
-            writeSaga: state.writeSaga ?? (hasWrite(kind) ? name : null),
-        };
-    }, {
-        readSaga: null,
-        writeSaga: null,
-    });
+            return {
+                readSaga: state.readSaga ?? (hasRead(kind) ? name : null),
+                writeSaga: state.writeSaga ?? (hasWrite(kind) ? name : null),
+            };
+        },
+        {
+            readSaga: null,
+            writeSaga: null,
+        },
+    );
     const stripped = message
         .replace(SAGA_DIRECTIVE, "")
         .replace(/[ \t]{2,}/g, " ")

@@ -20,8 +20,12 @@ describe("formatSuccessComment", () => {
             repo: "henrikgrubbe/memes",
         });
 
-        expect(comment).toContain("https://github.com/henrikgrubbe/memes/blob/main/memes/meme-123.jpg");
-        expect(comment).toContain("https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg");
+        expect(comment).toContain(
+            "https://github.com/henrikgrubbe/memes/blob/main/memes/meme-123.jpg",
+        );
+        expect(comment).toContain(
+            "https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg",
+        );
     });
 
     it("renders revised prompt and usage metadata when present", () => {
@@ -77,10 +81,17 @@ describe("formatFailureComment", () => {
     });
 
     it("renders each attempt when history is provided (regression for #706)", () => {
-        const comment = formatFailureComment("xAI (grok-imagine-image) is out of credits/quota: 403", [
-            {provider: "OpenAI (gpt-image-2)", status: "failed", message: "blocked by moderation"},
-            {provider: "grok-imagine-image", status: "failed", message: "out of credits"},
-        ]);
+        const comment = formatFailureComment(
+            "xAI (grok-imagine-image) is out of credits/quota: 403",
+            [
+                {
+                    provider: "OpenAI (gpt-image-2)",
+                    status: "failed",
+                    message: "blocked by moderation",
+                },
+                {provider: "grok-imagine-image", status: "failed", message: "out of credits"},
+            ],
+        );
         expect(comment).toContain("**Provider attempts:**");
         expect(comment).toContain("- OpenAI (gpt-image-2) ❌ (blocked by moderation)");
         expect(comment).toContain("- grok-imagine-image ❌ (out of credits)");
@@ -95,7 +106,9 @@ describe("formatFailureComment", () => {
 describe("formatCostCents", () => {
     it("returns null when cost is unknown", () => {
         expect(formatCostCents(undefined)).toBeNull();
-        expect(formatCostCents({usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46}})).toBeNull();
+        expect(
+            formatCostCents({usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46}}),
+        ).toBeNull();
     });
 
     it("formats cost as a cents string with three decimals", () => {
@@ -116,11 +129,16 @@ describe("formatSlackSuccessPayload", () => {
     it("includes a display-ready cost_cents string when cost is present", () => {
         const payload = formatSlackSuccessPayload({
             ...base,
-            metadata: {usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46}, costCents: 0.108},
+            metadata: {
+                usage: {inputTokens: 12, outputTokens: 34, totalTokens: 46},
+                costCents: 0.108,
+            },
         });
         expect(payload.status).toBe("success");
         expect(payload.provider).toBe("OpenAI");
-        expect(payload.image_url).toBe("https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg");
+        expect(payload.image_url).toBe(
+            "https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg",
+        );
         expect(payload.cost_cents).toBe("0.108¢");
     });
 

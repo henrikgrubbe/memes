@@ -1,0 +1,16 @@
+{
+  "bracketSpacing": false,
+  "endOfLine": "lf",
+  "printWidth": 100,
+  "semi": true,
+  "tabWidth": 4,
+  "trailingComma": "all",
+  "overrides": [
+    {
+      "files": ["*.json", "*.yml", "*.yaml"],
+      "options": {
+        "tabWidth": 2
+      }
+    }
+  ]
+}

@@ -14,7 +14,10 @@ export interface AppConfig {
     readonly writeSaga: string | null;
 }
 
-export class AppConfigService extends Context.Tag("AppConfigService")<AppConfigService, AppConfig>() {}
+export class AppConfigService extends Context.Tag("AppConfigService")<
+    AppConfigService,
+    AppConfig
+>() {}
 
 const loadAppConfig = Effect.gen(function* () {
     const env = yield* Config.all({
@@ -24,8 +27,7 @@ const loadAppConfig = Effect.gen(function* () {
         issueBody: Config.string("ISSUE_BODY"),
     });
     const fields = yield* parseIssueBody(env.issueBody).pipe(
-        Effect.mapError((error) =>
-            ConfigError.InvalidData(["ISSUE_BODY"], error.message)),
+        Effect.mapError((error) => ConfigError.InvalidData(["ISSUE_BODY"], error.message)),
     );
     const directives = parseSagaDirectives(fields.message);
 
@@ -71,9 +73,8 @@ function tokenizeIssueBody(body: string): Readonly<Record<string, string>> {
     return body.split("\n").reduce<TokenizerState>((state, rawLine) => {
         const line = rawLine.replace(/\r$/, "");
         const separator = line.indexOf(": ");
-        const potentialKey = separator === -1
-            ? null
-            : line.slice(0, separator).trim().toLowerCase();
+        const potentialKey =
+            separator === -1 ? null : line.slice(0, separator).trim().toLowerCase();
 
         if (potentialKey != null && KNOWN_KEYS.has(potentialKey)) {
             return {

@@ -19,9 +19,7 @@ export interface CommitPlan {
 }
 
 export interface GitService {
-    readonly commitToMain: (
-        plan: CommitPlan,
-    ) => Effect.Effect<void, PushFailedError>;
+    readonly commitToMain: (plan: CommitPlan) => Effect.Effect<void, PushFailedError>;
 }
 
 export class GitServiceTag extends Context.Tag("GitService")<GitServiceTag, GitService>() {}
@@ -33,8 +31,9 @@ export const makeGitLayer = (impl: GitService): Layer.Layer<GitServiceTag> =>
     Layer.succeed(GitServiceTag, impl);
 
 /** No-op git layer for tests that don't care about git operations. */
-export const GitNoOpLayer: Layer.Layer<GitServiceTag> =
-    makeGitLayer({commitToMain: () => Effect.void});
+export const GitNoOpLayer: Layer.Layer<GitServiceTag> = makeGitLayer({
+    commitToMain: () => Effect.void,
+});
 
 // ---- Real adapter -----------------------------------------------------------
 
@@ -61,39 +60,31 @@ const commitAttempt = (run: GitCommand, plan: CommitPlan): Effect.Effect<void, P
         );
 
         const paths = yield* plan.stage;
-        yield* Effect.forEach(
-            paths,
-            (path) => run(`git add "${path}"`),
-            {discard: true},
-        );
+        yield* Effect.forEach(paths, (path) => run(`git add "${path}"`), {discard: true});
         yield* run(`git commit -m "${plan.message}"`);
         yield* run(`git push origin HEAD`).pipe(
             Effect.tapError(() => run(`git reset --hard HEAD~1`).pipe(Effect.ignore)),
         );
     });
 
-export const GitLayer: Layer.Layer<GitServiceTag, never, ShellTag> =
-    Layer.effect(
-        GitServiceTag,
-        Effect.gen(function* () {
-            const shell = yield* ShellTag;
-            const run = (command: string) =>
-                shell.run(command).pipe(
-                    Effect.mapError(() => new PushAttemptError()),
-                );
+export const GitLayer: Layer.Layer<GitServiceTag, never, ShellTag> = Layer.effect(
+    GitServiceTag,
+    Effect.gen(function* () {
+        const shell = yield* ShellTag;
+        const run = (command: string) =>
+            shell.run(command).pipe(Effect.mapError(() => new PushAttemptError()));
 
-            return {
-                commitToMain: (plan) =>
-                    Effect.retry(
-                        commitAttempt(run, plan).pipe(
-                            Effect.tapError(() =>
-                                Effect.log("Push failed - retrying...")),
-                        ),
-                        Schedule.recurs(MAX_PUSH_RETRIES - 1),
-                    ).pipe(
-                        Effect.tap(() => Effect.log(`Pushed to main: ${plan.message}`)),
-                        Effect.mapError(() => new PushFailedError({attempts: MAX_PUSH_RETRIES})),
+        return {
+            commitToMain: (plan) =>
+                Effect.retry(
+                    commitAttempt(run, plan).pipe(
+                        Effect.tapError(() => Effect.log("Push failed - retrying...")),
                     ),
-            } satisfies GitService;
-        }),
-    );
+                    Schedule.recurs(MAX_PUSH_RETRIES - 1),
+                ).pipe(
+                    Effect.tap(() => Effect.log(`Pushed to main: ${plan.message}`)),
+                    Effect.mapError(() => new PushFailedError({attempts: MAX_PUSH_RETRIES})),
+                ),
+        } satisfies GitService;
+    }),
+);

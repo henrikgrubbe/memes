@@ -10,12 +10,18 @@ describe("parseIssueBody", () => {
         const exit = await run(body);
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
-            expect(exit.value).toMatchObject({sender: "hhb", message: "funny cat", channel: "#memes", link: "https://slack.com/x"});
+            expect(exit.value).toMatchObject({
+                sender: "hhb",
+                message: "funny cat",
+                channel: "#memes",
+                link: "https://slack.com/x",
+            });
         }
     });
 
     it("handles multi-line message values", async () => {
-        const body = "sender: hhb\nmessage: line one\n  continuation\nchannel: #general\nlink: https://x";
+        const body =
+            "sender: hhb\nmessage: line one\n  continuation\nchannel: #general\nlink: https://x";
         const exit = await run(body);
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
@@ -38,7 +44,9 @@ describe("parseIssueBody", () => {
             expect(exit.value.message).toBe(
                 "Meme-maskinen: Fy føj Rune Sostack Clausen, dit meme var alt for beskidt!\nRune: :sadpepe: :sad-cat-meow: :esben-sad:",
             );
-            expect(exit.value.link).toBe("https://bankdata.slack.com/archives/G01K33ZEMFT/p1787747639249749");
+            expect(exit.value.link).toBe(
+                "https://bankdata.slack.com/archives/G01K33ZEMFT/p1787747639249749",
+            );
         }
     });
 
@@ -77,7 +85,8 @@ describe("parseIssueBody", () => {
     });
 
     it("preserves colons in values", async () => {
-        const body = "sender: hhb\nmessage: time: 12:00\nchannel: #c\nlink: https://example.com/path?q=1";
+        const body =
+            "sender: hhb\nmessage: time: 12:00\nchannel: #c\nlink: https://example.com/path?q=1";
         const exit = await run(body);
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
@@ -134,13 +143,16 @@ describe("parseIssueBody", () => {
 
 describe("AppConfigLayer", () => {
     it("parses saga directives from the issue message", async () => {
-        const issueBody = "sender: hhb\nmessage: read:origin make a sequel write:next\nchannel: #memes\nlink: https://slack.com/x";
-        const provider = ConfigProvider.fromMap(new Map([
-            ["REPO", "henrikgrubbe/memes"],
-            ["SLACK_WEBHOOK_URL", "https://slack.com/webhook"],
-            ["ISSUE_NUMBER", "823"],
-            ["ISSUE_BODY", issueBody],
-        ]));
+        const issueBody =
+            "sender: hhb\nmessage: read:origin make a sequel write:next\nchannel: #memes\nlink: https://slack.com/x";
+        const provider = ConfigProvider.fromMap(
+            new Map([
+                ["REPO", "henrikgrubbe/memes"],
+                ["SLACK_WEBHOOK_URL", "https://slack.com/webhook"],
+                ["ISSUE_NUMBER", "823"],
+                ["ISSUE_BODY", issueBody],
+            ]),
+        );
         const config = await Effect.runPromise(
             AppConfigService.pipe(
                 Effect.provide(AppConfigLayer),

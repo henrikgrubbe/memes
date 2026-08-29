@@ -23,14 +23,17 @@ describe("buildMemePrompt", () => {
     });
 
     it("prepends the canon for continuity and keeps the meme instruction", () => {
-        const prompt = buildMemePrompt("the getaway", {name: "heist", canon: "A gang of cats robs a bank."});
+        const prompt = buildMemePrompt("the getaway", {
+            name: "heist",
+            canon: "A gang of cats robs a bank.",
+        });
         expect(prompt).toContain('Continuing the "heist" saga.');
         expect(prompt).toContain("A gang of cats robs a bank.");
         expect(prompt.endsWith("Make a meme: the getaway.")).toBe(true);
     });
 
     it("never exceeds the prompt cap, trimming the canon to fit", () => {
-        const canon  = "x".repeat(MAX_CANON_CHARS);
+        const canon = "x".repeat(MAX_CANON_CHARS);
         const prompt = buildMemePrompt("short prompt", {name: "s", canon});
         expect(prompt.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS);
         expect(prompt.endsWith("Make a meme: short prompt.")).toBe(true);
@@ -38,7 +41,7 @@ describe("buildMemePrompt", () => {
 
     it("drops the canon entirely when the prompt alone fills the budget", () => {
         const longPrompt = "y".repeat(MAX_PROMPT_CHARS);
-        const prompt     = buildMemePrompt(longPrompt, {name: "s", canon: "some canon"});
+        const prompt = buildMemePrompt(longPrompt, {name: "s", canon: "some canon"});
         expect(prompt.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS);
         expect(prompt).not.toContain("some canon");
     });
@@ -50,11 +53,13 @@ describe("capCanon", () => {
     });
 
     it("truncates canon longer than the ceiling", () => {
-        expect(capCanon("z".repeat(MAX_CANON_CHARS + 500)).length).toBeLessThanOrEqual(MAX_CANON_CHARS);
+        expect(capCanon("z".repeat(MAX_CANON_CHARS + 500)).length).toBeLessThanOrEqual(
+            MAX_CANON_CHARS,
+        );
     });
 
     it("cuts at the last line boundary rather than mid-word", () => {
-        const text   = "a".repeat(MAX_CANON_CHARS - 10) + "\n" + "b".repeat(100);
+        const text = "a".repeat(MAX_CANON_CHARS - 10) + "\n" + "b".repeat(100);
         const capped = capCanon(text);
         expect(capped.length).toBeLessThanOrEqual(MAX_CANON_CHARS);
         expect(capped).toBe("a".repeat(MAX_CANON_CHARS - 10));
@@ -62,7 +67,7 @@ describe("capCanon", () => {
     });
 
     it("hard-cuts when the only boundary is too early to be useful", () => {
-        const text   = "x. " + "y".repeat(MAX_CANON_CHARS + 100); // boundary at index 1
+        const text = "x. " + "y".repeat(MAX_CANON_CHARS + 100); // boundary at index 1
         const capped = capCanon(text);
         expect(capped.length).toBe(MAX_CANON_CHARS);
     });
@@ -78,7 +83,9 @@ describe("appendFallback", () => {
     });
 
     it("caps the result at the ceiling", () => {
-        expect(appendFallback("a".repeat(MAX_CANON_CHARS), "overflow").length).toBe(MAX_CANON_CHARS);
+        expect(appendFallback("a".repeat(MAX_CANON_CHARS), "overflow").length).toBe(
+            MAX_CANON_CHARS,
+        );
     });
 });
 
@@ -139,7 +146,10 @@ describe("foldCanon", () => {
     });
 
     it("clamps to the ceiling when even the shorten pass overshoots", async () => {
-        const result = await run(["x".repeat(MAX_CANON_CHARS + 500), "y".repeat(MAX_CANON_CHARS + 500)]);
+        const result = await run([
+            "x".repeat(MAX_CANON_CHARS + 500),
+            "y".repeat(MAX_CANON_CHARS + 500),
+        ]);
         expect(result.length).toBeLessThanOrEqual(MAX_CANON_CHARS);
     });
 
@@ -157,13 +167,24 @@ describe("foldCanon", () => {
 
 describe("describeModelError", () => {
     it("renders an OpenAI APIError as status + code + message", () => {
-        const err = {status: 404, code: "model_not_found", message: "The model `gpt-4o-mini` does not exist or you do not have access to it."};
-        expect(describeModelError(err)).toBe("HTTP 404 [model_not_found] The model `gpt-4o-mini` does not exist or you do not have access to it.");
+        const err = {
+            status: 404,
+            code: "model_not_found",
+            message: "The model `gpt-4o-mini` does not exist or you do not have access to it.",
+        };
+        expect(describeModelError(err)).toBe(
+            "HTTP 404 [model_not_found] The model `gpt-4o-mini` does not exist or you do not have access to it.",
+        );
     });
 
     it("reads a nested error object shape", () => {
-        const err = {status: 403, error: {code: "insufficient_quota", message: "You exceeded your current quota"}};
-        expect(describeModelError(err)).toBe("HTTP 403 [insufficient_quota] You exceeded your current quota");
+        const err = {
+            status: 403,
+            error: {code: "insufficient_quota", message: "You exceeded your current quota"},
+        };
+        expect(describeModelError(err)).toBe(
+            "HTTP 403 [insufficient_quota] You exceeded your current quota",
+        );
     });
 
     it("uses the message of a plain Error", () => {

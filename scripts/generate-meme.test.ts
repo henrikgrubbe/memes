@@ -1,26 +1,60 @@
 import {Effect, Exit, Layer} from "effect";
 import {describe, expect, it} from "vitest";
-import {AllProvidersExhaustedError, ModerationFailedError, ModerationBlockedError, ProviderError, QuotaExhaustedError, RateLimitError} from "./errors.js";
+import {
+    AllProvidersExhaustedError,
+    ModerationFailedError,
+    ModerationBlockedError,
+    ProviderError,
+    QuotaExhaustedError,
+    RateLimitError,
+} from "./errors.js";
 import {generateImage} from "./generate-meme.js";
 import {makeProvidersLayer, ProvidersServiceTag} from "./providers.js";
 import type {ProviderFn} from "./providers.js";
 
 // ---- Provider mock helpers ------------------------------------------------
 
-const PRIMARY  = "OpenAI";
+const PRIMARY = "OpenAI";
 const FALLBACK = "xAI";
 
-const successFn   = (provider = PRIMARY): ProviderFn => (_) => Effect.succeed({buffer: Buffer.from("hello"), history: [{provider, status: "success"}]});
-const successRlFn = (provider: string, hits: number): ProviderFn => (_) => Effect.succeed({buffer: Buffer.from("hello"), history: [
-    ...Array.from({length: hits}, (): {provider: string; status: "rate-limited"} => ({provider, status: "rate-limited"})),
-    {provider, status: "success"},
-]});
-const modFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ModerationBlockedError({provider, detail: "blocked"}));
-const rlFn        = (provider: string): ProviderFn => (_) => Effect.fail(new RateLimitError({provider, attempts: 10}));
-const errFn       = (provider: string): ProviderFn => (_) => Effect.fail(new ProviderError({provider, detail: "error"}));
-const quotaFn     = (provider: string): ProviderFn => (_) => Effect.fail(new QuotaExhaustedError({provider, detail: "no credits"}));
+const successFn =
+    (provider = PRIMARY): ProviderFn =>
+    (_) =>
+        Effect.succeed({buffer: Buffer.from("hello"), history: [{provider, status: "success"}]});
+const successRlFn =
+    (provider: string, hits: number): ProviderFn =>
+    (_) =>
+        Effect.succeed({
+            buffer: Buffer.from("hello"),
+            history: [
+                ...Array.from({length: hits}, (): {provider: string; status: "rate-limited"} => ({
+                    provider,
+                    status: "rate-limited",
+                })),
+                {provider, status: "success"},
+            ],
+        });
+const modFn =
+    (provider: string): ProviderFn =>
+    (_) =>
+        Effect.fail(new ModerationBlockedError({provider, detail: "blocked"}));
+const rlFn =
+    (provider: string): ProviderFn =>
+    (_) =>
+        Effect.fail(new RateLimitError({provider, attempts: 10}));
+const errFn =
+    (provider: string): ProviderFn =>
+    (_) =>
+        Effect.fail(new ProviderError({provider, detail: "error"}));
+const quotaFn =
+    (provider: string): ProviderFn =>
+    (_) =>
+        Effect.fail(new QuotaExhaustedError({provider, detail: "no credits"}));
 
-const run = <A, E>(effect: Effect.Effect<A, E, ProvidersServiceTag>, layer: Layer.Layer<ProvidersServiceTag>) =>
+const run = <A, E>(
+    effect: Effect.Effect<A, E, ProvidersServiceTag>,
+    layer: Layer.Layer<ProvidersServiceTag>,
+) =>
     Effect.runPromise(Effect.exit(Effect.provide(effect.pipe(Effect.withRandomFixed([0])), layer)));
 
 // ---- generateImage --------------------------------------------------------
@@ -67,11 +101,12 @@ describe("generateImage", () => {
     });
 
     it("preserves metadata from the fallback provider", async () => {
-        const fallbackWithMeta: ProviderFn = (_) => Effect.succeed({
-            buffer:   Buffer.from("hello"),
-            history:  [{provider: FALLBACK, status: "success"}],
-            metadata: {revisedPrompt: "revised"},
-        });
+        const fallbackWithMeta: ProviderFn = (_) =>
+            Effect.succeed({
+                buffer: Buffer.from("hello"),
+                history: [{provider: FALLBACK, status: "success"}],
+                metadata: {revisedPrompt: "revised"},
+            });
         const exit = await run(
             generateImage("make a meme"),
             makeProvidersLayer({[PRIMARY]: modFn(PRIMARY)}, fallbackWithMeta),
@@ -123,7 +158,11 @@ describe("generateImage", () => {
             expect(exit.cause.error).toBeInstanceOf(RateLimitError);
             // @ts-expect-error accessing .error on Cause.Fail
             expect(exit.cause.error.history).toEqual([
-                {provider: PRIMARY, status: "failed", message: `${PRIMARY} rate-limit retries exhausted after 10 attempts`},
+                {
+                    provider: PRIMARY,
+                    status: "failed",
+                    message: `${PRIMARY} rate-limit retries exhausted after 10 attempts`,
+                },
             ]);
         }
     });
@@ -286,12 +325,15 @@ describe("generateImage", () => {
         const SECONDARY = "OpenAI-alt";
         const exit = await run(
             generateImage("make a meme"),
-            makeProvidersLayer({[PRIMARY]: quotaFn(PRIMARY), [SECONDARY]: modFn(SECONDARY)}, successFn(FALLBACK)),
+            makeProvidersLayer(
+                {[PRIMARY]: quotaFn(PRIMARY), [SECONDARY]: modFn(SECONDARY)},
+                successFn(FALLBACK),
+            ),
         );
         expect(Exit.isSuccess(exit)).toBe(true);
         if (Exit.isSuccess(exit)) {
             const {history} = exit.value;
-            expect(history[0]).toMatchObject({provider: PRIMARY, status: "failed"});   // out of credits, skipped
+            expect(history[0]).toMatchObject({provider: PRIMARY, status: "failed"}); // out of credits, skipped
             expect(history[1]).toMatchObject({provider: SECONDARY, status: "failed"}); // moderation blocked
             expect(history.at(-1)).toMatchObject({provider: FALLBACK, status: "success"});
         }

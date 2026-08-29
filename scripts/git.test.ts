@@ -12,13 +12,14 @@ const recordingShell = (commands: string[], rejectedPushes = 0): Shell => {
     let pushes = 0;
 
     return {
-        run: (command) => Effect.suspend(() => {
-            commands.push(command);
-            if (command === "git push origin HEAD" && pushes++ < rejectedPushes) {
-                return Effect.fail(new ShellError({command, detail: "rejected"}));
-            }
-            return Effect.succeed("");
-        }),
+        run: (command) =>
+            Effect.suspend(() => {
+                commands.push(command);
+                if (command === "git push origin HEAD" && pushes++ < rejectedPushes) {
+                    return Effect.fail(new ShellError({command, detail: "rejected"}));
+                }
+                return Effect.succeed("");
+            }),
         runWithBodyFile: () => Effect.die("Unexpected body-file command"),
     };
 };
@@ -28,7 +29,9 @@ const runCommit = (
     stage: Effect.Effect<ReadonlyArray<string>>,
     rejectedPushes = 0,
 ) => {
-    const layer = GitLayer.pipe(Layer.provide(makeShellLayer(recordingShell(commands, rejectedPushes))));
+    const layer = GitLayer.pipe(
+        Layer.provide(makeShellLayer(recordingShell(commands, rejectedPushes))),
+    );
     const program = GitServiceTag.pipe(
         Effect.flatMap((git) => git.commitToMain({message: "Test commit", stage})),
     );

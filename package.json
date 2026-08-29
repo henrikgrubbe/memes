@@ -2,6 +2,8 @@
   "type": "module",
   "scripts": {
     "prepare": "effect-tsgo patch --typescript --no-oxlint",
+    "format": "prettier --write \"scripts/**/*.ts\" \"*.{json,ts}\" \".github/workflows/*.yml\"",
+    "format:check": "prettier --check \"scripts/**/*.ts\" \"*.{json,ts}\" \".github/workflows/*.yml\"",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -16,6 +18,7 @@
     "@types/node": "^26.1.2",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.10",
+    "prettier": "3.6.2",
     "tsx": "^4.23.9",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"

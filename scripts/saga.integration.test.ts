@@ -15,8 +15,15 @@ import {ShellLayer} from "./shell.js";
 // deterministically uses the raw-append fallback (no network).
 
 const dummyConfig: AppConfig = {
-    issueNumber: "42", repo: "o/r", slackWebhookUrl: "", requester: "u",
-    memePrompt: "", channel: "#c", slackLink: "", readSaga: null, writeSaga: null,
+    issueNumber: "42",
+    repo: "o/r",
+    slackWebhookUrl: "",
+    requester: "u",
+    memePrompt: "",
+    channel: "#c",
+    slackLink: "",
+    readSaga: null,
+    writeSaga: null,
 };
 
 const git = (cwd: string, cmd: string) => execSync(`git ${cmd}`, {cwd, stdio: "pipe"}).toString();
@@ -28,9 +35,9 @@ let originalCwd: string;
 
 beforeEach(() => {
     originalCwd = process.cwd();
-    root   = mkdtempSync(join(tmpdir(), "saga-"));
+    root = mkdtempSync(join(tmpdir(), "saga-"));
     remote = join(root, "remote.git");
-    work   = join(root, "work");
+    work = join(root, "work");
     execSync(`git init --bare -b main "${remote}"`);
     execSync(`git clone "${remote}" "${work}"`, {stdio: "pipe"});
     git(work, `config user.name test`);
@@ -54,7 +61,14 @@ const contribute = (saga: string, prompt: string) => {
         NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
         Layer.succeed(AppConfigService, dummyConfig),
     );
-    const layer = SagaLayer.pipe(Layer.provide(Layer.mergeAll(infra, GitLayer.pipe(Layer.provide(ShellLayer.pipe(Layer.provide(infra)))))));
+    const layer = SagaLayer.pipe(
+        Layer.provide(
+            Layer.mergeAll(
+                infra,
+                GitLayer.pipe(Layer.provide(ShellLayer.pipe(Layer.provide(infra)))),
+            ),
+        ),
+    );
     const program = SagaServiceTag.pipe(Effect.flatMap((s) => s.contribute(saga, prompt)));
     return Effect.runPromise(
         program.pipe(

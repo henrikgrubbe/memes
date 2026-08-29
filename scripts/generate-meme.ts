@@ -17,25 +17,20 @@ export const generateImage = (prompt: string, user?: string) =>
         Effect.flatMap(({generateWithFallback}) => generateWithFallback(prompt, user)),
     );
 
-const sagaReadLog = (
-    saga: string | null,
-    canon: string | null,
-): Effect.Effect<void> =>
+const sagaReadLog = (saga: string | null, canon: string | null): Effect.Effect<void> =>
     saga == null
         ? Effect.void
         : Effect.log(
-            canon == null
-                ? `Saga "${saga}" has no canon yet - generating without context.`
-                : `Reading saga "${saga}" (${canon.length} chars of canon).`,
-        );
+              canon == null
+                  ? `Saga "${saga}" has no canon yet - generating without context.`
+                  : `Reading saga "${saga}" (${canon.length} chars of canon).`,
+          );
 
 const sagaContext = (
     saga: string | null,
     canon: string | null,
 ): {name: string; canon: string} | null =>
-    saga != null && canon != null
-        ? {name: saga, canon}
-        : null;
+    saga != null && canon != null ? {name: saga, canon} : null;
 
 // ---- Failure handling -------------------------------------------------------
 
@@ -60,13 +55,8 @@ const program = Effect.gen(function* () {
     const memeId = crypto.randomUUID();
     const memesDir = path.join(process.cwd(), "memes");
     const outFile = path.join(memesDir, `${memeId}.jpg`);
-    const canon = config.readSaga == null
-        ? null
-        : yield* saga.read(config.readSaga);
-    const prompt = buildMemePrompt(
-        config.memePrompt,
-        sagaContext(config.readSaga, canon),
-    );
+    const canon = config.readSaga == null ? null : yield* saga.read(config.readSaga);
+    const prompt = buildMemePrompt(config.memePrompt, sagaContext(config.readSaga, canon));
 
     yield* sagaReadLog(config.readSaga, canon);
     yield* fs.makeDirectory(memesDir, {recursive: true});
@@ -74,10 +64,7 @@ const program = Effect.gen(function* () {
         `Starting generation for issue #${config.issueNumber}: "${config.memePrompt}"`,
     );
 
-    const {buffer, history, metadata} = yield* generateImage(
-        prompt,
-        config.requester,
-    );
+    const {buffer, history, metadata} = yield* generateImage(prompt, config.requester);
 
     const stageMeme = fs.writeFile(outFile, buffer).pipe(
         Effect.orDie,
@@ -100,10 +87,7 @@ const program = Effect.gen(function* () {
         : saga.contribute(config.writeSaga, config.memePrompt);
     yield* Effect.log("Done.");
 }).pipe(
-    Effect.catchTag(
-        "ModerationFailedError",
-        (error) => handleFailure(failureDisposition(error)),
-    ),
+    Effect.catchTag("ModerationFailedError", (error) => handleFailure(failureDisposition(error))),
     Effect.catchAll((error) => handleFailure(failureDisposition(error))),
 );
 
@@ -115,17 +99,9 @@ const PlatformLayer = Layer.mergeAll(
 
 const ShellLive = ShellLayer.pipe(Layer.provide(PlatformLayer));
 const GitLive = GitLayer.pipe(Layer.provide(ShellLive));
-const NotifierLive = NotifierLayer.pipe(
-    Layer.provide(Layer.mergeAll(AppConfigLayer, ShellLive)),
-);
+const NotifierLive = NotifierLayer.pipe(Layer.provide(Layer.mergeAll(AppConfigLayer, ShellLive)));
 const SagaLive = SagaLayer.pipe(
-    Layer.provide(
-        Layer.mergeAll(
-            AppConfigLayer,
-            PlatformLayer,
-            GitLive,
-        ),
-    ),
+    Layer.provide(Layer.mergeAll(AppConfigLayer, PlatformLayer, GitLive)),
 );
 
 const AppLayer = Layer.mergeAll(

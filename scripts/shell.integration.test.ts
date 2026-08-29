@@ -6,10 +6,14 @@ import {ShellError, ShellTag, ShellLayer} from "./shell.js";
 
 // Exercises the real Shell adapter against actual `sh -c` subprocesses.
 
-const layer = ShellLayer.pipe(Layer.provide(Layer.mergeAll(
-    NodeFileSystem.layer,
-    NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
-)));
+const layer = ShellLayer.pipe(
+    Layer.provide(
+        Layer.mergeAll(
+            NodeFileSystem.layer,
+            NodeCommandExecutor.layer.pipe(Layer.provide(NodeFileSystem.layer)),
+        ),
+    ),
+);
 
 const run = <A>(effect: Effect.Effect<A, ShellError, ShellTag>) =>
     Effect.runPromise(effect.pipe(Effect.provide(layer)));
@@ -21,7 +25,9 @@ describe("Shell.run (integration)", () => {
     });
 
     it("passes the string through a real shell (pipes, quoting)", async () => {
-        const out = await run(ShellTag.pipe(Effect.flatMap((s) => s.run("printf 'a\\nb\\nc\\n' | wc -l"))));
+        const out = await run(
+            ShellTag.pipe(Effect.flatMap((s) => s.run("printf 'a\\nb\\nc\\n' | wc -l"))),
+        );
         expect(out.trim()).toBe("3");
     });
 
@@ -36,12 +42,16 @@ describe("Shell.run (integration)", () => {
 describe("Shell.runWithBodyFile (integration)", () => {
     it("writes the body to a temp file the command can read, then cleans it up", async () => {
         let seenPath = "";
-        const out = await run(ShellTag.pipe(Effect.flatMap((s) =>
-            s.runWithBodyFile("txt", "payload-contents", (tmp) => {
-                seenPath = tmp;
-                return `cat ${tmp}`;
-            }),
-        )));
+        const out = await run(
+            ShellTag.pipe(
+                Effect.flatMap((s) =>
+                    s.runWithBodyFile("txt", "payload-contents", (tmp) => {
+                        seenPath = tmp;
+                        return `cat ${tmp}`;
+                    }),
+                ),
+            ),
+        );
 
         expect(out).toBe("payload-contents");
         expect(seenPath).toMatch(/\.txt$/);
@@ -51,24 +61,32 @@ describe("Shell.runWithBodyFile (integration)", () => {
 
     it("gives the temp file the requested extension", async () => {
         let seenPath = "";
-        await run(ShellTag.pipe(Effect.flatMap((s) =>
-            s.runWithBodyFile("json", "{}", (tmp) => {
-                seenPath = tmp;
-                return `true`;
-            }),
-        )));
+        await run(
+            ShellTag.pipe(
+                Effect.flatMap((s) =>
+                    s.runWithBodyFile("json", "{}", (tmp) => {
+                        seenPath = tmp;
+                        return `true`;
+                    }),
+                ),
+            ),
+        );
         expect(seenPath).toMatch(/\.json$/);
     });
 
     it("writes the exact content to the file before running", async () => {
         // Capture the on-disk content from inside the command's lifetime.
         let onDisk = "";
-        await run(ShellTag.pipe(Effect.flatMap((s) =>
-            s.runWithBodyFile("txt", "line1\nline2", (tmp) => {
-                onDisk = readFileSync(tmp, "utf8");
-                return `true`;
-            }),
-        )));
+        await run(
+            ShellTag.pipe(
+                Effect.flatMap((s) =>
+                    s.runWithBodyFile("txt", "line1\nline2", (tmp) => {
+                        onDisk = readFileSync(tmp, "utf8");
+                        return `true`;
+                    }),
+                ),
+            ),
+        );
         expect(onDisk).toBe("line1\nline2");
     });
 });
