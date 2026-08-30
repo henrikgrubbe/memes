@@ -7,6 +7,7 @@ on:
       - "scripts/**"
       - "package.json"
       - "package-lock.json"
+      - ".prettierignore"
       - "tsconfig.json"
       - "vitest.config.ts"
   pull_request:
@@ -14,6 +15,7 @@ on:
       - "scripts/**"
       - "package.json"
       - "package-lock.json"
+      - ".prettierignore"
       - "tsconfig.json"
       - "vitest.config.ts"
 
@@ -29,5 +31,7 @@ jobs:
           node-version: lts/*
 
       - run: npm ci
+
+      - run: npm run format:check
 
       - run: npm test
