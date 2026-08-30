@@ -5,10 +5,12 @@
     "format": "prettier --write \"scripts/**/*.ts\" \"*.{json,ts}\" \".github/workflows/*.yml\"",
     "format:check": "prettier --check \"scripts/**/*.ts\" \"*.{json,ts}\" \".github/workflows/*.yml\"",
     "lint": "oxlint --import-plugin -D import/order --deny-warnings scripts",
+    "lint:ci": "npm run lint -- --format=github",
     "typecheck": "tsc --noEmit",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:ci": "vitest run --coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile.junit=reports/junit.xml --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=html --coverage.reporter=lcovonly",
     "test:watch": "vitest"
   },
   "dependencies": {
