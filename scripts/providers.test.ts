@@ -69,6 +69,12 @@ const rl =
       message: `try again in ${delayS}s`,
       headers: {},
     });
+const rlWithHeader = () => (): Promise<ImageResponse> =>
+  Promise.reject({
+    status: 429,
+    message: "rate limited",
+    headers: { "retry-after": "0" },
+  });
 const mod = () => (): Promise<ImageResponse> =>
   Promise.reject({
     status: 400,
@@ -219,6 +225,25 @@ describe("callWithRetry", () => {
       yield* TestClock.adjust(Duration.seconds(2));
       return yield* Fiber.join(fiber);
     });
+
+    const exit = await runTC(test);
+    expect(Exit.isSuccess(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) {
+      expect(exit.value.history).toEqual([
+        { provider: PROVIDER, status: "rate-limited" },
+        { provider: PROVIDER, status: "success" },
+      ]);
+    }
+  });
+
+  it("uses Retry-After headers when the response message has no delay", async () => {
+    const client = makeClient([rlWithHeader(), ok()]);
+    const test = Effect.gen(function* () {
+      const fiber = yield* Effect.fork(call(client));
+      yield* TestClock.adjust(Duration.seconds(2));
+      return yield* Fiber.join(fiber);
+    });
+
     const exit = await runTC(test);
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {

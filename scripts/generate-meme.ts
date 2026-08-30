@@ -51,7 +51,7 @@ const handleFailure = ({
     return yield* Effect.die("failure-handled");
   });
 
-const program = Effect.gen(function* () {
+export const program = Effect.gen(function* () {
   const config = yield* AppConfigService;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;

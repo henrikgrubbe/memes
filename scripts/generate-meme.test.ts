@@ -204,6 +204,22 @@ describe("generateImage", () => {
     expect(error.fallbackProvider).toBe(FALLBACK);
   });
 
+  it("reports exhausted rate-limit retries from the moderation fallback", async () => {
+    const exit = await run(
+      generateImage("make a meme"),
+      makeProvidersLayer(
+        { [PRIMARY]: moderationBlockedProvider(PRIMARY) },
+        rateLimitedProvider(FALLBACK),
+      ),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    const error = failureOfType(exit, ModerationFailedError);
+    expect(error.fallbackProvider).toBe(FALLBACK);
+    expect(error.fallbackDetail).toBe("rate-limit retries exhausted");
+    expect(error.history).toHaveLength(2);
+  });
+
   // Regression for #706: a primary moderation block that diverts to a fallback
   // which is then out of credits must still report the primary attempt.
   it("carries the primary moderation attempt in history when the fallback is out of credits", async () => {
