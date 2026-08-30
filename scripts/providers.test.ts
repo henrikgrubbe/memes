@@ -19,6 +19,7 @@ import {
   ProvidersLayer,
   ProvidersServiceTag,
 } from "./providers.js";
+import { failureOfType } from "./test-support.js";
 
 const PROVIDER = "test-provider";
 const call = (client: OpenAI) =>
@@ -174,29 +175,19 @@ describe("callWithRetry", () => {
       call(makeClient([() => Promise.resolve({ data: [] })])),
     );
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      expect(exit.cause._tag).toBe("Fail");
-      // @ts-expect-error accessing .error on Cause.Fail
-      expect(exit.cause.error._tag).toBe("ProviderError");
-    }
+    failureOfType(exit, ProviderError);
   });
 
   it("fails immediately with ModerationBlockedError on moderation block", async () => {
     const exit = await run(call(makeClient([mod()])));
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      // @ts-expect-error accessing .error on Cause.Fail
-      expect(exit.cause.error).toBeInstanceOf(ModerationBlockedError);
-    }
+    failureOfType(exit, ModerationBlockedError);
   });
 
   it("fails immediately with ProviderError on generic server error", async () => {
     const exit = await run(call(makeClient([fail("internal error")])));
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      // @ts-expect-error accessing .error on Cause.Fail
-      expect(exit.cause.error).toBeInstanceOf(ProviderError);
-    }
+    failureOfType(exit, ProviderError);
   });
 
   it("turns a null rejection into ProviderError", async () => {
@@ -204,19 +195,13 @@ describe("callWithRetry", () => {
     const exit = await run(call(client));
 
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      // @ts-expect-error accessing .error on Cause.Fail
-      expect(exit.cause.error).toBeInstanceOf(ProviderError);
-    }
+    failureOfType(exit, ProviderError);
   });
 
   it("fails with QuotaExhaustedError on a 403 credit/spending-limit error", async () => {
     const exit = await run(call(makeClient([xaiCredits()])));
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      // @ts-expect-error accessing .error on Cause.Fail
-      expect(exit.cause.error).toBeInstanceOf(QuotaExhaustedError);
-    }
+    failureOfType(exit, QuotaExhaustedError);
   });
 
   it("fails with QuotaExhaustedError without retrying on 429 insufficient_quota", async () => {
@@ -224,10 +209,7 @@ describe("callWithRetry", () => {
     // never reach it.
     const exit = await run(call(makeClient([insufficientQuota(), ok()])));
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      // @ts-expect-error accessing .error on Cause.Fail
-      expect(exit.cause.error).toBeInstanceOf(QuotaExhaustedError);
-    }
+    failureOfType(exit, QuotaExhaustedError);
   });
 
   it("retries after rate limit and succeeds", async () => {
@@ -260,12 +242,8 @@ describe("callWithRetry", () => {
     if (Exit.isSuccess(exit)) {
       const inner = exit.value;
       expect(Exit.isFailure(inner)).toBe(true);
-      if (Exit.isFailure(inner)) {
-        // @ts-expect-error accessing .error on Cause.Fail
-        expect(inner.cause.error).toBeInstanceOf(RateLimitError);
-        // @ts-expect-error accessing .error on Cause.Fail
-        expect(inner.cause.error.attempts).toBe(MAX_RETRIES);
-      }
+      const error = failureOfType(inner, RateLimitError);
+      expect(error.attempts).toBe(MAX_RETRIES);
     }
   });
 

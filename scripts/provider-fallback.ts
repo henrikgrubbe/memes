@@ -24,6 +24,16 @@ type AttemptError =
   | QuotaExhaustedError;
 type HistoryError = Exclude<AttemptError, ModerationBlockedError>;
 
+interface FallbackProvider {
+  readonly name: string;
+  readonly generate: ProviderFn | null;
+}
+
+interface GenerationRequest {
+  readonly prompt: string;
+  readonly user?: string;
+}
+
 const failedAttempt = (provider: string, message: string): HistoryEntry => ({
   provider,
   status: "failed",
@@ -63,13 +73,11 @@ function withAttemptHistory<A>(
 }
 
 function runModerationFallback(
-  fallbackName: string,
+  fallback: FallbackProvider,
   primary: string,
   primaryError: ModerationBlockedError,
   skipped: ReadonlyArray<HistoryEntry>,
-  fallback: ProviderFn | null,
-  prompt: string,
-  user?: string,
+  request: GenerationRequest,
 ): Effect.Effect<GenerationResult, GenerateError> {
   return Effect.gen(function* () {
     const priorHistory = [
@@ -92,7 +100,16 @@ function runModerationFallback(
             : [...priorHistory, fallbackEntry],
       });
 
-    if (fallback == null) {
+    const failFallback = (error: AttemptError, detail: string) =>
+      Effect.fail(
+        moderationFailure(
+          error.provider,
+          detail,
+          failedAttempt(error.provider, error.message),
+        ),
+      );
+
+    if (fallback.generate == null) {
       yield* Effect.log(
         `Moderation block on ${primary} - no fallback provider available.`,
       );
@@ -100,48 +117,23 @@ function runModerationFallback(
     }
 
     yield* Effect.log(
-      `Moderation block on ${primary} - falling back to ${fallbackName}...`,
+      `Moderation block on ${primary} - falling back to ${fallback.name}...`,
     );
 
-    return yield* fallback(prompt, user).pipe(
+    return yield* fallback.generate(request.prompt, request.user).pipe(
       Effect.map((result) => ({
         ...result,
         history: [...priorHistory, ...result.history],
       })),
       Effect.catchTag("ModerationBlockedError", (error) =>
-        Effect.fail(
-          moderationFailure(
-            error.provider,
-            "also blocked by moderation",
-            failedAttempt(error.provider, error.message),
-          ),
-        ),
+        failFallback(error, "also blocked by moderation"),
       ),
       Effect.catchTags({
         QuotaExhaustedError: (error) =>
-          Effect.fail(
-            moderationFailure(
-              error.provider,
-              "out of credits/quota",
-              failedAttempt(error.provider, error.message),
-            ),
-          ),
+          failFallback(error, "out of credits/quota"),
         RateLimitError: (error) =>
-          Effect.fail(
-            moderationFailure(
-              error.provider,
-              "rate-limit retries exhausted",
-              failedAttempt(error.provider, error.message),
-            ),
-          ),
-        ProviderError: (error) =>
-          Effect.fail(
-            moderationFailure(
-              error.provider,
-              error.detail,
-              failedAttempt(error.provider, error.message),
-            ),
-          ),
+          failFallback(error, "rate-limit retries exhausted"),
+        ProviderError: (error) => failFallback(error, error.detail),
       }),
     );
   });
@@ -151,10 +143,8 @@ function tryPrimaries(
   primaries: ProviderPool,
   remaining: ReadonlyArray<string>,
   skipped: ReadonlyArray<HistoryEntry>,
-  fallbackName: string,
-  fallback: ProviderFn | null,
-  prompt: string,
-  user?: string,
+  fallback: FallbackProvider,
+  request: GenerationRequest,
 ): Effect.Effect<GenerationResult, GenerateError> {
   return Effect.gen(function* () {
     if (remaining.length === 0) {
@@ -169,7 +159,7 @@ function tryPrimaries(
     yield* Effect.log(`Selected ${primary} as primary provider...`);
 
     return yield* withAttemptHistory(
-      primaries[primary](prompt, user),
+      primaries[primary](request.prompt, request.user),
       skipped,
       primary,
     ).pipe(
@@ -187,23 +177,13 @@ function tryPrimaries(
                 primaries,
                 rest,
                 error.history ?? skipped,
-                fallbackName,
                 fallback,
-                prompt,
-                user,
+                request,
               ),
             ),
           ),
         ModerationBlockedError: (error) =>
-          runModerationFallback(
-            fallbackName,
-            primary,
-            error,
-            skipped,
-            fallback,
-            prompt,
-            user,
-          ),
+          runModerationFallback(fallback, primary, error, skipped, request),
       }),
     );
   });
@@ -211,18 +191,8 @@ function tryPrimaries(
 
 export function generateWithFallback(
   primaries: ProviderPool,
-  fallbackName: string,
-  fallback: ProviderFn | null,
-  prompt: string,
-  user?: string,
+  fallback: FallbackProvider,
+  request: GenerationRequest,
 ): Effect.Effect<GenerationResult, GenerateError> {
-  return tryPrimaries(
-    primaries,
-    Object.keys(primaries),
-    [],
-    fallbackName,
-    fallback,
-    prompt,
-    user,
-  );
+  return tryPrimaries(primaries, Object.keys(primaries), [], fallback, request);
 }

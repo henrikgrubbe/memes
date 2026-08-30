@@ -11,7 +11,7 @@ export const PRIMARY = "OpenAI";
 export const SECONDARY = "OpenAI-alt";
 export const FALLBACK = "xAI";
 
-export const successFn =
+export const successfulProvider =
   (provider = PRIMARY): ProviderFn =>
   () =>
     Effect.succeed({
@@ -19,7 +19,7 @@ export const successFn =
       history: [{ provider, status: "success" }],
     });
 
-export const successRlFn =
+export const rateLimitedThenSuccessfulProvider =
   (provider: string, hits: number): ProviderFn =>
   () =>
     Effect.succeed({
@@ -36,27 +36,27 @@ export const successRlFn =
       ],
     });
 
-export const modFn =
+export const moderationBlockedProvider =
   (provider: string): ProviderFn =>
   () =>
     Effect.fail(new ModerationBlockedError({ provider, detail: "blocked" }));
 
-export const rlFn =
+export const rateLimitedProvider =
   (provider: string): ProviderFn =>
   () =>
     Effect.fail(new RateLimitError({ provider, attempts: 10 }));
 
-export const errFn =
+export const providerErrorProvider =
   (provider: string): ProviderFn =>
   () =>
     Effect.fail(new ProviderError({ provider, detail: "error" }));
 
-export const quotaFn =
+export const quotaExhaustedProvider =
   (provider: string): ProviderFn =>
   () =>
     Effect.fail(new QuotaExhaustedError({ provider, detail: "no credits" }));
 
-export const failingProvider =
+export const providerFailingWith =
   (error: ProviderError | RateLimitError | QuotaExhaustedError): ProviderFn =>
   () =>
     Effect.fail(error);

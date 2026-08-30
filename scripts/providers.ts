@@ -84,10 +84,11 @@ const makeService = (
   generateWithFallback: (prompt, user) =>
     generateWithFallback(
       primaries,
-      MODERATION_FALLBACK_PROVIDER.name,
-      fallback,
-      prompt,
-      user,
+      {
+        name: MODERATION_FALLBACK_PROVIDER.name,
+        generate: fallback,
+      },
+      { prompt, ...(user == null ? {} : { user }) },
     ),
 });
 
