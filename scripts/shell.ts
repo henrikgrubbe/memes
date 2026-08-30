@@ -1,5 +1,5 @@
 import { Command, CommandExecutor, FileSystem } from "@effect/platform";
-import { Context, Data, Effect, Layer } from "effect";
+import { Chunk, Context, Data, Effect, Layer, Stream } from "effect";
 
 // Deep interface: run a subprocess through `sh -c` and get its trimmed stdout.
 // The sh invocation, output trimming, temp-file bodies (for tools that read a
@@ -32,15 +32,48 @@ export const makeShellLayer = (impl: Shell): Layer.Layer<ShellTag> =>
 
 type ShellDeps = CommandExecutor.CommandExecutor | FileSystem.FileSystem;
 
+const decode = (chunks: Chunk.Chunk<Uint8Array>): string => {
+  const decoder = new TextDecoder();
+  return (
+    Chunk.reduce(
+      chunks,
+      "",
+      (text, bytes) => text + decoder.decode(bytes, { stream: true }),
+    ) + decoder.decode()
+  );
+};
+
 const rawRun = (
   command: string,
 ): Effect.Effect<string, ShellError, CommandExecutor.CommandExecutor> =>
-  Command.make("sh", "-c", command).pipe(
-    Command.string,
+  Effect.scoped(
+    Effect.gen(function* () {
+      const process = yield* Command.start(Command.make("sh", "-c", command));
+      return yield* Effect.all(
+        {
+          stdout: Stream.runCollect(process.stdout).pipe(Effect.map(decode)),
+          stderr: Stream.runCollect(process.stderr).pipe(Effect.map(decode)),
+          exitCode: process.exitCode,
+        },
+        { concurrency: "unbounded" },
+      );
+    }),
+  ).pipe(
     Effect.mapError(
       (error) => new ShellError({ command, detail: String(error) }),
     ),
-    Effect.map((output) => output.trim()),
+    Effect.flatMap(({ exitCode, stderr, stdout }) =>
+      exitCode === 0
+        ? Effect.succeed(stdout.trim())
+        : Effect.fail(
+            new ShellError({
+              command,
+              detail: [`exit code ${exitCode}`, stderr.trim() || stdout.trim()]
+                .filter((detail) => detail !== "")
+                .join(": "),
+            }),
+          ),
+    ),
   );
 
 const rawRunWithBodyFile = (

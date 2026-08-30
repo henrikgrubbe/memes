@@ -1,5 +1,8 @@
 name: Test
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -8,6 +11,7 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".prettierignore"
+      - ".github/workflows/*.yml"
       - "tsconfig.json"
       - "vitest.config.ts"
   pull_request:
@@ -16,20 +20,100 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".prettierignore"
+      - ".github/workflows/*.yml"
       - "tsconfig.json"
       - "vitest.config.ts"
 
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  quality:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Formatting
+            script: format:check
+          - name: Lint
+            script: lint:ci
+          - name: Typecheck
+            script: typecheck
 
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out repository
+        uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
         with:
           node-version: lts/*
+          cache: npm
 
-      - run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-      - run: npm run check
+      - name: Run ${{ matrix.name }}
+        run: npm run ${{ matrix.script }}
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test with coverage
+        run: npm run test:coverage:ci
+
+      - name: Add coverage summary
+        if: ${{ !cancelled() && hashFiles('coverage/coverage-summary.json') != '' }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { appendFileSync, readFileSync } = require("node:fs");
+          const { total } = JSON.parse(
+            readFileSync("coverage/coverage-summary.json", "utf8"),
+          );
+          const rows = ["statements", "branches", "functions", "lines"].map(
+            (metric) =>
+              `| ${metric[0].toUpperCase()}${metric.slice(1)} | ${total[metric].pct}% | ${total[metric].covered} / ${total[metric].total} |`,
+          );
+          appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            [
+              "## Coverage",
+              "",
+              "| Metric | Coverage | Covered |",
+              "| --- | ---: | ---: |",
+              ...rows,
+              "",
+            ].join("\n"),
+          );
+          NODE
+
+      - name: Upload test and coverage reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-and-coverage-reports-${{ github.run_attempt }}
+          path: |
+            reports/junit.xml
+            coverage/
+          if-no-files-found: warn
+          retention-days: 14

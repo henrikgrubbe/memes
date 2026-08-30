@@ -3,6 +3,7 @@ import { NodeCommandExecutor, NodeFileSystem } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { ShellError, ShellTag, ShellLayer } from "./shell.js";
+import { failureOfType } from "./test-support.js";
 
 // Exercises the real Shell adapter against actual `sh -c` subprocesses.
 
@@ -35,11 +36,19 @@ describe("Shell.run (integration)", () => {
     expect(out.trim()).toBe("3");
   });
 
-  it("does not fail on a non-zero exit code (documents Command.string semantics)", async () => {
-    // `false` exits 1 but produces no stdout; Command.string only fails on a
-    // spawn failure, so this resolves to an empty string rather than a ShellError.
-    const out = await run(ShellTag.pipe(Effect.flatMap((s) => s.run("false"))));
-    expect(out).toBe("");
+  it("fails with ShellError when the command exits non-zero", async () => {
+    const exit = await Effect.runPromise(
+      ShellTag.pipe(
+        Effect.flatMap((shell) => shell.run("printf failure >&2; exit 7")),
+        Effect.provide(layer),
+        Effect.exit,
+      ),
+    );
+
+    const error = failureOfType(exit, ShellError);
+    expect(error.command).toBe("printf failure >&2; exit 7");
+    expect(error.detail).toContain("exit code 7");
+    expect(error.detail).toContain("failure");
   });
 });
 
