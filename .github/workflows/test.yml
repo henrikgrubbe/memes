@@ -11,7 +11,7 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".prettierignore"
-      - ".github/workflows/test.yml"
+      - ".github/workflows/*.yml"
       - "tsconfig.json"
       - "vitest.config.ts"
   pull_request:
@@ -20,7 +20,7 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".prettierignore"
-      - ".github/workflows/test.yml"
+      - ".github/workflows/*.yml"
       - "tsconfig.json"
       - "vitest.config.ts"
 

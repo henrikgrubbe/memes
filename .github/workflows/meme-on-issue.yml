@@ -1,33 +1,121 @@
 name: Generate meme for issue
+run-name: Meme #${{ github.event.issue.number }} - ${{ github.event.issue.title }}
 
 on:
   issues:
     types: [opened, reopened]
 
+concurrency:
+  group: meme-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
   generate-meme:
+    name: Generate meme
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
       issues: write
 
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
-      - uses: actions/setup-node@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
         with:
           node-version: lts/*
+          cache: npm
 
-      - run: npm ci
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci
+
+      - name: Validate configuration
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        shell: bash
+        run: |
+          missing=()
+          [[ -n "$OPENAI_API_KEY" ]] || missing+=("OPENAI_API_KEY")
+          [[ -n "$SLACK_WEBHOOK_URL" ]] || missing+=("SLACK_WEBHOOK_URL")
+
+          for secret in "${missing[@]}"; do
+            echo "::error title=Missing workflow secret::$secret is required"
+          done
+
+          if (( ${#missing[@]} > 0 )); then
+            exit 1
+          fi
 
       - name: Generate meme
+        id: generate
+        timeout-minutes: 10
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
-        run: npx tsx scripts/generate-meme.ts
+        shell: bash
+        run: |
+          mkdir -p reports
+          set +e
+          npm exec -- tsx scripts/generate-meme.ts 2>&1 | tee reports/generate-meme.log
+          status=${PIPESTATUS[0]}
+          set -e
+
+          if (( status != 0 )); then
+            echo "::error title=Meme generation failed::Issue #$ISSUE_NUMBER failed. See the run summary and diagnostic log."
+            exit "$status"
+          fi
+
+          echo "::notice title=Meme generated::Issue #$ISSUE_NUMBER completed successfully."
+
+      - name: Add run summary
+        if: ${{ always() }}
+        env:
+          GENERATION_OUTCOME: ${{ steps.generate.outcome }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { appendFileSync, readFileSync } = require("node:fs");
+          const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
+          const outcome = process.env.GENERATION_OUTCOME || "not run";
+          const icon =
+            outcome === "success" ? "✅" : outcome === "failure" ? "❌" : "⚪";
+          const detail =
+            outcome === "success"
+              ? "The generated meme was committed and the issue was updated."
+              : outcome === "failure"
+                ? "Download the diagnostic log artifact below for the complete generator output."
+                : "Generation did not run; inspect the preceding setup and configuration steps.";
+          appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            [
+              `## ${icon} Meme generation ${outcome}`,
+              "",
+              `- **Issue:** [#${event.issue.number}](${event.issue.html_url})`,
+              `- **Triggered by:** @${event.sender.login}`,
+              `- **Attempt:** ${process.env.GITHUB_RUN_ATTEMPT}`,
+              "",
+              detail,
+              "",
+            ].join("\n"),
+          );
+          NODE
+
+      - name: Upload failure diagnostics
+        if: ${{ failure() && hashFiles('reports/generate-meme.log') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: meme-generation-log-issue-${{ github.event.issue.number }}-attempt-${{ github.run_attempt }}
+          path: reports/generate-meme.log
+          if-no-files-found: error
+          retention-days: 14
