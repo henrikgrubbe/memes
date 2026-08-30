@@ -1,24 +1,24 @@
 # Team MAR
 
-**Setting**: The chaotic world of Team MAR at Bankdata, or "meme-fabrikken," is filled with misadventures from failed ceramic cup painting to intense DHL relay runs, ServiceNow training, and Friday Mexican wraps. They revel in distractions, gathering at Yamas in Aarhus. Rune often incites tension with noisy golf ball enthusiasts, obsessively referencing skorstenskage, an ongoing team meme. A running joke finds Rune fumbling nutids-r in Danish. During "war-room mode," he stealthily hides in Jeppe's decorative cups for some peace. Recently, the team discovered that Skjoldbamsen Sigurd is not deceased, but rather has Graves disease, complete with struma and bulging eyes, leading to new jokes about his "striking" appearance.
+**Setting**: In the chaotic world of Team MAR at Bankdata (the "meme-fabrikken"), misadventures unfold from failed ceramic cup painting to DHL relay runs, ServiceNow training, and Friday Mexican wraps. Distractions abound at Yamas in Aarhus, where Rune sparks tension with golf ball enthusiasts, endlessly referencing skorstenskage. A recurring joke involves Rune fumbling nutids-r in Danish. During "war-room mode," he hides in Jeppe's decorative cups for peace. Recently, Skjoldbamsen Sigurd shocked the team by revealing he has Graves disease, with struma and bulging eyes, launching new jokes about his "striking" appearance.
 
 **Characters**:
-- **Rune (Beaufillou)**: The vain francophile Viking, "Head of Vibes," often introduces himself flamboyantly as the "Viking of Vibes," never without his baguette. His nutids-r struggles provide endless amusement. In high-stress moments, he hides in Jeppe's cup.
+- **Rune (Beaufillou)**: The flamboyant "Viking of Vibes," always with his baguette. His nutids-r struggles amuse everyone, and in stress, he retreats to Jeppe's cup.
 
-- **Persille-Sebastian**: The German archaeologist-turned-developer with a vendetta against parsley shortages at Yamas, dubbed "The Parsley Avenger." Disappointed by Træmand’s jokes, he often reacts with head shakes and his classic, "Det er godt nok mærkeligt det der" :sebastian-det-er-godt-nok-maerkeligt:.
+- **Persille-Sebastian**: The German archaeologist-turned-developer, known as "The Parsley Avenger," fights parsley shortages at Yamas. His classic phrase, "Det er godt nok mærkeligt det der," comes after disappointing Træmand’s jokes, now delivered with heightened frequency.
 
-- **Elmast Jeppe**: A towering figure, reminiscent of an electric pylon, he embodies "Metal Elmast" and loves puns related to electricity. His decorative cups serve as Rune's favorite hideout during team discussions.
+- **Elmast Jeppe**: The towering "Metal Elmast," who loves electricity puns and provides Rune with a hiding spot in his decorative cups.
 
-- **Alpaca Alpár**: A stylish Romanian alpaca with a tuxedo cat named Laban, who feels competitive over Rune’s affection for Laban, uniquely blending science and memes in his vibrant introductions.
+- **Alpaca Alpár**: A stylish Romanian alpaca, owner of tuxedo cat Laban, fiercely competes for Rune’s affection, blending science with memes.
 
-- **Skjoldbamsen Sigurd**: The Nordjyde bear who delights in physics as "Sigurd Newton," often munching on Haribo and delivering physics jokes when he introduces himself. Now dealing with Graves disease, his "striking" eyes and new health quirks add to the team's humor.
+- **Skjoldbamsen Sigurd**: The Nordjyde bear, aka "Sigurd Newton," enjoys munching Haribo and cracking physics jokes. His Graves disease adds a humorous twist to his "striking" appearance.
 
-- **Træmand Brandborg**: A wooden elf and Rune's ceramics rival, skilled in hestejazz, who enjoys teasing Sebastian with coriander jokes while presenting himself musically.
+- **Træmand Brandborg**: The wooden elf and Rune's ceramics rival, loves teasing Sebastian with coriander jokes and performs musically.
 
-- **Henrik (Henrik OK)**: The world’s okayest Henrik, whose art school background often clashes with Rune's humor. He introduces himself with a mundane cup fact.
+- **Henrik (Henrik OK)**: The world's okayest Henrik, whose mundane introductions clash with Rune's flair.
 
-- **Gitte**: The assertive product owner who often dominates discussions, overshadowing Jeppe, while succinctly stating team goals.
+- **Gitte**: The assertive product owner who often dominates discussions and succinctly states team goals.
 
-- **Teslatrubaduren Morten**: The Nordjyske hybrid merging hunting and music, known for his catchy Tesla-themed intros, and always scheming the next meme festival.
+- **Teslatrubaduren Morten**: The Nordjyske hybrid melding hunting and music, known for memorable Tesla-themed intros and planning the next meme festival.
 
-In the saga "mar," Team MAR's antics come alive, integrating their quirks into humorous introductions that reinforce their strong camaraderie. Memes are structured as commands: write:<name> for additions; read:<name> for context; saga:<name> for both.
+In the saga "mar," Team MAR's antics shine through their quirky introductions and humor, highlighting their camaraderie. For memes, use commands: write:<name> for additions; read:<name> for context; saga:<name> for both.
