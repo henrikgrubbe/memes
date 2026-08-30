@@ -1,7 +1,6 @@
 import { Command, CommandExecutor, FileSystem } from "@effect/platform";
 import { Context, Data, Effect, Layer } from "effect";
 
-// ---- Shell ------------------------------------------------------------------
 // Deep interface: run a subprocess through `sh -c` and get its trimmed stdout.
 // The sh invocation, output trimming, temp-file bodies (for tools that read a
 // payload from a file, like `gh --body-file` or `curl -d @file`), and error
@@ -28,12 +27,8 @@ export interface Shell {
 
 export class ShellTag extends Context.Tag("Shell")<ShellTag, Shell>() {}
 
-// ---- Test helper ------------------------------------------------------------
-
 export const makeShellLayer = (impl: Shell): Layer.Layer<ShellTag> =>
   Layer.succeed(ShellTag, impl);
-
-// ---- Real adapter -----------------------------------------------------------
 
 type ShellDeps = CommandExecutor.CommandExecutor | FileSystem.FileSystem;
 

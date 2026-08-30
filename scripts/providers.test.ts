@@ -24,8 +24,6 @@ const PROVIDER = "test-provider";
 const call = (client: OpenAI) =>
   callWithRetry(PROVIDER, client, "m", {}, "prompt");
 
-// ---- Mock OpenAI client factory -------------------------------------------
-
 type ImageResponse = {
   data: Array<{ b64_json?: string; revised_prompt?: string }>;
   usage?: {
@@ -42,6 +40,20 @@ function makeClient(responses: Array<() => Promise<ImageResponse>>): OpenAI {
       generate: () => responses[Math.min(i++, responses.length - 1)](),
     },
   } as unknown as OpenAI;
+}
+
+function makeRequestRecorder() {
+  let request: Record<string, unknown> = {};
+  const client = {
+    images: {
+      generate: (params: Record<string, unknown>) => {
+        request = params;
+        return Promise.resolve({ data: [{ b64_json: "aGk=" }] });
+      },
+    },
+  } as unknown as OpenAI;
+
+  return { client, request: () => request } as const;
 }
 
 const ok =
@@ -88,8 +100,6 @@ const runTC = <A, E>(effect: Effect.Effect<A, E, never>) =>
   Effect.runPromise(
     Effect.exit(effect).pipe(Effect.provide(TestContext.TestContext)),
   );
-
-// ---- Tests ----------------------------------------------------------------
 
 describe("callWithRetry", () => {
   it("succeeds on first try", async () => {
@@ -260,80 +270,57 @@ describe("callWithRetry", () => {
   });
 
   it("passes extra params through to the API", async () => {
-    let capturedParams: Record<string, unknown> = {};
-    const client = {
-      images: {
-        generate: (p: Record<string, unknown>) => {
-          capturedParams = p;
-          return Promise.resolve({ data: [{ b64_json: "aGk=" }] });
-        },
-      },
-    } as unknown as OpenAI;
+    const recorder = makeRequestRecorder();
     await run(
       callWithRetry(
         PROVIDER,
-        client,
+        recorder.client,
         "dall-e-3",
         { size: "1024x1024", quality: "hd" },
         "cat",
       ),
     );
-    expect(capturedParams["size"]).toBe("1024x1024");
-    expect(capturedParams["quality"]).toBe("hd");
-    expect(capturedParams["model"]).toBe("dall-e-3");
-    expect(capturedParams["prompt"]).toBe("cat");
+    expect(recorder.request()["size"]).toBe("1024x1024");
+    expect(recorder.request()["quality"]).toBe("hd");
+    expect(recorder.request()["model"]).toBe("dall-e-3");
+    expect(recorder.request()["prompt"]).toBe("cat");
   });
 
   it("passes numeric params (e.g. output_compression) through to the API", async () => {
-    let capturedParams: Record<string, unknown> = {};
-    const client = {
-      images: {
-        generate: (p: Record<string, unknown>) => {
-          capturedParams = p;
-          return Promise.resolve({ data: [{ b64_json: "aGk=" }] });
-        },
-      },
-    } as unknown as OpenAI;
+    const recorder = makeRequestRecorder();
     await run(
       callWithRetry(
         PROVIDER,
-        client,
+        recorder.client,
         "gpt-image-2",
         { output_compression: 80 },
         "cat",
       ),
     );
-    expect(capturedParams["output_compression"]).toBe(80);
+    expect(recorder.request()["output_compression"]).toBe(80);
   });
 
   it("forwards the end-user id as `user` when provided", async () => {
-    let capturedParams: Record<string, unknown> = {};
-    const client = {
-      images: {
-        generate: (p: Record<string, unknown>) => {
-          capturedParams = p;
-          return Promise.resolve({ data: [{ b64_json: "aGk=" }] });
-        },
-      },
-    } as unknown as OpenAI;
+    const recorder = makeRequestRecorder();
     await run(
-      callWithRetry(PROVIDER, client, "gpt-image-2", {}, "cat", "U017Z2VDNJJ"),
+      callWithRetry(
+        PROVIDER,
+        recorder.client,
+        "gpt-image-2",
+        {},
+        "cat",
+        "U017Z2VDNJJ",
+      ),
     );
-    expect(capturedParams["user"]).toBe("U017Z2VDNJJ");
+    expect(recorder.request()["user"]).toBe("U017Z2VDNJJ");
   });
 
   it("omits `user` entirely when no end-user id is provided", async () => {
-    let capturedParams: Record<string, unknown> = {};
-    const client = {
-      images: {
-        generate: (p: Record<string, unknown>) => {
-          capturedParams = p;
-          return Promise.resolve({ data: [{ b64_json: "aGk=" }] });
-        },
-      },
-    } as unknown as OpenAI;
-    await run(callWithRetry(PROVIDER, client, "gpt-image-2", {}, "cat"));
-    expect("user" in capturedParams).toBe(false);
+    const recorder = makeRequestRecorder();
+    await run(
+      callWithRetry(PROVIDER, recorder.client, "gpt-image-2", {}, "cat"),
+    );
+    expect("user" in recorder.request()).toBe(false);
   });
 });
 

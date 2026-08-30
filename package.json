@@ -4,8 +4,9 @@
     "prepare": "effect-tsgo patch --typescript --no-oxlint",
     "format": "prettier --write \"scripts/**/*.ts\" \"*.{json,ts}\" \".github/workflows/*.yml\"",
     "format:check": "prettier --check \"scripts/**/*.ts\" \"*.{json,ts}\" \".github/workflows/*.yml\"",
-    "lint": "oxlint --deny-warnings scripts",
-    "check": "npm run format:check && npm run lint && npm test",
+    "lint": "oxlint --import-plugin -D import/order --deny-warnings scripts",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test",
     "test": "vitest run",
     "test:watch": "vitest"
   },

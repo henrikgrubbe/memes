@@ -9,18 +9,11 @@ import {
 import { generateImage } from "./generate-meme.js";
 import type { HistoryEntry } from "./history.js";
 import {
-  makeProvidersLayer,
-  type ProviderFn,
-  ProvidersServiceTag,
-} from "./providers.js";
-
-const PRIMARY = "OpenAI";
-const SECONDARY = "OpenAI-alt";
-
-const failingProvider =
-  (error: ProviderError | RateLimitError | QuotaExhaustedError): ProviderFn =>
-  () =>
-    Effect.fail(error);
+  failingProvider,
+  PRIMARY,
+  SECONDARY,
+} from "./provider-test-support.js";
+import { makeProvidersLayer, ProvidersServiceTag } from "./providers.js";
 
 const generateFailure = (layer: Layer.Layer<ProvidersServiceTag>) =>
   Effect.runPromise(

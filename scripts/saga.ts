@@ -4,8 +4,6 @@ import { Config, Context, Data, Effect, Layer, Option } from "effect";
 import { AppConfigService } from "./config.js";
 import { GitServiceTag } from "./git.js";
 
-// ---- Tunables ---------------------------------------------------------------
-
 // Hard cap on the image-generation prompt (matches the provider limit).
 export const MAX_PROMPT_CHARS = 4000;
 // Target ceiling for a saga's canon so it always leaves room for the prompt.
@@ -17,8 +15,6 @@ export const COMPRESSION_MODEL = "gpt-4o-mini";
 export const MAX_CANON_TOKENS = 900;
 // Directory (repo-relative) holding one markdown file per saga.
 export const CONTEXT_DIR = "context";
-
-// ---- Pure helpers -----------------------------------------------------------
 
 /** Repo-relative path for a saga's canon file. */
 export const sagaPath = (saga: string): string => `${CONTEXT_DIR}/${saga}.md`;
@@ -186,7 +182,6 @@ export function foldCanon<E>(
   );
 }
 
-// ---- SagaService ------------------------------------------------------------
 // Deep interface: callers read a saga's canon or contribute a meme to it;
 // compression, file I/O, git commit/push and contention handling live behind
 // the seam. Both methods are total - a saga hiccup never breaks meme delivery.
@@ -210,8 +205,6 @@ export const SagaNoOpLayer: Layer.Layer<SagaServiceTag> = makeSagaLayer({
   read: () => Effect.succeed(null),
   contribute: () => Effect.void,
 });
-
-// ---- Real adapter -----------------------------------------------------------
 
 class CompressionError extends Data.TaggedError("CompressionError")<{
   readonly detail: string;

@@ -2,7 +2,6 @@ import { Context, Effect, Layer, Schedule } from "effect";
 import { PushFailedError } from "./errors.js";
 import { ShellTag } from "./shell.js";
 
-// ---- GitService -------------------------------------------------------------
 // Deep interface: the single concurrency-safe way to land a change on `main`.
 // Callers describe *what* to commit via a CommitPlan; identity, rebasing,
 // pushing, retrying, and resetting rejected commits all live behind this seam.
@@ -29,8 +28,6 @@ export class GitServiceTag extends Context.Tag("GitService")<
   GitService
 >() {}
 
-// ---- Test helper ------------------------------------------------------------
-
 /** Build a Layer from a pre-constructed GitService implementation (bypasses real git). */
 export const makeGitLayer = (impl: GitService): Layer.Layer<GitServiceTag> =>
   Layer.succeed(GitServiceTag, impl);
@@ -39,8 +36,6 @@ export const makeGitLayer = (impl: GitService): Layer.Layer<GitServiceTag> =>
 export const GitNoOpLayer: Layer.Layer<GitServiceTag> = makeGitLayer({
   commitToMain: () => Effect.void,
 });
-
-// ---- Real adapter -----------------------------------------------------------
 
 const MAX_PUSH_RETRIES = 5;
 

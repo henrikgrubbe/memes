@@ -3,59 +3,23 @@ import { describe, expect, it } from "vitest";
 import {
   AllProvidersExhaustedError,
   ModerationFailedError,
-  ModerationBlockedError,
   ProviderError,
-  QuotaExhaustedError,
   RateLimitError,
 } from "./errors.js";
 import { generateImage } from "./generate-meme.js";
+import {
+  errFn,
+  FALLBACK,
+  modFn,
+  PRIMARY,
+  quotaFn,
+  rlFn,
+  SECONDARY,
+  successFn,
+  successRlFn,
+} from "./provider-test-support.js";
 import { makeProvidersLayer, ProvidersServiceTag } from "./providers.js";
 import type { ProviderFn } from "./providers.js";
-
-// ---- Provider mock helpers ------------------------------------------------
-
-const PRIMARY = "OpenAI";
-const FALLBACK = "xAI";
-
-const successFn =
-  (provider = PRIMARY): ProviderFn =>
-  () =>
-    Effect.succeed({
-      buffer: Buffer.from("hello"),
-      history: [{ provider, status: "success" }],
-    });
-const successRlFn =
-  (provider: string, hits: number): ProviderFn =>
-  () =>
-    Effect.succeed({
-      buffer: Buffer.from("hello"),
-      history: [
-        ...Array.from(
-          { length: hits },
-          (): { provider: string; status: "rate-limited" } => ({
-            provider,
-            status: "rate-limited",
-          }),
-        ),
-        { provider, status: "success" },
-      ],
-    });
-const modFn =
-  (provider: string): ProviderFn =>
-  () =>
-    Effect.fail(new ModerationBlockedError({ provider, detail: "blocked" }));
-const rlFn =
-  (provider: string): ProviderFn =>
-  () =>
-    Effect.fail(new RateLimitError({ provider, attempts: 10 }));
-const errFn =
-  (provider: string): ProviderFn =>
-  () =>
-    Effect.fail(new ProviderError({ provider, detail: "error" }));
-const quotaFn =
-  (provider: string): ProviderFn =>
-  () =>
-    Effect.fail(new QuotaExhaustedError({ provider, detail: "no credits" }));
 
 const run = <A, E>(
   effect: Effect.Effect<A, E, ProvidersServiceTag>,
@@ -66,8 +30,6 @@ const run = <A, E>(
       Effect.provide(effect.pipe(Effect.withRandomFixed([0])), layer),
     ),
   );
-
-// ---- generateImage --------------------------------------------------------
 
 describe("generateImage", () => {
   it("returns success with primary provider history", async () => {
@@ -209,7 +171,6 @@ describe("generateImage", () => {
   });
 
   it("skips an out-of-credits primary and uses the next available primary", async () => {
-    const SECONDARY = "OpenAI-alt";
     const exit = await run(
       generateImage("make a meme"),
       makeProvidersLayer({
@@ -294,7 +255,6 @@ describe("generateImage", () => {
   });
 
   it("carries the skipped primaries in history on AllProvidersExhaustedError", async () => {
-    const SECONDARY = "OpenAI-alt";
     const exit = await run(
       generateImage("make a meme"),
       makeProvidersLayer({
@@ -333,7 +293,6 @@ describe("generateImage", () => {
   });
 
   it("preserves skipped-primary history when a later primary fails", async () => {
-    const SECONDARY = "OpenAI-alt";
     const exit = await run(
       generateImage("make a meme"),
       makeProvidersLayer({
@@ -359,7 +318,6 @@ describe("generateImage", () => {
   });
 
   it("lists every exhausted primary in AllProvidersExhaustedError", async () => {
-    const SECONDARY = "OpenAI-alt";
     const exit = await run(
       generateImage("make a meme"),
       makeProvidersLayer({
