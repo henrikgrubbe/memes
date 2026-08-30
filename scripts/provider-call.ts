@@ -189,13 +189,10 @@ export function callWithRetry(
     );
     const rateLimitHits = yield* Ref.get(rateLimitHitsRef);
     const history = [
-      ...Array.from(
-        { length: rateLimitHits },
-        (): HistoryEntry => ({
-          provider: providerName,
-          status: "rate-limited",
-        }),
-      ),
+      ...Array.from({ length: rateLimitHits }, (): HistoryEntry => ({
+        provider: providerName,
+        status: "rate-limited",
+      })),
       { provider: providerName, status: "success" },
     ] satisfies ReadonlyArray<HistoryEntry>;
 

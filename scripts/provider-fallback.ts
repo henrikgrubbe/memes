@@ -18,10 +18,7 @@ type GenerateError =
   | RateLimitError
   | QuotaExhaustedError;
 type AttemptError =
-  | ModerationBlockedError
-  | ProviderError
-  | RateLimitError
-  | QuotaExhaustedError;
+  ModerationBlockedError | ProviderError | RateLimitError | QuotaExhaustedError;
 type HistoryError = Exclude<AttemptError, ModerationBlockedError>;
 
 interface FallbackProvider {
