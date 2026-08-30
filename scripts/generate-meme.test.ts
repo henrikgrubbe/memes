@@ -19,14 +19,14 @@ const FALLBACK = "xAI";
 
 const successFn =
   (provider = PRIMARY): ProviderFn =>
-  (_) =>
+  () =>
     Effect.succeed({
       buffer: Buffer.from("hello"),
       history: [{ provider, status: "success" }],
     });
 const successRlFn =
   (provider: string, hits: number): ProviderFn =>
-  (_) =>
+  () =>
     Effect.succeed({
       buffer: Buffer.from("hello"),
       history: [
@@ -42,19 +42,19 @@ const successRlFn =
     });
 const modFn =
   (provider: string): ProviderFn =>
-  (_) =>
+  () =>
     Effect.fail(new ModerationBlockedError({ provider, detail: "blocked" }));
 const rlFn =
   (provider: string): ProviderFn =>
-  (_) =>
+  () =>
     Effect.fail(new RateLimitError({ provider, attempts: 10 }));
 const errFn =
   (provider: string): ProviderFn =>
-  (_) =>
+  () =>
     Effect.fail(new ProviderError({ provider, detail: "error" }));
 const quotaFn =
   (provider: string): ProviderFn =>
-  (_) =>
+  () =>
     Effect.fail(new QuotaExhaustedError({ provider, detail: "no credits" }));
 
 const run = <A, E>(
@@ -116,7 +116,7 @@ describe("generateImage", () => {
   });
 
   it("preserves metadata from the fallback provider", async () => {
-    const fallbackWithMeta: ProviderFn = (_) =>
+    const fallbackWithMeta: ProviderFn = () =>
       Effect.succeed({
         buffer: Buffer.from("hello"),
         history: [{ provider: FALLBACK, status: "success" }],

@@ -1,4 +1,4 @@
-import { ConfigProvider, Duration, Effect, Exit, Fiber, Layer } from "effect";
+import { ConfigProvider, Duration, Effect, Exit, Fiber } from "effect";
 import * as TestClock from "effect/TestClock";
 import * as TestContext from "effect/TestContext";
 import type OpenAI from "openai";
