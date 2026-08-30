@@ -1,4 +1,4 @@
-import { ConfigProvider, Duration, Effect, Exit, Fiber, Layer } from "effect";
+import { ConfigProvider, Duration, Effect, Exit, Fiber } from "effect";
 import * as TestClock from "effect/TestClock";
 import * as TestContext from "effect/TestContext";
 import type OpenAI from "openai";
@@ -19,12 +19,11 @@ import {
   ProvidersLayer,
   ProvidersServiceTag,
 } from "./providers.js";
+import { failureOfType } from "./test-support.js";
 
 const PROVIDER = "test-provider";
 const call = (client: OpenAI) =>
   callWithRetry(PROVIDER, client, "m", {}, "prompt");
-
-// ---- Mock OpenAI client factory -------------------------------------------
 
 type ImageResponse = {
   data: Array<{ b64_json?: string; revised_prompt?: string }>;
@@ -42,6 +41,20 @@ function makeClient(responses: Array<() => Promise<ImageResponse>>): OpenAI {
       generate: () => responses[Math.min(i++, responses.length - 1)](),
     },
   } as unknown as OpenAI;
+}
+
+function makeRequestRecorder() {
+  let request: Record<string, unknown> = {};
+  const client = {
+    images: {
+      generate: (params: Record<string, unknown>) => {
+        request = params;
+        return Promise.resolve({ data: [{ b64_json: "aGk=" }] });
+      },
+    },
+  } as unknown as OpenAI;
+
+  return { client, request: () => request } as const;
 }
 
 const ok =
@@ -88,8 +101,6 @@ const runTC = <A, E>(effect: Effect.Effect<A, E, never>) =>
   Effect.runPromise(
     Effect.exit(effect).pipe(Effect.provide(TestContext.TestContext)),
   );
-
-// ---- Tests ----------------------------------------------------------------
 
 describe("callWithRetry", () => {
   it("succeeds on first try", async () => {
@@ -164,29 +175,19 @@ describe("callWithRetry", () => {
       call(makeClient([() => Promise.resolve({ data: [] })])),
     );
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      expect(exit.cause._tag).toBe("Fail");
-      // @ts-expect-error accessing .error on Cause.Fail
-      expect(exit.cause.error._tag).toBe("ProviderError");
-    }
+    failureOfType(exit, ProviderError);
   });
 
   it("fails immediately with ModerationBlockedError on moderation block", async () => {
     const exit = await run(call(makeClient([mod()])));
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      // @ts-expect-error accessing .error on Cause.Fail
-      expect(exit.cause.error).toBeInstanceOf(ModerationBlockedError);
-    }
+    failureOfType(exit, ModerationBlockedError);
   });
 
   it("fails immediately with ProviderError on generic server error", async () => {
     const exit = await run(call(makeClient([fail("internal error")])));
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      // @ts-expect-error accessing .error on Cause.Fail
-      expect(exit.cause.error).toBeInstanceOf(ProviderError);
-    }
+    failureOfType(exit, ProviderError);
   });
 
   it("turns a null rejection into ProviderError", async () => {
@@ -194,19 +195,13 @@ describe("callWithRetry", () => {
     const exit = await run(call(client));
 
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      // @ts-expect-error accessing .error on Cause.Fail
-      expect(exit.cause.error).toBeInstanceOf(ProviderError);
-    }
+    failureOfType(exit, ProviderError);
   });
 
   it("fails with QuotaExhaustedError on a 403 credit/spending-limit error", async () => {
     const exit = await run(call(makeClient([xaiCredits()])));
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      // @ts-expect-error accessing .error on Cause.Fail
-      expect(exit.cause.error).toBeInstanceOf(QuotaExhaustedError);
-    }
+    failureOfType(exit, QuotaExhaustedError);
   });
 
   it("fails with QuotaExhaustedError without retrying on 429 insufficient_quota", async () => {
@@ -214,10 +209,7 @@ describe("callWithRetry", () => {
     // never reach it.
     const exit = await run(call(makeClient([insufficientQuota(), ok()])));
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      // @ts-expect-error accessing .error on Cause.Fail
-      expect(exit.cause.error).toBeInstanceOf(QuotaExhaustedError);
-    }
+    failureOfType(exit, QuotaExhaustedError);
   });
 
   it("retries after rate limit and succeeds", async () => {
@@ -250,90 +242,63 @@ describe("callWithRetry", () => {
     if (Exit.isSuccess(exit)) {
       const inner = exit.value;
       expect(Exit.isFailure(inner)).toBe(true);
-      if (Exit.isFailure(inner)) {
-        // @ts-expect-error accessing .error on Cause.Fail
-        expect(inner.cause.error).toBeInstanceOf(RateLimitError);
-        // @ts-expect-error accessing .error on Cause.Fail
-        expect(inner.cause.error.attempts).toBe(MAX_RETRIES);
-      }
+      const error = failureOfType(inner, RateLimitError);
+      expect(error.attempts).toBe(MAX_RETRIES);
     }
   });
 
   it("passes extra params through to the API", async () => {
-    let capturedParams: Record<string, unknown> = {};
-    const client = {
-      images: {
-        generate: (p: Record<string, unknown>) => {
-          capturedParams = p;
-          return Promise.resolve({ data: [{ b64_json: "aGk=" }] });
-        },
-      },
-    } as unknown as OpenAI;
+    const recorder = makeRequestRecorder();
     await run(
       callWithRetry(
         PROVIDER,
-        client,
+        recorder.client,
         "dall-e-3",
         { size: "1024x1024", quality: "hd" },
         "cat",
       ),
     );
-    expect(capturedParams["size"]).toBe("1024x1024");
-    expect(capturedParams["quality"]).toBe("hd");
-    expect(capturedParams["model"]).toBe("dall-e-3");
-    expect(capturedParams["prompt"]).toBe("cat");
+    expect(recorder.request()["size"]).toBe("1024x1024");
+    expect(recorder.request()["quality"]).toBe("hd");
+    expect(recorder.request()["model"]).toBe("dall-e-3");
+    expect(recorder.request()["prompt"]).toBe("cat");
   });
 
   it("passes numeric params (e.g. output_compression) through to the API", async () => {
-    let capturedParams: Record<string, unknown> = {};
-    const client = {
-      images: {
-        generate: (p: Record<string, unknown>) => {
-          capturedParams = p;
-          return Promise.resolve({ data: [{ b64_json: "aGk=" }] });
-        },
-      },
-    } as unknown as OpenAI;
+    const recorder = makeRequestRecorder();
     await run(
       callWithRetry(
         PROVIDER,
-        client,
+        recorder.client,
         "gpt-image-2",
         { output_compression: 80 },
         "cat",
       ),
     );
-    expect(capturedParams["output_compression"]).toBe(80);
+    expect(recorder.request()["output_compression"]).toBe(80);
   });
 
   it("forwards the end-user id as `user` when provided", async () => {
-    let capturedParams: Record<string, unknown> = {};
-    const client = {
-      images: {
-        generate: (p: Record<string, unknown>) => {
-          capturedParams = p;
-          return Promise.resolve({ data: [{ b64_json: "aGk=" }] });
-        },
-      },
-    } as unknown as OpenAI;
+    const recorder = makeRequestRecorder();
     await run(
-      callWithRetry(PROVIDER, client, "gpt-image-2", {}, "cat", "U017Z2VDNJJ"),
+      callWithRetry(
+        PROVIDER,
+        recorder.client,
+        "gpt-image-2",
+        {},
+        "cat",
+        "U017Z2VDNJJ",
+      ),
     );
-    expect(capturedParams["user"]).toBe("U017Z2VDNJJ");
+    expect(recorder.request()["user"]).toBe("U017Z2VDNJJ");
   });
 
   it("omits `user` entirely when no end-user id is provided", async () => {
-    let capturedParams: Record<string, unknown> = {};
-    const client = {
-      images: {
-        generate: (p: Record<string, unknown>) => {
-          capturedParams = p;
-          return Promise.resolve({ data: [{ b64_json: "aGk=" }] });
-        },
-      },
-    } as unknown as OpenAI;
-    await run(callWithRetry(PROVIDER, client, "gpt-image-2", {}, "cat"));
-    expect("user" in capturedParams).toBe(false);
+    const recorder = makeRequestRecorder();
+    await run(
+      callWithRetry(PROVIDER, recorder.client, "gpt-image-2", {}, "cat"),
+    );
+    expect("user" in recorder.request()).toBe(false);
   });
 });
 

@@ -11,8 +11,6 @@ import {
 } from "./notification-format.js";
 import { type Shell, ShellTag } from "./shell.js";
 
-// ---- Types ------------------------------------------------------------------
-
 const SlackPayloadSchema = Schema.Struct({
   status: Schema.Literal("success", "failure"),
   image_url: Schema.String,
@@ -33,7 +31,6 @@ export interface NotifySuccessParams {
   readonly metadata?: GenerationMetadata;
 }
 
-// ---- NotifierService --------------------------------------------------------
 // Deep interface: callers describe what happened; delivery orchestration
 // remains behind this seam.
 
@@ -50,8 +47,6 @@ export class NotifierServiceTag extends Context.Tag("NotifierService")<
   NotifierServiceTag,
   NotifierService
 >() {}
-
-// ---- Real adapter -----------------------------------------------------------
 
 const postComment = (
   config: AppConfig,

@@ -6,6 +6,7 @@ import {
   IssueFields,
   parseIssueBody,
 } from "./config.js";
+import { failureOrThrow } from "./test-support.js";
 
 const run = (body: string) =>
   Effect.runPromise(Effect.exit(parseIssueBody(body)));
@@ -130,10 +131,7 @@ describe("parseIssueBody", () => {
     const body = "sender: hhb\nmessage: hi\nchannel: #c";
     const exit = await run(body);
     expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      // @ts-expect-error accessing .error on Cause.Fail
-      expect(exit.cause.error._tag).toBe("ParseError");
-    }
+    expect(failureOrThrow(exit)._tag).toBe("ParseError");
   });
 
   it("fails when a field value is only whitespace", async () => {

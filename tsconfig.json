@@ -28,7 +28,7 @@
           "globalTimersInEffect": "warning",
           "instanceOfSchema": "warning",
           "newPromise": "warning",
-          "nodeBuiltinImport": "warning",
+          "nodeBuiltinImport": "off",
           "preferSchemaOverJson": "warning",
           "processEnv": "warning",
           "processEnvInEffect": "warning",

@@ -9,18 +9,11 @@ import {
 import { generateImage } from "./generate-meme.js";
 import type { HistoryEntry } from "./history.js";
 import {
-  makeProvidersLayer,
-  type ProviderFn,
-  ProvidersServiceTag,
-} from "./providers.js";
-
-const PRIMARY = "OpenAI";
-const SECONDARY = "OpenAI-alt";
-
-const failingProvider =
-  (error: ProviderError | RateLimitError | QuotaExhaustedError): ProviderFn =>
-  () =>
-    Effect.fail(error);
+  PRIMARY,
+  providerFailingWith,
+  SECONDARY,
+} from "./provider-test-support.js";
+import { makeProvidersLayer, ProvidersServiceTag } from "./providers.js";
 
 const generateFailure = (layer: Layer.Layer<ProvidersServiceTag>) =>
   Effect.runPromise(
@@ -35,7 +28,7 @@ describe("provider error history", () => {
   it("reconstructs ProviderError with the failed attempt", async () => {
     const error = await generateFailure(
       makeProvidersLayer({
-        [PRIMARY]: failingProvider(
+        [PRIMARY]: providerFailingWith(
           new ProviderError({ provider: PRIMARY, detail: "unavailable" }),
         ),
       }),
@@ -54,7 +47,7 @@ describe("provider error history", () => {
   it("reconstructs RateLimitError with the failed attempt", async () => {
     const error = await generateFailure(
       makeProvidersLayer({
-        [PRIMARY]: failingProvider(
+        [PRIMARY]: providerFailingWith(
           new RateLimitError({ provider: PRIMARY, attempts: 10 }),
         ),
       }),
@@ -76,7 +69,7 @@ describe("provider error history", () => {
     ];
     const error = await generateFailure(
       makeProvidersLayer({
-        [PRIMARY]: failingProvider(
+        [PRIMARY]: providerFailingWith(
           new ProviderError({
             provider: PRIMARY,
             detail: "unavailable",
@@ -100,7 +93,7 @@ describe("provider error history", () => {
   it("reconstructs QuotaExhaustedError before reporting all primaries exhausted", async () => {
     const error = await generateFailure(
       makeProvidersLayer({
-        [PRIMARY]: failingProvider(
+        [PRIMARY]: providerFailingWith(
           new QuotaExhaustedError({ provider: PRIMARY, detail: "no credits" }),
         ),
       }),
@@ -119,10 +112,10 @@ describe("provider error history", () => {
   it("keeps skipped-primary history before the terminal attempt", async () => {
     const error = await generateFailure(
       makeProvidersLayer({
-        [PRIMARY]: failingProvider(
+        [PRIMARY]: providerFailingWith(
           new QuotaExhaustedError({ provider: PRIMARY, detail: "no credits" }),
         ),
-        [SECONDARY]: failingProvider(
+        [SECONDARY]: providerFailingWith(
           new ProviderError({ provider: SECONDARY, detail: "unavailable" }),
         ),
       }),

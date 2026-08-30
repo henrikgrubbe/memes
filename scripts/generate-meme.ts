@@ -14,8 +14,6 @@ import { ProvidersLayer, ProvidersServiceTag } from "./providers.js";
 import { buildMemePrompt, SagaLayer, SagaServiceTag } from "./saga.js";
 import { ShellLayer } from "./shell.js";
 
-// ---- Pipeline steps ---------------------------------------------------------
-
 export const generateImage = (prompt: string, user?: string) =>
   ProvidersServiceTag.pipe(
     Effect.flatMap(({ generateWithFallback }) =>
@@ -41,8 +39,6 @@ const sagaContext = (
 ): { name: string; canon: string } | null =>
   saga != null && canon != null ? { name: saga, canon } : null;
 
-// ---- Failure handling -------------------------------------------------------
-
 const handleFailure = ({
   message,
   closeNotPlanned,
@@ -54,8 +50,6 @@ const handleFailure = ({
     yield* notifier.notifyFailure(message, closeNotPlanned, history);
     return yield* Effect.die("failure-handled");
   });
-
-// ---- Program ----------------------------------------------------------------
 
 const program = Effect.gen(function* () {
   const config = yield* AppConfigService;
