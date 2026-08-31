@@ -1,11 +1,11 @@
 # Team MAR
 
-**Setting**: In the chaotic world of Team MAR at Bankdata (the "meme-fabrikken"), misadventures unfold from failed ceramic cup painting to DHL relay runs, ServiceNow training, and Friday Mexican wraps. At Yamas in Aarhus, Rune tensions with golf enthusiasts while fumbly referencing skorstenskage. His nutids-r struggles provide comic relief, often retreating to Jeppe's decorative cups in "war-room mode." Recently, Skjoldbamsen Sigurd’s revelation of his Graves disease sparked new jokes about his "striking" appearance, with AI noting he always looks very (!) shocked. Laban, Alpaca Alpár’s tuxedo cat celebrated for his charm, has a 45% chance that his bow tie is an actual butterfly fluttering around the office.
+**Setting**: In the chaotic world of Team MAR at Bankdata (the "meme-fabrikken"), misadventures unfold from failed ceramic cup painting to DHL relay runs, ServiceNow training, and Friday Mexican wraps. At Yamas in Aarhus, Rune tensions with golf enthusiasts while fumbly referencing skorstenskage. His nutids-r struggles provide comic relief, often retreating to Jeppe's decorative cups in "war-room mode." Recently, Skjoldbamsen Sigurd’s revelation of his Graves disease sparked new jokes about his "striking" appearance, with AI noting he always looks very (!) shocked. Laban, Alpaca Alpár’s tuxedo cat celebrated for his charm, has a 45% chance that his bow tie is an actual butterfly fluttering around the office. Persille-Sebastian frequently asks humorous questions like "Hvorfor er Gitte en bamse?" "Hvorfor er det en giraf?" and "Hvorfor er der altid persille på maden i kantinen?" adding to the team's quirky dynamics.
 
 **Characters**:
 - **Rune (Beaufillou)**: The flamboyant "Viking of Vibes," always with his baguette, amusing everyone with his nutids-r struggles and retreating to Jeppe’s cup when stressed.
 
-- **Persille-Sebastian**: The "Parsley Avenger" and German archaeologist-turned-developer, known for his "Det er godt nok mærkeligt det der" after Træmand's corny jokes.
+- **Persille-Sebastian**: The "Parsley Avenger" and German archaeologist-turned-developer, known for his inquisitive nature and questions that often bewilder, like "Hvorfor er Gitte en bamse?" and "Hvorfor er der altid persille på maden i kantinen?" He often responds with "Det er godt nok mærkeligt det der" after Træmand's corny jokes.
 
 - **Elmast Jeppe**: The towering "Metal Elmast," loves electricity puns and provides a hiding spot in his decorative cups for Rune.
 
@@ -19,7 +19,7 @@
 
 - **Henrik (Henrik OK)**: The world's okayest Henrik, whose mundane introductions contrast with Rune's flamboyance.
 
-- **Gitte**: The assertive product owner dominating discussions and succinctly stating team goals.
+- **Gitte**: The assertive product owner dominating discussions and succinctly stating team goals, often the subject of Sebastian's curious inquiries.
 
 - **Teslatrubaduren Morten**: The Nordjyske hybrid of hunting and music, famed for memorable Tesla-themed intros and planning the next meme festival.
 
