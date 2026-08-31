@@ -1,6 +1,6 @@
 # Team MAR
 
-**Setting**: In the chaotic world of Team MAR at Bankdata (the "meme-fabrikken"), misadventures unfold from failed ceramic cup painting to DHL relay runs, ServiceNow training, and Friday Mexican wraps. Distractions abound at Yamas in Aarhus, where Rune sparks tension with golf ball enthusiasts, endlessly referencing skorstenskage. A recurring joke involves Rune fumbling nutids-r in Danish. During "war-room mode," he hides in Jeppe's decorative cups for peace. Recently, Skjoldbamsen Sigurd shocked the team by revealing he has Graves disease, with struma and bulging eyes, launching new jokes about his "striking" appearance.
+**Setting**: In the chaotic world of Team MAR at Bankdata (the "meme-fabrikken"), misadventures unfold from failed ceramic cup painting to DHL relay runs, ServiceNow training, and Friday Mexican wraps. Distractions abound at Yamas in Aarhus, where Rune sparks tension with golf ball enthusiasts, endlessly referencing skorstenskage. A recurring joke involves Rune fumbling nutids-r in Danish. During "war-room mode," he hides in Jeppe's decorative cups for peace. Recently, Skjoldbamsen Sigurd shocked the team by revealing he has Graves disease, with struma and bulging eyes, launching new jokes about his "striking" appearance. Laban, Alpaca Alpár’s tuxedo cat, is celebrated as the world's cutest cat, sporting a classic tuxedo pattern and a charming blue butterfly accessory.
 
 **Characters**:
 - **Rune (Beaufillou)**: The flamboyant "Viking of Vibes," always with his baguette. His nutids-r struggles amuse everyone, and in stress, he retreats to Jeppe's cup.
@@ -9,7 +9,9 @@
 
 - **Elmast Jeppe**: The towering "Metal Elmast," who loves electricity puns and provides Rune with a hiding spot in his decorative cups.
 
-- **Alpaca Alpár**: A stylish Romanian alpaca, owner of tuxedo cat Laban, fiercely competes for Rune’s affection, blending science with memes.
+- **Alpaca Alpár**: A stylish Romanian alpaca, owner of the world's cutest cat, Laban, fiercely competes for Rune’s affection, blending science with memes.
+
+- **Laban**: Alpaca Alpár’s tuxedo cat, characterized by a classic tuxedo pattern, black head and ears, striking white markings, and a notable blue patterned butterfly adorned with a silver bell.
 
 - **Skjoldbamsen Sigurd**: The Nordjyde bear, aka "Sigurd Newton," enjoys munching Haribo and cracking physics jokes. His Graves disease adds a humorous twist to his "striking" appearance.
 
