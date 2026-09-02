@@ -174,7 +174,7 @@ describe("formatSlackSuccessPayload", () => {
     });
     expect(payload.status).toBe("success");
     expect(payload.provider).toBe("OpenAI");
-    expect(payload.image_url).toBe(
+    expect(payload.content_url).toBe(
       "https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg",
     );
     expect(payload.cost_cents).toBe("0.108¢");
@@ -198,7 +198,7 @@ describe("formatSlackFailurePayload", () => {
 
     expect(payload).toEqual({
       status: "failure",
-      image_url: "",
+      content_url: "",
       title: "make a meme",
       requester: "U123",
       channel: "#memes",
@@ -216,10 +216,12 @@ describe("formatSlackSagaUpdatePayload", () => {
         updated: true,
         requester: "U123",
         channel: "#memes",
+        repo: "henrikgrubbe/memes",
       }),
     ).toEqual({
       status: "saga-updated",
-      image_url: "",
+      content_url:
+        "https://github.com/henrikgrubbe/memes/blob/main/context/heist.md",
       title: 'Saga "heist": The cats cancel the robbery.',
       requester: "U123",
       channel: "#memes",
@@ -228,14 +230,16 @@ describe("formatSlackSagaUpdatePayload", () => {
   });
 
   it("uses a distinct failure status when the saga update does not land", () => {
-    expect(
-      formatSlackSagaUpdatePayload({
-        saga: "heist",
-        contribution: "The cats cancel the robbery.",
-        updated: false,
-        requester: "U123",
-        channel: "#memes",
-      }).status,
-    ).toBe("saga-update-failed");
+    const payload = formatSlackSagaUpdatePayload({
+      saga: "heist",
+      contribution: "The cats cancel the robbery.",
+      updated: false,
+      requester: "U123",
+      channel: "#memes",
+      repo: "henrikgrubbe/memes",
+    });
+
+    expect(payload.status).toBe("saga-update-failed");
+    expect(payload.content_url).toBe("");
   });
 });

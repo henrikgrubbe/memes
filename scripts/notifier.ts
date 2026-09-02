@@ -20,7 +20,7 @@ const SlackPayloadSchema = Schema.Struct({
     "saga-updated",
     "saga-update-failed",
   ),
-  image_url: Schema.String,
+  content_url: Schema.String,
   title: Schema.String,
   requester: Schema.String,
   channel: Schema.String,
@@ -164,6 +164,7 @@ const makeNotifier = (config: AppConfig, shell: Shell): NotifierService => ({
           updated,
           requester: config.requester,
           channel: config.channel,
+          repo: config.repo,
         }),
       );
     }),
