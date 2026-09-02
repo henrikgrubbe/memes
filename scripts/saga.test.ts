@@ -14,33 +14,36 @@ import {
 } from "./saga.js";
 
 describe("buildMemePrompt", () => {
-  it("wraps a bare prompt when no saga canon is supplied", () => {
-    expect(buildMemePrompt("a cat on a bike")).toBe(
-      "Make a meme: a cat on a bike.",
-    );
+  it("keeps a bare request unchanged when no saga canon is supplied", () => {
+    expect(buildMemePrompt("a cat on a bike")).toBe("a cat on a bike");
   });
 
   it("ignores an empty canon", () => {
     expect(buildMemePrompt("a cat", { name: "heist", canon: "   " })).toBe(
-      "Make a meme: a cat.",
+      "a cat",
     );
   });
 
-  it("prepends the canon for continuity and keeps the meme instruction", () => {
+  it("distinguishes continuity background from the current request", () => {
     const prompt = buildMemePrompt("the getaway", {
       name: "heist",
       canon: "A gang of cats robs a bank.",
     });
-    expect(prompt).toContain('Continuing the "heist" saga.');
-    expect(prompt).toContain("A gang of cats robs a bank.");
-    expect(prompt.endsWith("Make a meme: the getaway.")).toBe(true);
+    expect(prompt).toBe(
+      "Background for continuity:\n" +
+        "A gang of cats robs a bank.\n\n" +
+        "Current request - depict this now:\n" +
+        "the getaway",
+    );
   });
 
   it("never exceeds the prompt cap, trimming the canon to fit", () => {
     const canon = "x".repeat(MAX_CANON_CHARS);
     const prompt = buildMemePrompt("short prompt", { name: "s", canon });
     expect(prompt.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS);
-    expect(prompt.endsWith("Make a meme: short prompt.")).toBe(true);
+    expect(
+      prompt.endsWith("Current request - depict this now:\nshort prompt"),
+    ).toBe(true);
   });
 
   it("drops the canon entirely when the prompt alone fills the budget", () => {
@@ -115,7 +118,7 @@ describe("buildCompressionMessages", () => {
     );
     expect(system.content).toContain("without keeping obsolete versions");
     expect(user.content).toContain("This is the story so far:");
-    expect(user.content).toContain("Now this has happened:");
+    expect(user.content).toContain("New contribution:");
     expect(user.content).toContain("Update the story");
   });
 

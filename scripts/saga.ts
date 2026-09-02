@@ -43,19 +43,19 @@ export function capCanon(text: string): string {
 
 /**
  * Assemble the final image prompt. When a saga canon is supplied it is
- * prepended for continuity, but the meme instruction and user prompt are kept
- * whole and the canon is trimmed to whatever budget remains under the cap.
+ * supplied as background, while the current request remains the primary image
+ * instruction. The canon is trimmed to whatever budget remains under the cap.
  */
 export function buildMemePrompt(
   memePrompt: string,
   saga?: { readonly name: string; readonly canon: string } | null,
 ): string {
-  const base = `Make a meme: ${memePrompt}.`;
+  const base = memePrompt;
   if (saga == null || saga.canon.trim() === "") {
     return base.slice(0, MAX_PROMPT_CHARS);
   }
-  const prefix = `Continuing the "${saga.name}" saga. Canon so far:\n`;
-  const suffix = `\n\n${base}`;
+  const prefix = `Background for continuity:\n`;
+  const suffix = `\n\nCurrent request - depict this now:\n${base}`;
   const budget = MAX_PROMPT_CHARS - prefix.length - suffix.length;
 
   if (budget <= 0) {
@@ -71,7 +71,7 @@ interface ChatMessage {
   readonly content: string;
 }
 
-/** Build the chat messages that fold a new meme idea into a saga's canon. */
+/** Build the chat messages that fold a new contribution into a saga's canon. */
 export function buildCompressionMessages(
   saga: string,
   canon: string,
@@ -79,15 +79,15 @@ export function buildCompressionMessages(
 ): ReadonlyArray<ChatMessage> {
   const system = [
     `You maintain the canon: the story so far for the saga "${saga}".`,
-    `Update the existing canon with ONE new meme idea that has happened.`,
+    `Update the existing canon with ONE new contribution.`,
     `The updated canon must:`,
-    `- include the important information from the new idea,`,
+    `- include the important information from the new contribution,`,
     `- preserve recurring characters, running jokes, locations and key story beats,`,
     `- correct, replace, invalidate, resolve or remove existing information when the`,
-    `  new idea requires it, without keeping obsolete versions,`,
+    `  new contribution requires it, without keeping obsolete versions,`,
     `- remove other information only when it is obsolete or necessary to stay under`,
     `  ${MAX_CANON_CHARS} characters,`,
-    `- use the same language as the ideas.`,
+    `- use the same language as the contribution.`,
     `Format the canon as concise Markdown. Use only useful headings and short bullet`,
     `lists. Do not use tables, deep nesting, emphasis or decorative formatting.`,
     `Preserve the existing structure when practical.`,
@@ -97,7 +97,7 @@ export function buildCompressionMessages(
     `This is the story so far:`,
     canon.trim() === "" ? "(empty - this is the first entry)" : canon,
     ``,
-    `Now this has happened:`,
+    `New contribution:`,
     prompt,
     ``,
     `Update the story and keep it under ${MAX_CANON_CHARS} characters.`,
@@ -162,7 +162,7 @@ export function describeModelError(error: unknown): string {
 }
 
 /**
- * Fold a new meme idea into the canon using an injected model call. Total by
+ * Fold a new contribution into the canon using an injected model call. Total by
  * construction: if the first response overshoots the budget it gets one
  * "shorten" retry, then the result is boundary-clamped; any model failure falls
  * back to a raw capped append so a write is never lost. Pure w.r.t. transport,

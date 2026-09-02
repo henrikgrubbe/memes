@@ -98,7 +98,7 @@ describe("meme generation workflow", () => {
     expect(events[0]).toBe("saga:read:fp");
     expect(events[1]).toContain("mkdir:");
     expect(events[2]).toBe(
-      'provider:U123:Continuing the "fp" saga. Canon so far:\nExisting canon\n\nMake a meme: A typed functional meme.',
+      "provider:U123:Background for continuity:\nExisting canon\n\nCurrent request - depict this now:\nA typed functional meme",
     );
     expect(events[3]).toBe("git:start");
     expect(events[4]).toMatch(/^write:.*\/memes\/.+\.jpg$/);
@@ -114,7 +114,7 @@ describe("meme generation workflow", () => {
 
     expect(Exit.isFailure(exit)).toBe(true);
     expect(events).toContain(
-      'provider:U123:Continuing the "fp" saga. Canon so far:\nExisting canon\n\nMake a meme: A typed functional meme.',
+      "provider:U123:Background for continuity:\nExisting canon\n\nCurrent request - depict this now:\nA typed functional meme",
     );
     expect(events).toContain("notify:failure:OpenAI failed: error");
     expect(events.some((event) => event.startsWith("git:"))).toBe(false);
@@ -141,9 +141,7 @@ describe("meme generation workflow", () => {
     });
 
     expect(Exit.isSuccess(exit)).toBe(true);
-    expect(events).toContain(
-      "provider:U123:Make a meme: A typed functional meme.",
-    );
+    expect(events).toContain("provider:U123:A typed functional meme");
     expect(events.some((event) => event.startsWith("saga:"))).toBe(false);
   });
 });
