@@ -5,14 +5,21 @@ import type { GenerationMetadata } from "./providers.js";
 import type { HistoryEntry } from "./history.js";
 import {
   formatFailureComment,
+  formatSagaUpdateComment,
   formatSlackFailurePayload,
+  formatSlackSagaUpdatePayload,
   formatSlackSuccessPayload,
   formatSuccessComment,
 } from "./notification-format.js";
 import { type Shell, ShellTag } from "./shell.js";
 
 const SlackPayloadSchema = Schema.Struct({
-  status: Schema.Literal("success", "failure"),
+  status: Schema.Literal(
+    "success",
+    "failure",
+    "saga-updated",
+    "saga-update-failed",
+  ),
   image_url: Schema.String,
   title: Schema.String,
   requester: Schema.String,
@@ -31,11 +38,20 @@ export interface NotifySuccessParams {
   readonly metadata?: GenerationMetadata;
 }
 
+export interface NotifySagaUpdateParams {
+  readonly saga: string;
+  readonly contribution: string;
+  readonly updated: boolean;
+}
+
 // Deep interface: callers describe what happened; delivery orchestration
 // remains behind this seam.
 
 export interface NotifierService {
   readonly notifySuccess: (params: NotifySuccessParams) => Effect.Effect<void>;
+  readonly notifySagaUpdate: (
+    params: NotifySagaUpdateParams,
+  ) => Effect.Effect<void>;
   readonly notifyFailure: (
     message: string,
     closeNotPlanned?: boolean,
@@ -127,6 +143,27 @@ const makeNotifier = (config: AppConfig, shell: Shell): NotifierService => ({
           channel: config.channel,
           repo: config.repo,
           metadata,
+        }),
+      );
+    }),
+
+  notifySagaUpdate: ({ saga, contribution, updated }) =>
+    Effect.gen(function* () {
+      yield* postComment(
+        config,
+        shell,
+        formatSagaUpdateComment({ saga, contribution, updated }),
+      );
+      yield* updated ? closeIssue(config, shell) : Effect.void;
+      yield* postSlack(
+        config,
+        shell,
+        formatSlackSagaUpdatePayload({
+          saga,
+          contribution,
+          updated,
+          requester: config.requester,
+          channel: config.channel,
         }),
       );
     }),

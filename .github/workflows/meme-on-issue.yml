@@ -1,5 +1,5 @@
-name: Generate meme for issue
-run-name: Meme #${{ github.event.issue.number }} - ${{ github.event.issue.title }}
+name: Process meme request
+run-name: Request #${{ github.event.issue.number }} - ${{ github.event.issue.title }}
 
 on:
   issues:
@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   generate-meme:
-    name: Generate meme
+    name: Process request
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -52,7 +52,7 @@ jobs:
             exit 1
           fi
 
-      - name: Generate meme
+      - name: Process request
         id: generate
         timeout-minutes: 10
         env:
@@ -72,11 +72,11 @@ jobs:
           set -e
 
           if (( status != 0 )); then
-            echo "::error title=Meme generation failed::Issue #$ISSUE_NUMBER failed. See the run summary and diagnostic log."
+            echo "::error title=Request processing failed::Issue #$ISSUE_NUMBER failed. See the run summary and diagnostic log."
             exit "$status"
           fi
 
-          echo "::notice title=Meme generated::Issue #$ISSUE_NUMBER completed successfully."
+          echo "::notice title=Request completed::Issue #$ISSUE_NUMBER completed successfully."
 
       - name: Add run summary
         if: ${{ always() }}
@@ -92,14 +92,14 @@ jobs:
             outcome === "success" ? "✅" : outcome === "failure" ? "❌" : "⚪";
           const detail =
             outcome === "success"
-              ? "The generated meme was committed and the issue was updated."
+              ? "The request was completed and the issue was updated."
               : outcome === "failure"
                 ? "Download the diagnostic log artifact below for the complete generator output."
                 : "Generation did not run; inspect the preceding setup and configuration steps.";
           appendFileSync(
             process.env.GITHUB_STEP_SUMMARY,
             [
-              `## ${icon} Meme generation ${outcome}`,
+              `## ${icon} Request processing ${outcome}`,
               "",
               `- **Issue:** [#${event.issue.number}](${event.issue.html_url})`,
               `- **Triggered by:** @${event.sender.login}`,

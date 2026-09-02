@@ -88,6 +88,49 @@ describe("NotifierService through the Shell seam", () => {
     expect(commands[commands.length - 1]).toContain("curl");
   });
 
+  it("posts, closes, and sends Slack confirmation for a saga update", async () => {
+    const commands: string[] = [];
+    await run(
+      NotifierServiceTag.pipe(
+        Effect.flatMap((n) =>
+          n.notifySagaUpdate({
+            saga: "heist",
+            contribution: "The cats cancel the robbery.",
+            updated: true,
+          }),
+        ),
+      ),
+      commands,
+    );
+
+    expect(commands).toHaveLength(3);
+    expect(commands[0]).toContain("gh issue comment 42 --repo o/r --body-file");
+    expect(commands[1]).toContain("state=closed");
+    expect(commands[2]).toContain("curl");
+  });
+
+  it("reports a failed saga update without closing the issue", async () => {
+    const commands: string[] = [];
+    await run(
+      NotifierServiceTag.pipe(
+        Effect.flatMap((n) =>
+          n.notifySagaUpdate({
+            saga: "heist",
+            contribution: "The cats cancel the robbery.",
+            updated: false,
+          }),
+        ),
+      ),
+      commands,
+    );
+
+    expect(commands).toHaveLength(2);
+    expect(commands.some((command) => command.includes("state=closed"))).toBe(
+      false,
+    );
+    expect(commands[1]).toContain("curl");
+  });
+
   it("closes the issue as not_planned on a moderation failure", async () => {
     const commands: string[] = [];
     await run(

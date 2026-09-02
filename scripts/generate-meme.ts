@@ -59,6 +59,19 @@ export const program = Effect.gen(function* () {
   const git = yield* GitServiceTag;
   const notifier = yield* NotifierServiceTag;
 
+  if (config.writeSaga != null && config.readSaga == null) {
+    const updated = yield* saga.contribute(config.writeSaga, config.memePrompt);
+    yield* notifier.notifySagaUpdate({
+      saga: config.writeSaga,
+      contribution: config.memePrompt,
+      updated,
+    });
+    if (!updated) {
+      return yield* Effect.die("failure-handled");
+    }
+    return yield* Effect.log("Done.");
+  }
+
   const memeId = crypto.randomUUID();
   const memesDir = path.join(process.cwd(), "memes");
   const outFile = path.join(memesDir, `${memeId}.jpg`);

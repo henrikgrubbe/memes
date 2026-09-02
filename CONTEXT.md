@@ -11,12 +11,17 @@ prompt before generation, and are case-insensitive; saga names are slugs of
 `A–Z a–z 0–9 _ -`):
 
 - `read:<saga>` — prepend that saga's canon to the image prompt for continuity.
-- `write:<saga>` — fold this meme into that saga's canon after generating.
+- `write:<saga>` — contribute the request to that saga's canon.
 - `saga:<saga>` — shorthand for both: read _and_ write the same saga (the usual
   "keep participating in this saga" case).
 
 They are independent: a meme may read one saga, write another, both, or
 neither. A space after the colon (`read: the news`) is **not** a directive.
+
+When `write:<saga>` is used without `read:<saga>`, the contribution updates the
+canon without generating an image. The issue and Slack thread receive a
+confirmation. Combined read/write requests still generate an image before
+updating the canon.
 
 ### Storage
 
