@@ -185,6 +185,17 @@ describe("formatSlackSuccessPayload", () => {
     expect(payload.cost_cents).toBeUndefined();
     expect("cost_cents" in payload).toBe(false);
   });
+
+  it("includes distinct read and write Saga names", () => {
+    const payload = formatSlackSuccessPayload({
+      ...base,
+      readSaga: "original",
+      writeSaga: "sequel",
+    });
+
+    expect(payload.read_saga).toBe("original");
+    expect(payload.write_saga).toBe("sequel");
+  });
 });
 
 describe("formatSlackFailurePayload", () => {
@@ -204,6 +215,20 @@ describe("formatSlackFailurePayload", () => {
       channel: "#memes",
       error: "generation failed",
     });
+  });
+
+  it("includes Saga names when generation fails", () => {
+    const payload = formatSlackFailurePayload({
+      title: "make a meme",
+      requester: "U123",
+      channel: "#memes",
+      error: "generation failed",
+      readSaga: "original",
+      writeSaga: "sequel",
+    });
+
+    expect(payload.read_saga).toBe("original");
+    expect(payload.write_saga).toBe("sequel");
   });
 });
 
@@ -226,6 +251,7 @@ describe("formatSlackSagaUpdatePayload", () => {
       requester: "U123",
       channel: "#memes",
       error: "",
+      write_saga: "heist",
     });
   });
 
