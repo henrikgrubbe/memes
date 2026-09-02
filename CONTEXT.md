@@ -12,7 +12,7 @@ prompt before generation, and are case-insensitive; saga names are slugs of
 
 - `read:<saga>` — prepend that saga's canon to the image prompt for continuity.
 - `write:<saga>` — fold this meme into that saga's canon after generating.
-- `saga:<saga>` — shorthand for both: read *and* write the same saga (the usual
+- `saga:<saga>` — shorthand for both: read _and_ write the same saga (the usual
   "keep participating in this saga" case).
 
 They are independent: a meme may read one saga, write another, both, or
@@ -25,12 +25,14 @@ Each saga is a plain-markdown file `context/<saga>.md` holding the current
 
 ### Compression
 
-On every `write`, a cheap text model (`gpt-4o-mini`) folds the new meme idea
-into the canon, keeping it under `MAX_CANON_CHARS` (3000) so a canon plus the
-prompt always fits the image prompt cap (`MAX_PROMPT_CHARS`, 4000). If the
-model is unavailable the write falls back to a raw capped append, so a meme is
-never lost. Concurrent writes to the same saga serialize via
-`git pull --rebase` + re-derive (see `scripts/saga.ts`).
+On every `write`, a cheap text model (`gpt-4o-mini`) receives the story so far
+and the new meme idea, then updates the canon as concise Markdown. New ideas can
+add, correct, replace, resolve, invalidate, or remove facts from the canon. The
+result stays under `MAX_CANON_CHARS` (3000) so a canon plus the prompt always
+fits the image prompt cap (`MAX_PROMPT_CHARS`, 4000). If the model is
+unavailable the write falls back to a raw capped append, so a meme is never
+lost. Concurrent writes to the same saga serialize via `git pull --rebase` +
+re-derive (see `scripts/saga.ts`).
 
 Relevant code: `scripts/saga.ts` (service, compression, prompt assembly),
 `scripts/saga-directives.ts` (`parseSagaDirectives`), `scripts/config.ts`

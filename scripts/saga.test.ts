@@ -104,6 +104,30 @@ describe("buildCompressionMessages", () => {
     expect(system.content).toContain(String(MAX_CANON_CHARS));
   });
 
+  it("asks for an incremental story update that can remove obsolete canon", () => {
+    const [system, user] = buildCompressionMessages(
+      "heist",
+      "The cats plan a bank robbery.",
+      "The cats cancel the robbery.",
+    );
+    expect(system.content).toContain(
+      "correct, replace, invalidate, resolve or remove",
+    );
+    expect(system.content).toContain("without keeping obsolete versions");
+    expect(user.content).toContain("This is the story so far:");
+    expect(user.content).toContain("Now this has happened:");
+    expect(user.content).toContain("Update the story");
+  });
+
+  it("requires concise, lightly structured Markdown", () => {
+    const [system] = buildCompressionMessages("heist", "canon", "idea");
+    expect(system.content).toContain("concise Markdown");
+    expect(system.content).toContain("useful headings and short bullet");
+    expect(system.content).toContain(
+      "Do not use tables, deep nesting, emphasis or decorative formatting",
+    );
+  });
+
   it("marks an empty canon as the first entry and includes the new idea", () => {
     const [, user] = buildCompressionMessages(
       "heist",
@@ -136,6 +160,7 @@ describe("buildShortenMessages", () => {
     expect(system.content).toContain('saga "heist"');
     expect(system.content).toContain(String(MAX_CANON_CHARS));
     expect(system.content.toUpperCase()).toContain("SHORTER");
+    expect(system.content).toContain("concise Markdown");
     expect(user.content).toContain("way too long canon");
   });
 });

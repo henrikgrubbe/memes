@@ -78,22 +78,29 @@ export function buildCompressionMessages(
   prompt: string,
 ): ReadonlyArray<ChatMessage> {
   const system = [
-    `You maintain a running "canon": a compact, evolving summary of a series of`,
-    `user-submitted meme ideas that all belong to the saga "${saga}".`,
-    `Given the current canon and ONE new meme idea, produce an UPDATED canon that:`,
-    `- integrates the new idea,`,
-    `- preserves recurring characters, running jokes, locations and key story beats,`,
-    `- is written as concise descriptive notes, not prose,`,
-    `- stays under ${MAX_CANON_CHARS} characters,`,
-    `- keeps the same language as the ideas.`,
+    `You maintain the canon: the story so far for the saga "${saga}".`,
+    `Update the existing canon with ONE new meme idea that has happened.`,
+    `The updated canon must:`,
+    `- include the important information from the new idea,`,
+    `- preserve recurring characters, running jokes, locations and key story beats,`,
+    `- correct, replace, invalidate, resolve or remove existing information when the`,
+    `  new idea requires it, without keeping obsolete versions,`,
+    `- remove other information only when it is obsolete or necessary to stay under`,
+    `  ${MAX_CANON_CHARS} characters,`,
+    `- use the same language as the ideas.`,
+    `Format the canon as concise Markdown. Use only useful headings and short bullet`,
+    `lists. Do not use tables, deep nesting, emphasis or decorative formatting.`,
+    `Preserve the existing structure when practical.`,
     `Output ONLY the canon text, with no preamble or commentary.`,
   ].join("\n");
   const user = [
-    `Current canon:`,
+    `This is the story so far:`,
     canon.trim() === "" ? "(empty - this is the first entry)" : canon,
     ``,
-    `New meme idea:`,
+    `Now this has happened:`,
     prompt,
+    ``,
+    `Update the story and keep it under ${MAX_CANON_CHARS} characters.`,
   ].join("\n");
   return [
     { role: "system", content: system },
@@ -110,7 +117,9 @@ export function buildShortenMessages(
     `You are editing the canon for the saga "${saga}".`,
     `Rewrite it to be SHORTER without losing recurring characters, running`,
     `jokes, locations or key story beats. It MUST be under ${MAX_CANON_CHARS}`,
-    `characters. Keep the same language. Output ONLY the canon text.`,
+    `characters. Keep the same language and concise Markdown format. Use only`,
+    `useful headings and short bullet lists. Do not use tables, deep nesting,`,
+    `emphasis or decorative formatting. Output ONLY the canon text.`,
   ].join("\n");
   return [
     { role: "system", content: system },
