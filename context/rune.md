@@ -13,3 +13,5 @@
 - Det er vigtigt at holde fast ved, at Rune er en dum dreng med en dum hat. Han er også træt af, at han aldrig kommer til lande, som Martin Elkjær har været i, bare fordi han ikke er lige så gammel. Han er vidst også lidt sur over stadig ikke at have fået den længe lovede sportskage. Den stakkel, det er faktisk lidt synd for Rune alligevel.
 
 - Rune pløkker og flækker mink med sit yndlingsvåben, den rustne minkrevolver. Der skal heller ikke mange flere golfbolde til ovenpå, før han smadrer hele overetagen.
+
+- Rune har abdiceret som enevældig Event-Master og tilbyder nu tronen på skift til den næste, der har lyst til frie tøjler og Bankdatas dankort.
