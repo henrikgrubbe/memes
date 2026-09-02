@@ -7,3 +7,4 @@
   - 28 høns
   - 3 løbeænder
 - Gården har også en masse kartofler.
+- Ård Henrik har slappe svage arme og kan ikke lave noget manuelt fysisk arbejde. Derfor har han købt en minilæsser, som han er meget stolt af.
