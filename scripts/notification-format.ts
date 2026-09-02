@@ -30,6 +30,17 @@ interface SlackFailureParams {
   readonly error: string;
 }
 
+interface SagaUpdateParams {
+  readonly saga: string;
+  readonly contribution: string;
+  readonly updated: boolean;
+}
+
+interface SlackSagaUpdateParams extends SagaUpdateParams {
+  readonly requester: string;
+  readonly channel: string;
+}
+
 /** Display-ready cost string (e.g. "0.108¢"), or null when cost is unknown. */
 export function formatCostCents(metadata?: GenerationMetadata): string | null {
   const costCents = metadata?.costCents;
@@ -100,6 +111,19 @@ export function formatFailureComment(
   ].join("\n");
 }
 
+export function formatSagaUpdateComment({
+  saga,
+  contribution,
+  updated,
+}: SagaUpdateParams): string {
+  const status = updated
+    ? `✅ Saga \`${saga}\` updated.`
+    : `❌ Saga \`${saga}\` could not be updated. The issue remains open.`;
+  return [status, ``, `**Contribution:** ${inlineCode(contribution)}`].join(
+    "\n",
+  );
+}
+
 /** Format the Slack webhook payload for a successful generation. */
 export function formatSlackSuccessPayload({
   memeId,
@@ -137,5 +161,24 @@ export function formatSlackFailurePayload({
     requester,
     channel,
     error,
+  };
+}
+
+export function formatSlackSagaUpdatePayload({
+  saga,
+  contribution,
+  updated,
+  requester,
+  channel,
+}: SlackSagaUpdateParams) {
+  return {
+    status: updated
+      ? ("saga-updated" as const)
+      : ("saga-update-failed" as const),
+    image_url: "",
+    title: `Saga "${saga}": ${contribution}`,
+    requester,
+    channel,
+    error: updated ? "" : `Saga "${saga}" could not be updated.`,
   };
 }

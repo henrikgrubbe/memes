@@ -191,13 +191,13 @@ export function foldCanon<E>(
   );
 }
 
-// Deep interface: callers read a saga's canon or contribute a meme to it;
+// Deep interface: callers read a saga's canon or contribute new information;
 // compression, file I/O, git commit/push and contention handling live behind
-// the seam. Both methods are total - a saga hiccup never breaks meme delivery.
+// the seam. Both methods are total; contribute reports whether the update landed.
 
 export interface SagaService {
   readonly read: (saga: string) => Effect.Effect<string | null>;
-  readonly contribute: (saga: string, prompt: string) => Effect.Effect<void>;
+  readonly contribute: (saga: string, prompt: string) => Effect.Effect<boolean>;
 }
 
 export class SagaServiceTag extends Context.Tag("SagaService")<
@@ -212,7 +212,7 @@ export const makeSagaLayer = (impl: SagaService): Layer.Layer<SagaServiceTag> =>
 /** No-op layer for tests/deployments that don't exercise sagas. */
 export const SagaNoOpLayer: Layer.Layer<SagaServiceTag> = makeSagaLayer({
   read: () => Effect.succeed(null),
-  contribute: () => Effect.void,
+  contribute: () => Effect.succeed(true),
 });
 
 class CompressionError extends Data.TaggedError("CompressionError")<{
@@ -325,9 +325,10 @@ export const SagaLayer: Layer.Layer<
           })
           .pipe(
             Effect.tap(() => Effect.log(`Saga "${saga}" updated.`)),
+            Effect.as(true),
             Effect.catchAll(() =>
-              Effect.logWarning(
-                `Saga "${saga}" update failed - meme delivery unaffected.`,
+              Effect.logWarning(`Saga "${saga}" update failed.`).pipe(
+                Effect.as(false),
               ),
             ),
           ),

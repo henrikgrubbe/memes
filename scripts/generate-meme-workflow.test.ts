@@ -30,12 +30,14 @@ interface HarnessOptions {
   readonly config?: AppConfig;
   readonly provider?: ProviderFn;
   readonly gitFails?: boolean;
+  readonly sagaUpdateSucceeds?: boolean;
 }
 
 const runWorkflow = ({
   config = baseConfig,
   provider = successfulProvider("OpenAI"),
   gitFails = false,
+  sagaUpdateSucceeds = true,
 }: HarnessOptions = {}) => {
   let events: ReadonlyArray<string> = [];
   const record = (event: string) =>
@@ -50,7 +52,10 @@ const runWorkflow = ({
   const saga = makeSagaLayer({
     read: (name) =>
       record(`saga:read:${name}`).pipe(Effect.as("Existing canon")),
-    contribute: (name, prompt) => record(`saga:write:${name}:${prompt}`),
+    contribute: (name, prompt) =>
+      record(`saga:write:${name}:${prompt}`).pipe(
+        Effect.as(sagaUpdateSucceeds),
+      ),
   });
   const git = makeGitLayer({
     commitToMain: (plan) =>
@@ -67,6 +72,8 @@ const runWorkflow = ({
   const notifier = Layer.succeed(NotifierServiceTag, {
     notifySuccess: ({ memeId, prompt }) =>
       record(`notify:success:${memeId}:${prompt}`),
+    notifySagaUpdate: ({ saga, contribution, updated }) =>
+      record(`notify:saga:${saga}:${updated}:${contribution}`),
     notifyFailure: (message) => record(`notify:failure:${message}`),
   });
   const providers = makeProvidersLayer({
@@ -143,5 +150,30 @@ describe("meme generation workflow", () => {
     expect(Exit.isSuccess(exit)).toBe(true);
     expect(events).toContain("provider:U123:A typed functional meme");
     expect(events.some((event) => event.startsWith("saga:"))).toBe(false);
+  });
+
+  it("updates and confirms a write-only saga contribution without generating an image", async () => {
+    const { events, exit } = await runWorkflow({
+      config: { ...baseConfig, readSaga: null, writeSaga: "fp" },
+    });
+
+    expect(Exit.isSuccess(exit)).toBe(true);
+    expect(events).toEqual([
+      "saga:write:fp:A typed functional meme",
+      "notify:saga:fp:true:A typed functional meme",
+    ]);
+  });
+
+  it("reports a failed write-only saga contribution without generating an image", async () => {
+    const { events, exit } = await runWorkflow({
+      config: { ...baseConfig, readSaga: null, writeSaga: "fp" },
+      sagaUpdateSucceeds: false,
+    });
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(events).toEqual([
+      "saga:write:fp:A typed functional meme",
+      "notify:saga:fp:false:A typed functional meme",
+    ]);
   });
 });

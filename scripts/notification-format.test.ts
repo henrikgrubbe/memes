@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   formatCostCents,
   formatFailureComment,
+  formatSagaUpdateComment,
   formatSlackFailurePayload,
+  formatSlackSagaUpdatePayload,
   formatSlackSuccessPayload,
   formatSuccessComment,
 } from "./notification-format.js";
@@ -84,6 +86,28 @@ describe("formatFailureComment", () => {
       "grok-imagine-image is out of credits/quota: 403",
     );
     expect(comment).not.toContain("**Provider attempts:**");
+  });
+
+  describe("formatSagaUpdateComment", () => {
+    it("confirms a successful contribution", () => {
+      expect(
+        formatSagaUpdateComment({
+          saga: "heist",
+          contribution: "The cats cancel the robbery.",
+          updated: true,
+        }),
+      ).toContain("✅ Saga `heist` updated.");
+    });
+
+    it("keeps the issue open when the contribution could not be stored", () => {
+      expect(
+        formatSagaUpdateComment({
+          saga: "heist",
+          contribution: "The cats cancel the robbery.",
+          updated: false,
+        }),
+      ).toContain("The issue remains open.");
+    });
   });
 
   it("renders each attempt when history is provided (regression for #706)", () => {
@@ -180,5 +204,38 @@ describe("formatSlackFailurePayload", () => {
       channel: "#memes",
       error: "generation failed",
     });
+  });
+});
+
+describe("formatSlackSagaUpdatePayload", () => {
+  it("formats a successful saga update without an image", () => {
+    expect(
+      formatSlackSagaUpdatePayload({
+        saga: "heist",
+        contribution: "The cats cancel the robbery.",
+        updated: true,
+        requester: "U123",
+        channel: "#memes",
+      }),
+    ).toEqual({
+      status: "saga-updated",
+      image_url: "",
+      title: 'Saga "heist": The cats cancel the robbery.',
+      requester: "U123",
+      channel: "#memes",
+      error: "",
+    });
+  });
+
+  it("uses a distinct failure status when the saga update does not land", () => {
+    expect(
+      formatSlackSagaUpdatePayload({
+        saga: "heist",
+        contribution: "The cats cancel the robbery.",
+        updated: false,
+        requester: "U123",
+        channel: "#memes",
+      }).status,
+    ).toBe("saga-update-failed");
   });
 });
