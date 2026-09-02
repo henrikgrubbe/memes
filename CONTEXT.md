@@ -26,13 +26,13 @@ Each saga is a plain-markdown file `context/<saga>.md` holding the current
 ### Compression
 
 On every `write`, a cheap text model (`gpt-4o-mini`) receives the story so far
-and the new meme idea, then updates the canon as concise Markdown. New ideas can
-add, correct, replace, resolve, invalidate, or remove facts from the canon. The
-result stays under `MAX_CANON_CHARS` (3000) so a canon plus the prompt always
-fits the image prompt cap (`MAX_PROMPT_CHARS`, 4000). If the model is
-unavailable the write falls back to a raw capped append, so a meme is never
-lost. Concurrent writes to the same saga serialize via `git pull --rebase` +
-re-derive (see `scripts/saga.ts`).
+and the new contribution, then updates the canon as concise Markdown. A
+contribution can add, correct, replace, resolve, invalidate, or remove facts
+from the canon. The result stays under `MAX_CANON_CHARS` (3000) so a canon plus
+the prompt always fits the image prompt cap (`MAX_PROMPT_CHARS`, 4000). If the
+model is unavailable the write falls back to a raw capped append, so a meme is
+never lost. Concurrent writes to the same saga serialize via `git pull
+--rebase` + re-derive (see `scripts/saga.ts`).
 
 Relevant code: `scripts/saga.ts` (service, compression, prompt assembly),
 `scripts/saga-directives.ts` (`parseSagaDirectives`), `scripts/config.ts`
