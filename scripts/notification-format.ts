@@ -39,6 +39,7 @@ interface SagaUpdateParams {
 interface SlackSagaUpdateParams extends SagaUpdateParams {
   readonly requester: string;
   readonly channel: string;
+  readonly repo: string;
 }
 
 /** Display-ready cost string (e.g. "0.108¢"), or null when cost is unknown. */
@@ -137,7 +138,7 @@ export function formatSlackSuccessPayload({
   const costCents = formatCostCents(metadata);
   return {
     status: "success" as const,
-    image_url: `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`,
+    content_url: `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`,
     title,
     requester,
     channel,
@@ -156,7 +157,7 @@ export function formatSlackFailurePayload({
 }: SlackFailureParams) {
   return {
     status: "failure" as const,
-    image_url: "",
+    content_url: "",
     title,
     requester,
     channel,
@@ -170,12 +171,15 @@ export function formatSlackSagaUpdatePayload({
   updated,
   requester,
   channel,
+  repo,
 }: SlackSagaUpdateParams) {
   return {
     status: updated
       ? ("saga-updated" as const)
       : ("saga-update-failed" as const),
-    image_url: "",
+    content_url: updated
+      ? `https://github.com/${repo}/blob/main/context/${saga}.md`
+      : "",
     title: `Saga "${saga}": ${contribution}`,
     requester,
     channel,
