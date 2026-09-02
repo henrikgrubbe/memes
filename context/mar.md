@@ -1,10 +1,10 @@
 # Team MAR
 
-**Setting**: At Bankdata ("meme-fabrikken"), chaos reigns with ceramic cup painting, DHL runs, and ServiceNow training. Hidden in photos are a mexicansk lasagne and amusing incidents at Yamas, where Rune escapes golf enthusiasts to Jeppe’s cups. Skjoldbamsen Sigurd shares his ceramics wisdom while humorously coping with Graves disease. Laban, Alpaca Alpár’s tuxedo cat, now only meows while showing off his belly. Persille-Sebastian entertains with quirky questions like "Hvorfor er Gitte en bamse?" and loves calling meetings. Træmand Brandborg, Sebastian, Sigurd, Rune, Henrik OK, and Alpaca Alpár excitedly await their burnt ceramics. The spirits of Lærke, Nicolai, and Steffen haunt them, adding a supernatural twist.
+**Setting**: At Bankdata ("meme-fabrikken"), chaos reigns with ceramic cup painting, DHL runs, and ServiceNow training. Hidden in photos are a mexicansk lasagne and amusing incidents at Yamas, where Rune escapes golf enthusiasts to Jeppe’s cups. Skjoldbamsen Sigurd shares his ceramics wisdom while humorously coping with Graves disease. Laban, Alpaca Alpár’s tuxedo cat, now only meows while showing off his belly. Træmand Brandborg, Sebastian, Sigurd, Rune, Henrik OK, and Alpaca Alpár excitedly await their burnt ceramics. The spirits of Lærke, Nicolai, and Steffen haunt them, adding a supernatural twist.
 
 **Characters**:
 - **Rune (Beaufillou)**: Flamboyant "Viking of Vibes," often with a baguette, seeks solace in Jeppe’s cups and promises to bake a green PEPE cake.
-- **Persille-Sebastian**: "Parsley Avenger," quirky developer known for bewildering questions and love for meetings.
+- **Persille-Sebastian**: "Parsley Avenger," quirky developer known for bewildering questions, though secretly quite tired of meetings.
 - **Elmast Jeppe**: "Metal Elmast," creates puns on electricity and provides hiding spots in his cups.
 - **Alpaca Alpár**: Comical alpaca known for witty interjections, providing comic relief and charming interactions with Laban.
 - **Laban**: Alpaca’s tuxedo cat, now meows exclusively and humorously lies on his back.
@@ -17,4 +17,4 @@
 - **Nicolai**: Ghost in an oversized suit seeking Faxe Kondi, adding camaraderie from beyond.
 - **Steffen**: Red-haired giant ghost, often munching on bananas with Nutella, amusing the team.
 
-In the "mar" saga, Team MAR's humor thrives through their misadventures, hiding Mexican wraps and mexicansk lasagne. Rune’s baking aspirations grow through solar-gazing, while Alpaca delivers delightful comic relief. Anticipation for ceramics builds excitement. Sigurd’s expertise and Sebastian’s enthusiasm keep spirits high. Laban’s quirky antics continue this unique dynamic, while the spectral presence of Lærke, Nicolai, and Steffen adds humor, especially Nicolai's quest for Faxe Kondi.
+In the "mar" saga, Team MAR's humor thrives through their misadventures, hiding Mexican wraps and mexicansk lasagne. Rune’s baking aspirations grow through solar-gazing, while Alpaca delivers delightful comic relief. Anticipation for ceramics builds excitement. Sigurd’s expertise and Sebastian’s concealed fatigue from meetings keep spirits high. Laban’s quirky antics continue this unique dynamic, while the spectral presence of Lærke, Nicolai, and Steffen adds humor, especially Nicolai's quest for Faxe Kondi.
