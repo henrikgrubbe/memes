@@ -27,6 +27,8 @@ const SlackPayloadSchema = Schema.Struct({
   error: Schema.String,
   provider: Schema.optional(Schema.String),
   cost_cents: Schema.optional(Schema.String),
+  read_saga: Schema.optional(Schema.String),
+  write_saga: Schema.optional(Schema.String),
 });
 
 type SlackPayload = Schema.Schema.Type<typeof SlackPayloadSchema>;
@@ -143,6 +145,8 @@ const makeNotifier = (config: AppConfig, shell: Shell): NotifierService => ({
           channel: config.channel,
           repo: config.repo,
           metadata,
+          readSaga: config.readSaga ?? undefined,
+          writeSaga: config.writeSaga ?? undefined,
         }),
       );
     }),
@@ -180,6 +184,8 @@ const makeNotifier = (config: AppConfig, shell: Shell): NotifierService => ({
           requester: config.requester,
           channel: config.channel,
           error: message,
+          readSaga: config.readSaga ?? undefined,
+          writeSaga: config.writeSaga ?? undefined,
         }),
       );
       yield* closeNotPlanned

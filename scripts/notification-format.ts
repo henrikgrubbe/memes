@@ -21,6 +21,8 @@ interface SlackSuccessParams {
   readonly channel: string;
   readonly repo: string;
   readonly metadata?: GenerationMetadata;
+  readonly readSaga?: string;
+  readonly writeSaga?: string;
 }
 
 interface SlackFailureParams {
@@ -28,6 +30,8 @@ interface SlackFailureParams {
   readonly requester: string;
   readonly channel: string;
   readonly error: string;
+  readonly readSaga?: string;
+  readonly writeSaga?: string;
 }
 
 interface SagaUpdateParams {
@@ -50,6 +54,11 @@ export function formatCostCents(metadata?: GenerationMetadata): string | null {
 
 const inlineCode = (value: string): string =>
   value.includes("`") ? `\`\`${value}\`\`` : `\`${value}\``;
+
+const sagaFields = (readSaga?: string, writeSaga?: string) => ({
+  ...(readSaga == null ? {} : { read_saga: readSaga }),
+  ...(writeSaga == null ? {} : { write_saga: writeSaga }),
+});
 
 export function formatSuccessComment({
   memeId,
@@ -134,6 +143,8 @@ export function formatSlackSuccessPayload({
   channel,
   repo,
   metadata,
+  readSaga,
+  writeSaga,
 }: SlackSuccessParams) {
   const costCents = formatCostCents(metadata);
   return {
@@ -145,6 +156,7 @@ export function formatSlackSuccessPayload({
     error: "",
     provider,
     ...(costCents == null ? {} : { cost_cents: costCents }),
+    ...sagaFields(readSaga, writeSaga),
   };
 }
 
@@ -154,6 +166,8 @@ export function formatSlackFailurePayload({
   requester,
   channel,
   error,
+  readSaga,
+  writeSaga,
 }: SlackFailureParams) {
   return {
     status: "failure" as const,
@@ -162,6 +176,7 @@ export function formatSlackFailurePayload({
     requester,
     channel,
     error,
+    ...sagaFields(readSaga, writeSaga),
   };
 }
 
@@ -184,5 +199,6 @@ export function formatSlackSagaUpdatePayload({
     requester,
     channel,
     error: updated ? "" : `Saga "${saga}" could not be updated.`,
+    write_saga: saga,
   };
 }
