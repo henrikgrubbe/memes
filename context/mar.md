@@ -1,6 +1,6 @@
 # Team MAR
 
-**Setting**: Chaos reigns at Bankdata ("meme-fabrikken") with misadventures from botched ceramic cup painting to DHL relay runs and ServiceNow training. Each photo hides a mexicansk lasagne, subtle like Waldo, marked by an arrow for easy spotting. At Yamas in Aarhus, Rune clashes with golf enthusiasts, awkwardly referencing skorstenskage while retreating to Jeppe’s decorative cups in "war-room mode." Skjoldbamsen Sigurd, recently diagnosed with Graves disease, humorously embraces his "striking" appearance and shares his deep knowledge of ceramics in team discussions. Laban, Alpaca Alpár’s tuxedo cat, amusingly dismisses his bow tie statistics, pointing out it’s just fabric. Persille-Sebastian keeps the team lively with quirky inquiries like "Hvorfor er Gitte en bamse?" and his obsession with calling meetings to resolve issues.
+**Setting**: Chaos reigns at Bankdata ("meme-fabrikken") with misadventures from botched ceramic cup painting to DHL relay runs and ServiceNow training. Each photo hides a mexicansk lasagne, subtle like Waldo, marked by an arrow for easy spotting. At Yamas in Aarhus, Rune clashes with golf enthusiasts, awkwardly referencing skorstenskage while retreating to Jeppe’s decorative cups in "war-room mode." Skjoldbamsen Sigurd, recently diagnosed with Graves disease, humorously embraces his "striking" appearance and shares his deep knowledge of ceramics in team discussions. Laban, Alpaca Alpár’s tuxedo cat, amusingly dismisses his bow tie statistics, pointing out it’s just fabric. Persille-Sebastian keeps the team lively with quirky inquiries like "Hvorfor er Gitte en bamse?" and his obsession with calling meetings to resolve issues. Recently, Træmand Brandborg, Persille-Sebastian, Skjoldbamsen Sigurd, Rune Beaugaguette, Henrik OK, and Alpaca Alpár eagerly await their burnt and glazed ceramics they painted last week.
 
 **Characters**:
 - **Rune (Beaufillou)**: The flamboyant "Viking of Vibes," often with a baguette, seeking solace in Jeppe’s cup during nutids-r struggles.
@@ -15,12 +15,12 @@
   
 - **Skjoldbamsen Sigurd**: "Sigurd Newton," the Nordjyde bear with a taste for Haribo and physics jokes, embraced Graves disease humor while sharing his ceramics knowledge.
   
-- **Træmand Brandborg**: The wooden elf and Rune’s ceramics rival, known for teasing Sebastian with coriander jokes.
+- **Træmand Brandborg**: The wooden elf and Rune’s ceramics rival, known for teasing Sebastian with coriander jokes and excited for the return of their ceramics.
   
-- **Henrik (Henrik OK)**: The world's okayest Henrik, often overshadowed by Rune’s flamboyance.
+- **Henrik (Henrik OK)**: The world's okayest Henrik, often overshadowed by Rune’s flamboyance, now also anticipating the ceramics arrival.
   
 - **Gitte**: The assertive product owner defining team goals, often the source of Sebastian’s inquiries.
   
 - **Teslatrubaduren Morten**: The Nordjyske hybrid of hunting and music, organizing meme festivals and known for Tesla-themed intros.
 
-In the "mar" saga, Team MAR’s quirky humor flourishes through their antics, finding joy in hiding Mexican wraps and a mexicansk lasagne in photos. Sigurd's ceramic expertise adds sophistication to the banter, while Sebastian's meeting enthusiasm contributes humor and wit to the team dynamic.
+In the "mar" saga, Team MAR’s quirky humor flourishes through their antics, finding joy in hiding Mexican wraps and a mexicansk lasagne in photos. The excitement for their burnt and glazed ceramics adds another layer of enthusiasm to their group dynamics. Sigurd's ceramic expertise adds sophistication to the banter, while Sebastian's meeting enthusiasm contributes humor and wit to the team dynamic.
