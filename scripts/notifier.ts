@@ -117,6 +117,21 @@ const makeNotifier = (config: AppConfig, shell: Shell): NotifierService => ({
         history.find(({ status }) => status === "success")?.provider ??
         "unknown";
 
+      yield* postSlack(
+        config,
+        shell,
+        formatSlackSuccessPayload({
+          memeId,
+          provider,
+          title: config.memePrompt,
+          requester: config.requester,
+          channel: config.channel,
+          repo: config.repo,
+          metadata,
+          readSaga: config.readSaga ?? undefined,
+          writeSaga: config.writeSaga ?? undefined,
+        }),
+      );
       yield* postComment(
         config,
         shell,
@@ -134,31 +149,10 @@ const makeNotifier = (config: AppConfig, shell: Shell): NotifierService => ({
       );
       yield* closeIssue(config, shell);
       yield* Effect.log(`Issue #${config.issueNumber} closed.`);
-      yield* postSlack(
-        config,
-        shell,
-        formatSlackSuccessPayload({
-          memeId,
-          provider,
-          title: config.memePrompt,
-          requester: config.requester,
-          channel: config.channel,
-          repo: config.repo,
-          metadata,
-          readSaga: config.readSaga ?? undefined,
-          writeSaga: config.writeSaga ?? undefined,
-        }),
-      );
     }),
 
   notifySagaUpdate: ({ saga, contribution, updated }) =>
     Effect.gen(function* () {
-      yield* postComment(
-        config,
-        shell,
-        formatSagaUpdateComment({ saga, contribution, updated }),
-      );
-      yield* updated ? closeIssue(config, shell) : Effect.void;
       yield* postSlack(
         config,
         shell,
@@ -171,6 +165,12 @@ const makeNotifier = (config: AppConfig, shell: Shell): NotifierService => ({
           repo: config.repo,
         }),
       );
+      yield* postComment(
+        config,
+        shell,
+        formatSagaUpdateComment({ saga, contribution, updated }),
+      );
+      yield* updated ? closeIssue(config, shell) : Effect.void;
     }),
 
   notifyFailure: (message, closeNotPlanned = false, history) =>

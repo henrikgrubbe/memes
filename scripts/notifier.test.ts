@@ -46,7 +46,7 @@ describe("NotifierService through the Shell seam", () => {
     return Effect.runPromise(effect.pipe(Effect.provide(layer)));
   };
 
-  it("posts a comment, closes the issue, then posts to Slack on success", async () => {
+  it("posts to Slack before issue housekeeping on success", async () => {
     const commands: string[] = [];
     await run(
       NotifierServiceTag.pipe(
@@ -62,16 +62,12 @@ describe("NotifierService through the Shell seam", () => {
     );
 
     expect(commands).toHaveLength(3);
-    expect(commands[0]).toContain("gh issue comment 42 --repo o/r --body-file");
-    expect(commands[1]).toBe(
+    expect(commands[0]).toContain("curl");
+    expect(commands[0]).toContain("https://hooks.slack/x");
+    expect(commands[1]).toContain("gh issue comment 42 --repo o/r --body-file");
+    expect(commands[2]).toBe(
       "gh api repos/o/r/issues/42 -X PATCH -f state=closed",
     );
-    expect(commands[2]).toContain("curl");
-    expect(commands[2]).toContain("https://hooks.slack/x");
-    // The issue must be closed before we announce success to Slack.
-    expect(
-      commands.indexOf("gh api repos/o/r/issues/42 -X PATCH -f state=closed"),
-    ).toBeLessThan(commands.findIndex((c) => c.includes("curl")));
   });
 
   it("does not close the issue on a transient failure", async () => {
@@ -88,7 +84,7 @@ describe("NotifierService through the Shell seam", () => {
     expect(commands[commands.length - 1]).toContain("curl");
   });
 
-  it("posts, closes, and sends Slack confirmation for a saga update", async () => {
+  it("sends Slack confirmation before issue housekeeping for a saga update", async () => {
     const commands: string[] = [];
     await run(
       NotifierServiceTag.pipe(
@@ -104,9 +100,9 @@ describe("NotifierService through the Shell seam", () => {
     );
 
     expect(commands).toHaveLength(3);
-    expect(commands[0]).toContain("gh issue comment 42 --repo o/r --body-file");
-    expect(commands[1]).toContain("state=closed");
-    expect(commands[2]).toContain("curl");
+    expect(commands[0]).toContain("curl");
+    expect(commands[1]).toContain("gh issue comment 42 --repo o/r --body-file");
+    expect(commands[2]).toContain("state=closed");
   });
 
   it("reports a failed saga update without closing the issue", async () => {
@@ -128,7 +124,8 @@ describe("NotifierService through the Shell seam", () => {
     expect(commands.some((command) => command.includes("state=closed"))).toBe(
       false,
     );
-    expect(commands[1]).toContain("curl");
+    expect(commands[0]).toContain("curl");
+    expect(commands[1]).toContain("gh issue comment 42 --repo o/r --body-file");
   });
 
   it("closes the issue as not_planned on a moderation failure", async () => {
