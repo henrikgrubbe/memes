@@ -1,0 +1,12 @@
+# Non-secret example only. Copy values into .env.scaleway as TF_VAR_* exports.
+project_id           = "00000000-0000-0000-0000-000000000000"
+region               = "fr-par"
+name_prefix          = "memes"
+github_repository    = "henrikgrubbe/memes"
+github_target_branch = "main"
+
+# Safe deployment defaults:
+deploy_containers      = false
+worker_trigger_enabled = false
+hosted_ingress_mode    = "off"
+worker_mode            = "diagnostic"

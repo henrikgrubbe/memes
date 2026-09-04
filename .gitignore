@@ -4,4 +4,17 @@ reports/
 .idea/
 
 .env
+.env.scaleway
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+.terraform/
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
 repos/

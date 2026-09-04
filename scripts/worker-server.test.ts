@@ -26,7 +26,10 @@ describe("worker HTTP handling", () => {
     });
 
     const result = await Effect.runPromise(
-      handleWorkerRequest("{").pipe(Effect.provide(processor)),
+      handleWorkerRequest("{", {
+        diagnosticResponse: "success",
+        mode: "live",
+      }).pipe(Effect.provide(processor)),
     );
 
     expect(result.status).toBe(200);
@@ -40,11 +43,56 @@ describe("worker HTTP handling", () => {
     });
 
     const result = await Effect.runPromise(
-      handleWorkerRequest(validRequest).pipe(Effect.provide(processor)),
+      handleWorkerRequest(validRequest, {
+        diagnosticResponse: "success",
+        mode: "live",
+      }).pipe(Effect.provide(processor)),
     );
 
     expect(result).toEqual({
       body: { disposition: "retry" },
+      status: 503,
+    });
+  });
+
+  it("acknowledges diagnostics without invoking the processor", async () => {
+    let calls = 0;
+    const processor = Layer.succeed(WorkerProcessorTag, {
+      process: () =>
+        Effect.sync(() => {
+          calls += 1;
+          return "processed" as const;
+        }),
+    });
+
+    const result = await Effect.runPromise(
+      handleWorkerRequest(validRequest, {
+        diagnosticResponse: "success",
+        mode: "diagnostic",
+      }).pipe(Effect.provide(processor)),
+    );
+
+    expect(result).toEqual({
+      body: { disposition: "diagnostic-acknowledged" },
+      status: 200,
+    });
+    expect(calls).toBe(0);
+  });
+
+  it("can request a diagnostic redelivery without side effects", async () => {
+    const processor = Layer.succeed(WorkerProcessorTag, {
+      process: () => Effect.die("processor must not run"),
+    });
+
+    const result = await Effect.runPromise(
+      handleWorkerRequest(validRequest, {
+        diagnosticResponse: "retry",
+        mode: "diagnostic",
+      }).pipe(Effect.provide(processor)),
+    );
+
+    expect(result).toEqual({
+      body: { disposition: "diagnostic-retry" },
       status: 503,
     });
   });

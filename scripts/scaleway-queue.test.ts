@@ -37,6 +37,7 @@ describe("makeScalewayQueue", () => {
       {
         MessageBody: JSON.stringify(task),
         MessageDeduplicationId: task.deliveryId,
+        MessageGroupId: "meme-requests",
         QueueUrl: config.queueUrl,
       },
     ]);

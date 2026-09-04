@@ -66,6 +66,18 @@ Data API commit using a non-forced fast-forward with conflict retry. Completed
 markers suppress repeated generation and saga application. Slack completion is
 claimed in GitHub before posting because incoming webhooks have no idempotency
 key; this prevents duplicates but admits a documented missed-notification crash
-window. The current GitHub Actions workflow remains authoritative until the
-hosted canary and cutover layer is complete.
+window. Deployment is defined in `infra/scaleway` with a two-phase registry/image flow.
+Its safe defaults are ingress off, worker diagnostic, queue trigger absent, and
+GitHub Actions authoritative. The workflow remains in place permanently and is
+selected unless repository variable `MEME_PROCESSING_BACKEND` is exactly
+`hosted`. Issues created with the `hosted-canary` label are excluded from
+Actions and are the only deliveries admitted by canary ingress, preventing one
+request from running in both backends.
+
+Cutover pauses upstream intake, detaches the trigger, changes Actions authority,
+opens live ingress so the queue can buffer, then activates the live worker at
+maximum scale one. Rollback reverses those gates and assigns each buffered
+delivery to exactly one backend. Scaleway's full trigger envelope,
+acknowledgement timing, retry delay, DLQ interaction, and private-container
+compatibility remain live-canary facts rather than assumed guarantees.
 See `docs/hosting-webhook.md`.

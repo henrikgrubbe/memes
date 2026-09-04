@@ -19,7 +19,7 @@ const issueBody = [
 ].join("\n");
 const payload = JSON.stringify({
   action: "opened",
-  issue: { number: 42, body: issueBody },
+  issue: { number: 42, body: issueBody, labels: [] },
   repository: { full_name: "owner/repo" },
 });
 const signature = (body: string) =>
@@ -40,12 +40,16 @@ const run = (
         tasks.push(task);
       }),
   });
-  const effect = handleGitHubWebhook(secret, {
-    body,
-    deliveryId: options.deliveryId ?? "delivery-1",
-    event: options.event ?? "issues",
-    signature: options.signature ?? signature(body),
-  });
+  const effect = handleGitHubWebhook(
+    secret,
+    { canaryLabel: "hosted-canary", mode: "live" },
+    {
+      body,
+      deliveryId: options.deliveryId ?? "delivery-1",
+      event: options.event ?? "issues",
+      signature: options.signature ?? signature(body),
+    },
+  );
 
   return Effect.runPromise(
     effect.pipe(Effect.provide(layer), Effect.exit),
@@ -102,7 +106,7 @@ describe("handleGitHubWebhook", () => {
     });
     const editedBody = JSON.stringify({
       action: "edited",
-      issue: { number: 42, body: issueBody },
+      issue: { number: 42, body: issueBody, labels: [] },
       repository: { full_name: "owner/repo" },
     });
     const edited = await run(editedBody);
@@ -120,5 +124,74 @@ describe("handleGitHubWebhook", () => {
     const { exit } = await run(payload, { deliveryId: "" });
 
     expect(failureOfType(exit, WebhookRequestError).status).toBe(400);
+  });
+
+  it("admits only explicitly labelled issues in canary mode", async () => {
+    const canaryBody = JSON.stringify({
+      action: "opened",
+      issue: {
+        number: 42,
+        body: issueBody,
+        labels: [{ name: "hosted-canary" }],
+      },
+      repository: { full_name: "owner/repo" },
+    });
+    const tasks: Array<MemeRequestTask> = [];
+    const layer = makeWebhookQueueLayer({
+      enqueue: (task) =>
+        Effect.sync(() => {
+          tasks.push(task);
+        }),
+    });
+    const request = {
+      deliveryId: "delivery-1",
+      event: "issues",
+    };
+    const ignored = await Effect.runPromise(
+      handleGitHubWebhook(
+        secret,
+        { canaryLabel: "hosted-canary", mode: "canary" },
+        { ...request, body: payload, signature: signature(payload) },
+      ).pipe(Effect.provide(layer)),
+    );
+    const queued = await Effect.runPromise(
+      handleGitHubWebhook(
+        secret,
+        { canaryLabel: "hosted-canary", mode: "canary" },
+        { ...request, body: canaryBody, signature: signature(canaryBody) },
+      ).pipe(Effect.provide(layer)),
+    );
+
+    expect(ignored.disposition).toBe("ignored");
+    expect(queued.disposition).toBe("queued");
+    expect(tasks).toHaveLength(1);
+  });
+
+  it("ignores all issues when hosted ingress is off", async () => {
+    const tasks: Array<MemeRequestTask> = [];
+    const result = await Effect.runPromise(
+      handleGitHubWebhook(
+        secret,
+        { canaryLabel: "hosted-canary", mode: "off" },
+        {
+          body: payload,
+          deliveryId: "delivery-1",
+          event: "issues",
+          signature: signature(payload),
+        },
+      ).pipe(
+        Effect.provide(
+          makeWebhookQueueLayer({
+            enqueue: (task) =>
+              Effect.sync(() => {
+                tasks.push(task);
+              }),
+          }),
+        ),
+      ),
+    );
+
+    expect(result.disposition).toBe("ignored");
+    expect(tasks).toEqual([]);
   });
 });

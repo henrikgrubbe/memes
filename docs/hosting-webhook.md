@@ -117,12 +117,14 @@ The ingress requires:
 | Variable                | Purpose                                                          |
 | ----------------------- | ---------------------------------------------------------------- |
 | `GITHUB_WEBHOOK_SECRET` | Shared secret used to verify GitHub signatures                   |
-| `SCW_SQS_ACCESS_KEY`    | Queue credential with publish permission                         |
-| `SCW_SQS_SECRET_KEY`    | Secret for the queue credential                                  |
-| `SCW_SQS_ENDPOINT`      | Regional endpoint, such as `https://sqs.mnq.fr-par.scaleway.com` |
-| `SCW_SQS_QUEUE_URL`     | Full URL of the FIFO request queue                               |
-| `SCW_SQS_REGION`        | Queue region, such as `fr-par`                                   |
+| `SQS_ACCESS_KEY`        | Queue credential with publish permission                         |
+| `SQS_SECRET_KEY`        | Secret for the queue credential                                  |
+| `SQS_ENDPOINT`          | Regional endpoint, such as `https://sqs.mnq.fr-par.scaleway.com` |
+| `SQS_QUEUE_URL`         | Full URL of the FIFO request queue                               |
+| `SQS_REGION`            | Queue region, such as `fr-par`                                   |
 | `PORT`                  | HTTP port; defaults to `8080`                                    |
+| `HOSTED_INGRESS_MODE`   | `off`, exclusive `canary`, or `live`; defaults to `off`          |
+| `HOSTED_CANARY_LABEL`   | Label admitted in canary mode; defaults to `hosted-canary`       |
 
 Store the webhook and queue secrets as encrypted container secrets. Use
 separate credentials for the ingress publisher and the worker trigger so each
@@ -139,6 +141,9 @@ The worker requires:
 | `GITHUB_TARGET_BRANCH`    | Branch receiving output commits; defaults to `main`        |
 | `GITHUB_API_URL`          | GitHub REST base URL; defaults to `https://api.github.com` |
 | `PORT`                    | Worker HTTP port; defaults to `8080`                       |
+| `GITHUB_REPOSITORY`       | Only repository the worker is allowed to mutate            |
+| `WORKER_MODE`             | `diagnostic` or `live`; defaults to `diagnostic`            |
+| `WORKER_DIAGNOSTIC_RESPONSE` | `success` (200) or `retry` (503) for trigger validation  |
 
 For the first deployment, use a short-lived fine-grained PAT restricted to this
 repository with **Contents: read and write** and **Issues: read and write**.
@@ -148,22 +153,23 @@ registration, private-key, JWT, and token-refresh machinery.
 
 ## Deployment outline
 
-1. Create `meme-requests.fifo` and a same-region FIFO dead-letter queue.
-2. Set the request queue visibility timeout above the worst-case generation
-   time, retain messages for at least one day, and configure a maximum receive
-   count before dead-lettering.
-3. Create publish-only queue credentials for the ingress.
-4. Build `Dockerfile.webhook`, push it to Scaleway Container Registry, and
-   deploy it as a public Serverless Container with zero minimum instances.
-5. Configure the ingress environment and encrypted secrets listed above.
-6. Build `Dockerfile.worker` and deploy it with request concurrency one and
-   maximum scale one initially; a FIFO queue permits one in-flight message.
-7. Add a Scaleway Queues trigger for `meme-requests.fifo` using receive-only
-   queue credentials.
-8. Configure a GitHub webhook for issue events with JSON content and the same
-   secret as `GITHUB_WEBHOOK_SECRET`.
-9. Disable `.github/workflows/meme-on-issue.yml` only after an end-to-end
-   delivery succeeds through the hosted worker.
+The repeatable deployment lives in `infra/scaleway`. Run
+`infra/scaleway/setup.sh`; do not deploy directly from this outline.
+
+1. Apply phase one with `deploy_containers=false`. OpenTofu creates the private
+   registry, SQS service, FIFO request queue, same-region FIFO DLQ, scoped SQS
+   credentials, and Containers namespace.
+2. Build `Dockerfile.webhook` and `Dockerfile.worker`, tag both with an immutable
+   commit identifier, and push them to the newly created registry.
+3. Apply phase two with `deploy_containers=true`,
+   `hosted_ingress_mode=off`, `worker_mode=diagnostic`, and
+   `worker_trigger_enabled=false`. This is intentionally inert.
+4. Manually create the GitHub webhook with JSON issue events and the same
+   signing secret held by the ingress container.
+5. Prove the trigger contract in diagnostic canary mode, then run an exclusive
+   live canary.
+6. Cut over with the state machine below. Keep the Actions workflow present;
+   `MEME_PROCESSING_BACKEND` selects authority and an absent value means Actions.
 
 Scaleway documents only that queue content appears in the event object's
 `body` and responses of 300 or greater retry up to three times. It does not
@@ -172,3 +178,224 @@ timing, or private-container trigger compatibility. Layer 4 must run a
 logging-only canary to verify the observed envelope, deliberate redelivery
 after `500`, acknowledgement after `200`, and private-container compatibility
 before the Actions cutover.
+
+## OpenTofu resources and defaults
+
+`infra/scaleway` uses `scaleway/scaleway ~> 2.82.0`, OpenTofu-compatible HCL,
+and `fr-par`. It creates:
+
+- one private Container Registry namespace and one Serverless Containers
+  namespace;
+- Scaleway SQS activation plus separate manage-only, publish-only,
+  receive-only, and operations credentials;
+- `memes-requests.fifo` and `memes-requests-dlq.fifo` in `fr-par`, with explicit
+  deduplication IDs, one-day retention, 900-second visibility, long polling,
+  and redrive after four receives;
+- public ingress with zero minimum and two maximum instances, 30-second timeout,
+  encrypted secrets, and `/health` liveness;
+- a worker with zero minimum and one maximum instance, concurrency scaling
+  threshold one, 840-second timeout, encrypted secrets, and `/health` liveness;
+- an optional SQS trigger using receive-only credentials and `POST /queue`.
+
+The 840-second worker timeout is below the 900-second visibility timeout.
+Retention is at least one day so an outage is not silently converted into data
+loss. FIFO permits one in-flight message per queue, so raising worker scale
+before measuring throughput does not improve this design.
+
+The provider cannot deploy an application image before it exists in the new
+registry. The configuration therefore uses an explicit two-phase flow rather
+than a placeholder image. `deploy_containers` and `worker_trigger_enabled` both
+default to `false`.
+
+OpenTofu state contains SQS credentials and values supplied to container
+secrets. Local state and `.env.scaleway` are gitignored, but gitignore is not
+encryption. Keep them mode `0600`, back them up only to an encrypted secret/state
+store, and migrate to an encrypted remote backend before treating the
+deployment as production. Never commit a plan file: saved plans contain secret
+values.
+
+Provider references:
+
+- [Scaleway provider](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs)
+- [SQS queue resource](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/mnq_sqs_queue)
+- [Serverless Container resource](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/container)
+- [Container trigger resource](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/container_trigger)
+
+## Manual versus automated setup
+
+The human must:
+
+1. create/select the Scaleway project, enable billing and MFA, and create a
+   deployment API key;
+2. create a short-lived fine-grained PAT for only `henrikgrubbe/memes` with
+   Contents and Issues read/write;
+3. supply the Slack, OpenAI, optional xAI, and webhook-signing secrets;
+4. approve each plan/apply, authenticate Docker, build and push the two images;
+5. create the GitHub webhook, run every canary observation, pause/resume the
+   upstream Slack intake, and approve cutover.
+
+OpenTofu creates all registry, queue, scoped queue credential, container,
+encrypted secret wiring, probe, scaling, and optional trigger resources. It
+does not create a Scaleway account, billing method, MFA, GitHub PAT, provider
+API keys, Slack/OpenAI credentials, GitHub webhook, GitHub repository variable,
+or remote state backend.
+
+The wizard stores captured values only in ignored `.env.scaleway` with a
+restrictive umask. It never writes secrets to tracked HCL or GitHub Actions.
+Run it from the repository root:
+
+```bash
+./infra/scaleway/setup.sh
+```
+
+The wizard links official pages rather than relying on unstable Scaleway
+console click paths. It can resume an interrupted setup while Actions remains
+authoritative. Once `MEME_PROCESSING_BACKEND=hosted`, it refuses a full rerun
+rather than risking container destruction; use the rotation or rollback
+procedure below.
+
+## Exclusive canary and cutover state machine
+
+| State | GitHub variable | Ingress | Worker | Trigger | Authority |
+| --- | --- | --- | --- | --- | --- |
+| Default | absent or `actions` | `off` | `diagnostic` | absent | Actions |
+| Diagnostic canary | Actions | `canary` | `diagnostic` | enabled | Actions, except labelled canary |
+| Live canary | Actions | `canary` | `live` | enabled | Actions, except labelled canary |
+| Buffering cutover | `hosted` | `live` | `diagnostic` | absent | Queue buffers |
+| Hosted live | `hosted` | `live` | `live` | enabled | Hosted worker |
+| Rolled back | `actions` | `off` | `diagnostic` | absent | Actions |
+
+The workflow skips an issue only when `MEME_PROCESSING_BACKEND=hosted` or the
+issue already has the `hosted-canary` label in its `opened`/`reopened` event.
+Canary ingress admits only that label. Always attach the label before creating
+the canary issue; adding it later does not replay the opening event. Each
+diagnostic and live canary uses a new issue/delivery, so no request can be
+processed by both backends.
+
+OpenTofu also rejects `live` ingress with an attached diagnostic trigger:
+successful diagnostics return 200 and would otherwise acknowledge real
+requests without processing them. Authority transfer in the wizard is fatal
+and read-after-write verified before live ingress can be applied. If the live
+ingress apply is declined, interrupted, or fails, the wizard restores Actions
+authority and keeps intake paused. It requires zero visible and zero in-flight
+request messages before switching a diagnostic worker to live mode, since a
+503 diagnostic may remain hidden for the full visibility timeout.
+
+For live cutover:
+
+1. Pause Slack issue creation and wait for Actions and the queue to drain.
+2. Detach the trigger while ingress remains canary-only.
+3. Set `MEME_PROCESSING_BACKEND=hosted`; Actions now skips new requests.
+4. Apply `hosted_ingress_mode=live` while the trigger is absent. New deliveries
+   buffer durably.
+5. Apply `worker_mode=live` and `worker_trigger_enabled=true`.
+6. Resume Slack intake and observe the first request end to end.
+
+Pausing intake closes the small control-plane gap between steps 3 and 4. If an
+issue is created in that gap, use GitHub's webhook redelivery after ingress is
+live. Do not use the same issue as an Actions retry.
+
+## Mandatory live canary observations
+
+Scaleway documents only that message content is in event `body` and that an HTTP
+status of 300 or greater is retried up to three times. Before private or live
+processing, record evidence for all of the following:
+
+1. The configured `POST /queue` request reaches a private worker.
+2. The actual content type and envelope decode without logging the issue body.
+3. Diagnostic `503` produces the observed retry count and delay.
+4. Diagnostic `200` stops redelivery and the message disappears from the source
+   queue.
+5. Repeated failures interact with `max_receive_count=4` as expected and land in
+   the DLQ.
+6. A new exclusive live canary produces exactly one provider request, output
+   commit, issue completion, and Slack completion.
+7. Registry, Queues, and Serverless Containers all create successfully in
+   `fr-par`; Scaleway's current product-availability table is client-rendered
+   and was not statically verifiable.
+
+The full envelope, acknowledgement/deletion timing, retry delay, visibility
+extension behavior, DLQ interaction, and private-container trigger
+compatibility are not documented guarantees. If private invocation fails,
+stop. A temporary public diagnostic worker can isolate privacy as the cause,
+but public live processing needs a separate authenticated design and is not an
+automatic fallback.
+
+## Monitoring and operations
+
+- Probe public ingress with `curl -fsS "$INGRESS_ENDPOINT/health"`. Treat a
+  non-200 response, SQS publish 5xx, or GitHub webhook delivery failure as
+  paging signals.
+- Use Scaleway Serverless Container logs for start/failure/status diagnostics
+  and queue metrics/attributes for visible, in-flight, and DLQ message counts.
+  Alert on any DLQ message, oldest-message age approaching retention, repeated
+  worker 503s, and sustained max-scale execution.
+- Scaleway documents Cockpit integration with 31 days of included metrics and
+  seven days of included logs/traces. Set explicit longer retention only after
+  reviewing its cost.
+- Application logs contain repository, issue number, delivery ID, disposition,
+  provider status, and retry timing. They must not print webhook/PAT/provider
+  secrets, queue message bodies, issue bodies, prompts, or Slack webhook URLs.
+  Diagnostic mode explicitly logs `body omitted`.
+- Check `ApproximateNumberOfMessages`,
+  `ApproximateNumberOfMessagesNotVisible`, and
+  `ApproximateAgeOfOldestMessage` before and after every transition. Queue
+  attributes are eventually consistent; use repeated observations.
+
+For DLQ inspection, obtain the sensitive operations credentials only in the
+current shell:
+
+```bash
+cd infra/scaleway
+export AWS_ACCESS_KEY_ID="$(tofu output -raw operations_sqs_access_key)"
+export AWS_SECRET_ACCESS_KEY="$(tofu output -raw operations_sqs_secret_key)"
+export AWS_DEFAULT_REGION=fr-par
+endpoint="$(tofu output -raw sqs_endpoint)"
+dlq="$(tofu output -raw dead_letter_queue_url)"
+request_queue="$(tofu output -raw request_queue_url)"
+tmp="$(mktemp)"
+chmod 600 "$tmp"
+aws --endpoint-url "$endpoint" sqs receive-message \
+  --queue-url "$dlq" --max-number-of-messages 1 \
+  --visibility-timeout 0 --attribute-names All >"$tmp"
+```
+
+The temporary file contains the original issue body. Inspect it only on a
+trusted machine and delete it when done. To replay, receive one message with a
+300-second visibility timeout, confirm its repository/issue/delivery identity,
+send its body to `request_queue` with group ID `meme-requests` and a new replay
+deduplication ID, then delete the DLQ receipt only after `send-message`
+succeeds. Never bulk replay: the durable GitHub marker makes completed
+deliveries resumable, but unresolved failures can still repeat billed provider
+calls. Use the official [Scaleway SQS
+endpoint](https://www.scaleway.com/en/docs/queues/api-cli/aws-cli/) instructions.
+
+## Rotation, rollback, and cost
+
+Rotate the GitHub PAT before its recorded expiry: create the replacement with
+the same narrow repository permissions, update
+`TF_VAR_github_fine_grained_pat`, apply, run an exclusive canary, then revoke
+the old token. Use the same replace-apply-canary-revoke sequence for Slack and
+provider secrets. Rotate queue credentials by replacing their OpenTofu
+resources during paused intake; never delete the credential currently used by
+an attached trigger.
+
+Rollback is deliberately asymmetric:
+
+1. Pause intake.
+2. Apply trigger absent, ingress off, and worker diagnostic.
+3. Set `MEME_PROCESSING_BACKEND=actions` (or delete the variable).
+4. Decide each buffered request's owner before resuming. Either leave it queued
+   for a hosted recovery, or delete it from the queue and reopen/re-dispatch the
+   issue to Actions. Never do both.
+5. Resume intake.
+
+Do not delete the workflow; the CLI/manual Actions path remains the fallback.
+Do not purge a queue without a separate human confirmation and a saved list of
+delivery IDs.
+
+Cost guardrails are zero minimum instances, worker maximum scale one, ingress
+maximum scale two, FIFO serialization, one-day default retention, and explicit
+immutable image tags. Also configure Scaleway billing alerts, review provider
+usage after the first live request, prune old registry tags, cap log retention,
+and leave the trigger absent when hosted processing is not authoritative.
