@@ -11,6 +11,11 @@ concurrency:
 
 jobs:
   generate-meme:
+    if: >-
+      ${{
+        vars.MEME_PROCESSING_BACKEND != 'hosted' &&
+        !contains(github.event.issue.labels.*.name, 'hosted-canary')
+      }}
     name: Process request
     runs-on: ubuntu-latest
     timeout-minutes: 20

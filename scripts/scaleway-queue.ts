@@ -31,6 +31,7 @@ export const makeScalewayQueue = (
           new SendMessageCommand({
             MessageBody: encodeTask(task),
             MessageDeduplicationId: task.deliveryId,
+            MessageGroupId: "meme-requests",
             QueueUrl: config.queueUrl,
           }),
         ),
@@ -42,11 +43,11 @@ export const makeScalewayQueue = (
 });
 
 const ScalewayQueueConfig = Config.all({
-  accessKey: Config.string("SCW_SQS_ACCESS_KEY"),
-  endpoint: Config.string("SCW_SQS_ENDPOINT"),
-  queueUrl: Config.string("SCW_SQS_QUEUE_URL"),
-  region: Config.string("SCW_SQS_REGION"),
-  secretKey: Config.string("SCW_SQS_SECRET_KEY"),
+  accessKey: Config.string("SQS_ACCESS_KEY"),
+  endpoint: Config.string("SQS_ENDPOINT"),
+  queueUrl: Config.string("SQS_QUEUE_URL"),
+  region: Config.string("SQS_REGION"),
+  secretKey: Config.string("SQS_SECRET_KEY"),
 });
 
 export const makeScalewayQueueLayer = (

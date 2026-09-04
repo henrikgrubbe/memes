@@ -22,6 +22,7 @@ import {
 
 interface WorkerRuntimeConfig {
   readonly githubApiUrl: string;
+  readonly githubRepository: string;
   readonly githubToken: string;
   readonly openAiApiKey: string | null;
   readonly slackWebhookUrl: string;
@@ -34,15 +35,29 @@ interface WorkerProcessor {
   ) => Effect.Effect<HostedTaskResult, unknown>;
 }
 
+export type WorkerMode = "diagnostic" | "live";
+export type WorkerDiagnosticResponse = "retry" | "success";
+
+export interface WorkerRequestPolicy {
+  readonly diagnosticResponse: WorkerDiagnosticResponse;
+  readonly mode: WorkerMode;
+}
+
 export class WorkerProcessorTag extends Context.Tag("WorkerProcessor")<
   WorkerProcessorTag,
   WorkerProcessor
+>() {}
+
+class WorkerRequestPolicyTag extends Context.Tag("WorkerRequestPolicy")<
+  WorkerRequestPolicyTag,
+  WorkerRequestPolicy
 >() {}
 
 const WorkerConfig = Config.all({
   githubApiUrl: Config.string("GITHUB_API_URL").pipe(
     Config.withDefault("https://api.github.com"),
   ),
+  githubRepository: Config.string("GITHUB_REPOSITORY"),
   githubToken: Config.string("GITHUB_FINE_GRAINED_PAT"),
   openAiApiKey: Config.option(Config.string("OPENAI_API_KEY")),
   slackWebhookUrl: Config.string("SLACK_WEBHOOK_URL"),
@@ -65,6 +80,20 @@ const WorkerConfigLive = Layer.effect(
   ),
 );
 
+const WorkerRequestPolicyLive = Layer.effect(
+  WorkerRequestPolicyTag,
+  Config.all({
+    diagnosticResponse: Config.literal(
+      "success",
+      "retry",
+    )("WORKER_DIAGNOSTIC_RESPONSE").pipe(Config.withDefault("success")),
+    mode: Config.literal(
+      "diagnostic",
+      "live",
+    )("WORKER_MODE").pipe(Config.withDefault("diagnostic")),
+  }),
+);
+
 const WorkerProcessorLive = Layer.effect(
   WorkerProcessorTag,
   Effect.gen(function* () {
@@ -80,31 +109,37 @@ const WorkerProcessorLive = Layer.effect(
 
     return {
       process: (task) =>
-        makeRequestAppConfig({
-          issueBody: task.issueBody,
-          issueNumber: task.issueNumber,
-          repo: task.repo,
-          slackWebhookUrl: runtime.slackWebhookUrl,
-        }).pipe(
-          Effect.mapError(
-            () =>
+        task.repo !== runtime.githubRepository
+          ? Effect.fail(
               new WorkerMessageError({
-                detail: "Queued issue body is invalid",
+                detail: "Queued task repository is not allowed",
               }),
-          ),
-          Effect.flatMap((config) =>
-            runHostedTask(task, config, {
-              compressSaga,
-              repository: makeHostedGitHubRepository({
-                api,
-                branch: runtime.targetBranch,
-                task,
-              }),
-              slack,
-            }),
-          ),
-          Effect.provide(ProvidersLayer),
-        ),
+            )
+          : makeRequestAppConfig({
+              issueBody: task.issueBody,
+              issueNumber: task.issueNumber,
+              repo: task.repo,
+              slackWebhookUrl: runtime.slackWebhookUrl,
+            }).pipe(
+              Effect.mapError(
+                () =>
+                  new WorkerMessageError({
+                    detail: "Queued issue body is invalid",
+                  }),
+              ),
+              Effect.flatMap((config) =>
+                runHostedTask(task, config, {
+                  compressSaga,
+                  repository: makeHostedGitHubRepository({
+                    api,
+                    branch: runtime.targetBranch,
+                    task,
+                  }),
+                  slack,
+                }),
+              ),
+              Effect.provide(ProvidersLayer),
+            ),
     } satisfies WorkerProcessor;
   }),
 );
@@ -121,12 +156,30 @@ const terminalMessage = (error: WorkerMessageError): WorkerHttpResult => ({
 
 export const handleWorkerRequest = (
   requestBody: string,
+  policy: WorkerRequestPolicy,
 ): Effect.Effect<WorkerHttpResult, never, WorkerProcessorTag> =>
   decodeScalewayQueueRequest(requestBody).pipe(
     Effect.matchEffect({
       onFailure: (error) => Effect.succeed(terminalMessage(error)),
-      onSuccess: (task) =>
-        WorkerProcessorTag.pipe(
+      onSuccess: (task) => {
+        if (policy.mode === "diagnostic") {
+          return Effect.log(
+            `Diagnostic queue delivery for ${task.repo}#${task.issueNumber} (${task.deliveryId}); body omitted`,
+          ).pipe(
+            Effect.as(
+              policy.diagnosticResponse === "retry"
+                ? ({
+                    body: { disposition: "diagnostic-retry" },
+                    status: 503,
+                  } satisfies WorkerHttpResult)
+                : ({
+                    body: { disposition: "diagnostic-acknowledged" },
+                    status: 200,
+                  } satisfies WorkerHttpResult),
+            ),
+          );
+        }
+        return WorkerProcessorTag.pipe(
           Effect.flatMap((processor) => processor.process(task)),
           Effect.match({
             onFailure: (error) =>
@@ -142,7 +195,8 @@ export const handleWorkerRequest = (
                 status: 200 as const,
               }) satisfies WorkerHttpResult,
           }),
-        ),
+        );
+      },
     }),
     Effect.catchAllCause((cause) =>
       Effect.logError(Cause.pretty(cause)).pipe(
@@ -156,7 +210,11 @@ export const handleWorkerRequest = (
 
 const workerRequest = HttpServerRequest.HttpServerRequest.pipe(
   Effect.flatMap((request) => request.text),
-  Effect.flatMap(handleWorkerRequest),
+  Effect.flatMap((body) =>
+    WorkerRequestPolicyTag.pipe(
+      Effect.flatMap((policy) => handleWorkerRequest(body, policy)),
+    ),
+  ),
   Effect.map((result) =>
     HttpServerResponse.unsafeJson(result.body, { status: result.status }),
   ),
@@ -177,6 +235,7 @@ const ProcessorLive = WorkerProcessorLive.pipe(Layer.provide(WorkerConfigLive));
 const ApiLive = router.pipe(
   HttpServer.serve(),
   Layer.provide(ProcessorLive),
+  Layer.provide(WorkerRequestPolicyLive),
   Layer.provide(ServerLive),
 );
 

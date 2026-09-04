@@ -3,6 +3,13 @@ import { Context, Data, Effect, Layer, Schema } from "effect";
 
 const SUPPORTED_ACTIONS = new Set(["opened", "reopened"]);
 
+export type HostedIngressMode = "canary" | "live" | "off";
+
+export interface HostedIngressRouting {
+  readonly canaryLabel: string;
+  readonly mode: HostedIngressMode;
+}
+
 export class WebhookRequestError extends Data.TaggedError(
   "WebhookRequestError",
 )<{
@@ -63,6 +70,11 @@ const IssueWebhook = Schema.Struct({
   issue: Schema.Struct({
     number: Schema.Number,
     body: Schema.NullOr(Schema.String),
+    labels: Schema.Array(
+      Schema.Struct({
+        name: Schema.String,
+      }),
+    ),
   }),
   repository: Schema.Struct({
     full_name: Schema.NonEmptyTrimmedString,
@@ -100,6 +112,7 @@ export function verifyGitHubSignature(
 
 export const handleGitHubWebhook = (
   secret: string,
+  routing: HostedIngressRouting,
   request: GitHubWebhookRequest,
 ): Effect.Effect<
   GitHubWebhookResult,
@@ -130,6 +143,13 @@ export const handleGitHubWebhook = (
     );
 
     if (!SUPPORTED_ACTIONS.has(payload.action)) {
+      return { status: 202, disposition: "ignored" };
+    }
+    if (
+      routing.mode === "off" ||
+      (routing.mode === "canary" &&
+        !payload.issue.labels.some(({ name }) => name === routing.canaryLabel))
+    ) {
       return { status: 202, disposition: "ignored" };
     }
     if (payload.issue.body == null || payload.issue.body.trim() === "") {
