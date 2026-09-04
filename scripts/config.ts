@@ -48,6 +48,40 @@ const loadAppConfig = Effect.gen(function* () {
 
 export const AppConfigLayer = Layer.effect(AppConfigService, loadAppConfig);
 
+export interface RequestAppConfigInput {
+  readonly issueBody: string;
+  readonly issueNumber: string;
+  readonly repo: string;
+  readonly slackWebhookUrl: string;
+}
+
+export const makeRequestAppConfig = ({
+  issueBody,
+  issueNumber,
+  repo,
+  slackWebhookUrl,
+}: RequestAppConfigInput) =>
+  parseIssueBody(issueBody).pipe(
+    Effect.map((fields) => {
+      const directives = parseSagaDirectives(fields.message);
+      return {
+        issueNumber,
+        repo,
+        slackWebhookUrl,
+        requester: fields.sender,
+        memePrompt: directives.prompt,
+        channel: fields.channel,
+        slackLink: fields.link,
+        readSaga: directives.readSaga,
+        writeSaga: directives.writeSaga,
+      } satisfies AppConfig;
+    }),
+  );
+
+export const makeAppConfigLayer = (
+  config: AppConfig,
+): Layer.Layer<AppConfigService> => Layer.succeed(AppConfigService, config);
+
 export const parseIssueBody = (body: string) =>
   Schema.decodeUnknown(IssueFields)(tokenizeIssueBody(body));
 

@@ -48,6 +48,14 @@ export class MemePublishError extends Data.TaggedError("MemePublishError")<{
   }
 }
 
+export class NotificationError extends Data.TaggedError("NotificationError")<{
+  readonly detail: string;
+}> {
+  public get message(): string {
+    return this.detail;
+  }
+}
+
 export class ModerationFailedError extends Data.TaggedError(
   "ModerationFailedError",
 )<{

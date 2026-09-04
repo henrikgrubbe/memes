@@ -10,6 +10,7 @@ interface SuccessCommentParams {
   readonly channel: string;
   readonly slackLink: string;
   readonly repo: string;
+  readonly branch?: string;
   readonly metadata?: GenerationMetadata;
 }
 
@@ -20,6 +21,7 @@ interface SlackSuccessParams {
   readonly requester: string;
   readonly channel: string;
   readonly repo: string;
+  readonly branch?: string;
   readonly metadata?: GenerationMetadata;
   readonly readSaga?: string;
   readonly writeSaga?: string;
@@ -44,6 +46,7 @@ interface SlackSagaUpdateParams extends SagaUpdateParams {
   readonly requester: string;
   readonly channel: string;
   readonly repo: string;
+  readonly branch?: string;
 }
 
 /** Display-ready cost string (e.g. "0.108¢"), or null when cost is unknown. */
@@ -69,6 +72,7 @@ export function formatSuccessComment({
   channel,
   slackLink,
   repo,
+  branch = "main",
   metadata,
 }: SuccessCommentParams): string {
   const providerNote = ` _(${provider})_`;
@@ -81,8 +85,8 @@ export function formatSuccessComment({
       ? null
       : `${metadata.usage.inputTokens} input, ${metadata.usage.outputTokens} output, ${metadata.usage.totalTokens} total tokens`;
   const costCents = formatCostCents(metadata);
-  const blobUrl = `https://github.com/${repo}/blob/main/memes/${memeId}.jpg`;
-  const imageUrl = `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`;
+  const blobUrl = `https://github.com/${repo}/blob/${branch}/memes/${memeId}.jpg`;
+  const imageUrl = `https://raw.githubusercontent.com/${repo}/refs/heads/${branch}/memes/${memeId}.jpg`;
 
   return [
     `🎉 Meme generated and committed to [memes/${memeId}.jpg](${blobUrl})${providerNote}`,
@@ -142,6 +146,7 @@ export function formatSlackSuccessPayload({
   requester,
   channel,
   repo,
+  branch = "main",
   metadata,
   readSaga,
   writeSaga,
@@ -149,7 +154,7 @@ export function formatSlackSuccessPayload({
   const costCents = formatCostCents(metadata);
   return {
     status: "success" as const,
-    content_url: `https://raw.githubusercontent.com/${repo}/refs/heads/main/memes/${memeId}.jpg`,
+    content_url: `https://raw.githubusercontent.com/${repo}/refs/heads/${branch}/memes/${memeId}.jpg`,
     title,
     requester,
     channel,
@@ -187,13 +192,14 @@ export function formatSlackSagaUpdatePayload({
   requester,
   channel,
   repo,
+  branch = "main",
 }: SlackSagaUpdateParams) {
   return {
     status: updated
       ? ("saga-updated" as const)
       : ("saga-update-failed" as const),
     content_url: updated
-      ? `https://github.com/${repo}/blob/main/context/${saga}.md`
+      ? `https://github.com/${repo}/blob/${branch}/context/${saga}.md`
       : "",
     title: `Saga "${saga}": ${contribution}`,
     requester,

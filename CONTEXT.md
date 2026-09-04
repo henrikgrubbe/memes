@@ -45,17 +45,27 @@ Relevant code: `scripts/saga.ts` (service, compression, prompt assembly),
 
 ## Hosted processing
 
-The target hosted flow keeps the Slack Workflow's GitHub issue as the ingress:
-a signed GitHub issue webhook reaches a small HTTP service, which durably
-enqueues the request before returning. A separate worker will perform image
+The hosted flow keeps the Slack Workflow's GitHub issue as the ingress: a
+signed GitHub issue webhook reaches a small HTTP service, which durably
+enqueues the request before returning. A queue-triggered worker performs image
 generation, GitHub writes, Saga updates, and Slack notification.
 
 The ingress is implemented in `scripts/webhook-server.ts`.
 `scripts/github-webhook.ts` owns signature validation and event decoding, while
-`scripts/scaleway-queue.ts` publishes work to Scaleway Queues. A native queue
-trigger will invoke the worker container. The current GitHub
-Actions workflow remains authoritative until the worker migration is complete.
-The generation pipeline depends on `MemePublisherService`, `SagaService`, and
-`NotifierService`; the live CLI layers retain the current filesystem, git,
-GitHub CLI, and curl behavior behind those interfaces.
+`scripts/scaleway-queue.ts` publishes work to Scaleway Queues.
+`scripts/worker-server.ts` exposes the native queue-trigger endpoint and
+`scripts/hosted-github.ts` persists hosted results through the GitHub REST API.
+The worker creates request-scoped `AppConfig`, while its hosted adapters satisfy
+the same `MemePublisherService`, `SagaService`, and `NotifierService` interfaces
+used by the CLI pipeline. The CLI and GitHub Actions layers retain their
+filesystem, git, GitHub CLI, and curl behavior.
+
+Each delivery reserves a deterministic GitHub marker before provider work. The
+generated image, optional re-derived saga, and completed marker land in one Git
+Data API commit using a non-forced fast-forward with conflict retry. Completed
+markers suppress repeated generation and saga application. Slack completion is
+claimed in GitHub before posting because incoming webhooks have no idempotency
+key; this prevents duplicates but admits a documented missed-notification crash
+window. The current GitHub Actions workflow remains authoritative until the
+hosted canary and cutover layer is complete.
 See `docs/hosting-webhook.md`.

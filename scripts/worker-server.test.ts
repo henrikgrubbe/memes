@@ -1,0 +1,51 @@
+import { Effect, Layer, Schema } from "effect";
+import { describe, expect, it } from "vitest";
+import { handleWorkerRequest, WorkerProcessorTag } from "./worker-server.js";
+
+const encode = Schema.encodeSync(Schema.parseJson(Schema.Unknown));
+
+const validRequest = encode({
+  body: encode({
+    deliveryId: "delivery-1",
+    issueBody:
+      "sender: U1\nmessage: Test\nchannel: C1\nlink: https://example.test",
+    issueNumber: "42",
+    repo: "owner/repo",
+  }),
+});
+
+describe("worker HTTP handling", () => {
+  it("acknowledges permanently malformed messages without retrying", async () => {
+    let calls = 0;
+    const processor = Layer.succeed(WorkerProcessorTag, {
+      process: () =>
+        Effect.sync(() => {
+          calls += 1;
+          return "processed" as const;
+        }),
+    });
+
+    const result = await Effect.runPromise(
+      handleWorkerRequest("{").pipe(Effect.provide(processor)),
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body["disposition"]).toBe("rejected");
+    expect(calls).toBe(0);
+  });
+
+  it("returns a retryable status when processing fails", async () => {
+    const processor = Layer.succeed(WorkerProcessorTag, {
+      process: () => Effect.fail("temporary failure"),
+    });
+
+    const result = await Effect.runPromise(
+      handleWorkerRequest(validRequest).pipe(Effect.provide(processor)),
+    );
+
+    expect(result).toEqual({
+      body: { disposition: "retry" },
+      status: 503,
+    });
+  });
+});
