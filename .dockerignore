@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.scratch
+context
+coverage
+docs
+memes
+node_modules
+repos
+reports
+*.jpg

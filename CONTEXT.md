@@ -42,3 +42,17 @@ never lost. Concurrent writes to the same saga serialize via `git pull
 Relevant code: `scripts/saga.ts` (service, compression, prompt assembly),
 `scripts/saga-directives.ts` (`parseSagaDirectives`), `scripts/config.ts`
 (configuration wiring), `scripts/generate-meme.ts` (pipeline wiring).
+
+## Hosted processing
+
+The target hosted flow keeps the Slack Workflow's GitHub issue as the ingress:
+a signed GitHub issue webhook reaches a small HTTP service, which durably
+enqueues the request before returning. A separate worker will perform image
+generation, GitHub writes, Saga updates, and Slack notification.
+
+The ingress is implemented in `scripts/webhook-server.ts`.
+`scripts/github-webhook.ts` owns signature validation and event decoding, while
+`scripts/scaleway-queue.ts` publishes work to Scaleway Queues. A native queue
+trigger will invoke the worker container. The current GitHub
+Actions workflow remains authoritative until the worker migration is complete.
+See `docs/hosting-webhook.md`.
