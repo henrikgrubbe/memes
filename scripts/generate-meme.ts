@@ -1,5 +1,4 @@
 import { fileURLToPath } from "node:url";
-import { FileSystem, Path } from "@effect/platform";
 import {
   NodeCommandExecutor,
   NodeFileSystem,
@@ -8,7 +7,11 @@ import {
 import { Effect, Layer } from "effect";
 import { AppConfigLayer, AppConfigService } from "./config.js";
 import { failureDisposition, type FailureDisposition } from "./disposition.js";
-import { GitLayer, GitServiceTag } from "./git.js";
+import { GitLayer } from "./git.js";
+import {
+  MemePublisherLayer,
+  MemePublisherServiceTag,
+} from "./meme-publisher.js";
 import { NotifierLayer, NotifierServiceTag } from "./notifier.js";
 import { ProvidersLayer, ProvidersServiceTag } from "./providers.js";
 import { buildMemePrompt, SagaLayer, SagaServiceTag } from "./saga.js";
@@ -53,10 +56,8 @@ const handleFailure = ({
 
 export const program = Effect.gen(function* () {
   const config = yield* AppConfigService;
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
   const saga = yield* SagaServiceTag;
-  const git = yield* GitServiceTag;
+  const memePublisher = yield* MemePublisherServiceTag;
   const notifier = yield* NotifierServiceTag;
 
   if (config.writeSaga != null && config.readSaga == null) {
@@ -72,9 +73,6 @@ export const program = Effect.gen(function* () {
     return yield* Effect.log("Done.");
   }
 
-  const memeId = crypto.randomUUID();
-  const memesDir = path.join(process.cwd(), "memes");
-  const outFile = path.join(memesDir, `${memeId}.jpg`);
   const canon =
     config.readSaga == null ? null : yield* saga.read(config.readSaga);
   const prompt = buildMemePrompt(
@@ -83,7 +81,7 @@ export const program = Effect.gen(function* () {
   );
 
   yield* sagaReadLog(config.readSaga, canon);
-  yield* fs.makeDirectory(memesDir, { recursive: true });
+  const preparedMeme = yield* memePublisher.prepare(config.issueNumber);
   yield* Effect.log(
     `Starting generation for issue #${config.issueNumber}: "${config.memePrompt}"`,
   );
@@ -93,18 +91,9 @@ export const program = Effect.gen(function* () {
     config.requester,
   );
 
-  const stageMeme = fs.writeFile(outFile, buffer).pipe(
-    Effect.orDie,
-    Effect.tap(() => Effect.log(`Image saved: ${outFile}`)),
-    Effect.as([`memes/${memeId}.jpg`]),
-  );
-
-  yield* git.commitToMain({
-    message: `Add meme for issue #${config.issueNumber} (${memeId})`,
-    stage: stageMeme,
-  });
+  yield* preparedMeme.publish(buffer);
   yield* notifier.notifySuccess({
-    memeId,
+    memeId: preparedMeme.memeId,
     history,
     prompt: config.memePrompt,
     metadata,
@@ -128,6 +117,9 @@ const PlatformLayer = Layer.mergeAll(
 
 const ShellLive = ShellLayer.pipe(Layer.provide(PlatformLayer));
 const GitLive = GitLayer.pipe(Layer.provide(ShellLive));
+const MemePublisherLive = MemePublisherLayer.pipe(
+  Layer.provide(Layer.mergeAll(PlatformLayer, GitLive)),
+);
 const NotifierLive = NotifierLayer.pipe(
   Layer.provide(Layer.mergeAll(AppConfigLayer, ShellLive)),
 );
@@ -137,9 +129,8 @@ const SagaLive = SagaLayer.pipe(
 
 const AppLayer = Layer.mergeAll(
   AppConfigLayer,
-  PlatformLayer,
   ProvidersLayer,
-  GitLive,
+  MemePublisherLive,
   NotifierLive,
   SagaLive,
 );

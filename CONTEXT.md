@@ -55,4 +55,7 @@ The ingress is implemented in `scripts/webhook-server.ts`.
 `scripts/scaleway-queue.ts` publishes work to Scaleway Queues. A native queue
 trigger will invoke the worker container. The current GitHub
 Actions workflow remains authoritative until the worker migration is complete.
+The generation pipeline depends on `MemePublisherService`, `SagaService`, and
+`NotifierService`; the live CLI layers retain the current filesystem, git,
+GitHub CLI, and curl behavior behind those interfaces.
 See `docs/hosting-webhook.md`.

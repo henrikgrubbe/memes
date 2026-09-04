@@ -1,11 +1,9 @@
-import { FileSystem } from "@effect/platform";
-import { NodePath } from "@effect/platform-node";
 import { Effect, Exit, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { type AppConfig, AppConfigService } from "./config.js";
-import { PushFailedError } from "./errors.js";
+import { MemePublishError } from "./errors.js";
 import { program } from "./generate-meme.js";
-import { makeGitLayer } from "./git.js";
+import { makeMemePublisherLayer } from "./meme-publisher.js";
 import { NotifierServiceTag } from "./notifier.js";
 import {
   providerErrorProvider,
@@ -29,14 +27,14 @@ const baseConfig: AppConfig = {
 interface HarnessOptions {
   readonly config?: AppConfig;
   readonly provider?: ProviderFn;
-  readonly gitFails?: boolean;
+  readonly publishFails?: boolean;
   readonly sagaUpdateSucceeds?: boolean;
 }
 
 const runWorkflow = ({
   config = baseConfig,
   provider = successfulProvider("OpenAI"),
-  gitFails = false,
+  publishFails = false,
   sagaUpdateSucceeds = true,
 }: HarnessOptions = {}) => {
   let events: ReadonlyArray<string> = [];
@@ -45,10 +43,6 @@ const runWorkflow = ({
       events = [...events, event];
     });
 
-  const fileSystem = FileSystem.layerNoop({
-    makeDirectory: (path) => record(`mkdir:${path}`),
-    writeFile: (path) => record(`write:${path}`),
-  });
   const saga = makeSagaLayer({
     read: (name) =>
       record(`saga:read:${name}`).pipe(Effect.as("Existing canon")),
@@ -57,16 +51,24 @@ const runWorkflow = ({
         Effect.as(sagaUpdateSucceeds),
       ),
   });
-  const git = makeGitLayer({
-    commitToMain: (plan) =>
-      record("git:start").pipe(
-        Effect.zipRight(plan.stage),
-        Effect.flatMap((paths) => record(`git:commit:${paths.join(",")}`)),
-        Effect.zipRight(
-          gitFails
-            ? Effect.fail(new PushFailedError({ attempts: 5 }))
-            : Effect.void,
-        ),
+  const memePublisher = makeMemePublisherLayer({
+    prepare: (issueNumber) =>
+      record(`publish:prepare:${issueNumber}`).pipe(
+        Effect.as({
+          memeId: "meme-1",
+          publish: (image: Uint8Array) =>
+            record(`publish:image:${Buffer.from(image).toString()}`).pipe(
+              Effect.zipRight(
+                publishFails
+                  ? Effect.fail(
+                      new MemePublishError({
+                        detail: "Failed to push after 5 attempts",
+                      }),
+                    )
+                  : Effect.void,
+              ),
+            ),
+        }),
       ),
   });
   const notifier = Layer.succeed(NotifierServiceTag, {
@@ -84,10 +86,8 @@ const runWorkflow = ({
   });
   const layer = Layer.mergeAll(
     Layer.succeed(AppConfigService, config),
-    fileSystem,
-    NodePath.layer,
     saga,
-    git,
+    memePublisher,
     notifier,
     providers,
   );
@@ -103,15 +103,13 @@ describe("meme generation workflow", () => {
 
     expect(Exit.isSuccess(exit)).toBe(true);
     expect(events[0]).toBe("saga:read:fp");
-    expect(events[1]).toContain("mkdir:");
+    expect(events[1]).toBe("publish:prepare:42");
     expect(events[2]).toBe(
       "provider:U123:Background for continuity:\nExisting canon\n\nCurrent request - depict this now:\nA typed functional meme",
     );
-    expect(events[3]).toBe("git:start");
-    expect(events[4]).toMatch(/^write:.*\/memes\/.+\.jpg$/);
-    expect(events[5]).toMatch(/^git:commit:memes\/.+\.jpg$/);
-    expect(events[6]).toMatch(/^notify:success:.+:A typed functional meme$/);
-    expect(events[7]).toBe("saga:write:fp:A typed functional meme");
+    expect(events[3]).toBe("publish:image:hello");
+    expect(events[4]).toBe("notify:success:meme-1:A typed functional meme");
+    expect(events[5]).toBe("saga:write:fp:A typed functional meme");
   });
 
   it("notifies failure without committing when generation fails", async () => {
@@ -124,7 +122,10 @@ describe("meme generation workflow", () => {
       "provider:U123:Background for continuity:\nExisting canon\n\nCurrent request - depict this now:\nA typed functional meme",
     );
     expect(events).toContain("notify:failure:OpenAI failed: error");
-    expect(events.some((event) => event.startsWith("git:"))).toBe(false);
+    expect(events).toContain("publish:prepare:42");
+    expect(events.some((event) => event.startsWith("publish:image:"))).toBe(
+      false,
+    );
     expect(events.some((event) => event.startsWith("notify:success:"))).toBe(
       false,
     );
@@ -132,7 +133,7 @@ describe("meme generation workflow", () => {
   });
 
   it("reports a commit failure without announcing success or updating the saga", async () => {
-    const { events, exit } = await runWorkflow({ gitFails: true });
+    const { events, exit } = await runWorkflow({ publishFails: true });
 
     expect(Exit.isFailure(exit)).toBe(true);
     expect(events).toContain("notify:failure:Failed to push after 5 attempts");

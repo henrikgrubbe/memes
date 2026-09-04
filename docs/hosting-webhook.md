@@ -59,8 +59,14 @@ The repository contains the public ingress slice:
 
 The private worker endpoint is not implemented yet. The existing GitHub Actions
 workflow remains authoritative until the worker migration is complete. The
-next slice replaces local `git`, `gh`, and `curl` operations with GitHub and
-Slack HTTP adapters, then exposes the queue-triggered worker handler.
+generation pipeline is host-independent: it publishes generated image bytes
+through `MemePublisherService` and uses the existing `SagaService` and
+`NotifierService` interfaces for the other durable effects. Their live CLI
+layers retain the current filesystem, `git`, `gh`, and `curl` behavior.
+
+A later slice can supply HTTP-backed publisher, saga, and notifier adapters and
+expose the queue-triggered worker handler without changing generation
+orchestration.
 
 ## Configuration
 
