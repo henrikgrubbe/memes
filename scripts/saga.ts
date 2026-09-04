@@ -227,6 +227,12 @@ type ModelCall = (
   messages: ReadonlyArray<ChatMessage>,
 ) => Effect.Effect<string, CompressionError>;
 
+export type SagaCompressor = (
+  saga: string,
+  canon: string,
+  prompt: string,
+) => Effect.Effect<string>;
+
 const toOpenAiMessage = (
   message: ChatMessage,
 ): OpenAI.Chat.Completions.ChatCompletionMessageParam =>
@@ -259,6 +265,18 @@ const makeModelCall =
       }),
     );
 
+export const makeSagaCompressor = (apiKey: string | null): SagaCompressor => {
+  const callModel =
+    apiKey == null || apiKey.trim() === ""
+      ? null
+      : makeModelCall(new OpenAI({ apiKey }));
+
+  return (saga, canon, prompt) =>
+    callModel == null
+      ? Effect.succeed(appendFallback(canon, prompt))
+      : foldCanon(callModel, saga, canon, prompt);
+};
+
 export const SagaLayer: Layer.Layer<
   SagaServiceTag,
   never,
@@ -273,28 +291,13 @@ export const SagaLayer: Layer.Layer<
     const apiKey = yield* Config.option(Config.string("OPENAI_API_KEY")).pipe(
       Effect.orDie,
     );
-    const callModel = Option.match(apiKey, {
-      onNone: (): ModelCall | null => null,
-      onSome: (value): ModelCall | null =>
-        value.trim() === ""
-          ? null
-          : makeModelCall(new OpenAI({ apiKey: value })),
-    });
+    const compress = makeSagaCompressor(Option.getOrNull(apiKey));
 
     const absPath = (saga: string) =>
       path.join(process.cwd(), CONTEXT_DIR, `${saga}.md`);
 
     const readCanon = (saga: string): Effect.Effect<string | null> =>
       fs.readFileString(absPath(saga)).pipe(Effect.orElseSucceed(() => null));
-
-    const compress = (
-      saga: string,
-      canon: string,
-      prompt: string,
-    ): Effect.Effect<string> =>
-      callModel == null
-        ? Effect.succeed(appendFallback(canon, prompt))
-        : foldCanon(callModel, saga, canon, prompt);
 
     const stage = (
       saga: string,

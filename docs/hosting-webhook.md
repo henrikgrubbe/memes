@@ -57,16 +57,58 @@ The repository contains the public ingress slice:
 - `scripts/scaleway-queue.ts` publishes deduplicated messages to a FIFO queue.
 - `Dockerfile.webhook` builds the ingress container.
 
-The private worker endpoint is not implemented yet. The existing GitHub Actions
-workflow remains authoritative until the worker migration is complete. The
-generation pipeline is host-independent: it publishes generated image bytes
-through `MemePublisherService` and uses the existing `SagaService` and
-`NotifierService` interfaces for the other durable effects. Their live CLI
-layers retain the current filesystem, `git`, `gh`, and `curl` behavior.
+The repository also contains the queue worker slice:
 
-A later slice can supply HTTP-backed publisher, saga, and notifier adapters and
-expose the queue-triggered worker handler without changing generation
-orchestration.
+- `scripts/worker-server.ts` accepts trigger requests at `POST /` and
+  `POST /queue`, and exposes `GET /health`.
+- `scripts/worker-transport.ts` tolerates either a direct JSON task or an event
+  object whose `body` is the task object or its serialized JSON.
+- `scripts/worker-server.ts` creates request-scoped configuration, while
+  `scripts/hosted-worker.ts` orchestrates the existing provider, prompt,
+  publisher, saga, and notifier interfaces in hosted-safe order.
+- `scripts/hosted-github.ts` uses the Contents API for reads and the Git Data
+  API for atomic writes, issue comments, and issue closure.
+- `scripts/hosted-notifier.ts` posts the existing Slack payload contract with
+  the Node HTTP client rather than shelling out to `curl`.
+- `Dockerfile.worker` builds the dedicated production worker image.
+
+Malformed envelopes, invalid task identities, and invalid Slack issue bodies
+receive a terminal `200` response with `disposition: rejected`. Processing and
+dependency failures receive `503`, causing the Scaleway trigger to retry.
+Successful and resumed deliveries receive `200`. The CLI and GitHub Actions
+layers are unchanged and retain their filesystem, `git`, `gh`, and `curl`
+behavior.
+
+### Atomic persistence and idempotency
+
+The durable identity is the repository, issue number, and GitHub delivery ID.
+The worker derives a stable meme UUID and marker path from that identity.
+
+1. Before calling an image provider, reserve the delivery by committing
+   `.github/meme-worker/deliveries/<sha256>.json`.
+2. Read saga canon from the current target-branch head.
+3. Create blobs for the image, optional updated saga, and completed marker.
+4. Create one tree and one commit, then update the branch ref with
+   `force: false`.
+5. If the ref moved, re-read the marker and saga, re-derive the saga update, and
+   retry. If another attempt completed the marker, use its result.
+6. On redelivery, a completed marker skips provider generation, image commit,
+   and saga application and resumes only incomplete notification work.
+
+The image, saga, and completion marker are therefore atomic, and duplicate
+successful deliveries do not generate another commit or apply a saga twice.
+There are two unavoidable crash windows:
+
+- A crash after a provider accepts the request but before GitHub records the
+  completed result can cause another billed provider call. Neither the current
+  providers nor Scaleway supply an end-to-end idempotency key.
+- Slack incoming webhooks have no idempotency key or returned message ID. The
+  worker claims the Slack send in the GitHub marker before posting, yielding
+  at-most-once completion delivery. A crash after the claim and before Slack
+  accepts the request can omit the Slack message, but will not duplicate it.
+
+Issue completion comments include a hidden delivery marker. Retries find and
+reuse that comment before closing the issue.
 
 ## Configuration
 
@@ -86,6 +128,24 @@ Store the webhook and queue secrets as encrypted container secrets. Use
 separate credentials for the ingress publisher and the worker trigger so each
 has only the permissions it needs.
 
+The worker requires:
+
+| Variable                  | Purpose                                                    |
+| ------------------------- | ---------------------------------------------------------- |
+| `GITHUB_FINE_GRAINED_PAT` | Repository-scoped token for hosted persistence             |
+| `SLACK_WEBHOOK_URL`       | Existing Slack Workflow incoming webhook                   |
+| `OPENAI_API_KEY`          | Primary image generation and optional saga compression     |
+| `XAI_API_KEY`             | Optional moderation fallback provider                      |
+| `GITHUB_TARGET_BRANCH`    | Branch receiving output commits; defaults to `main`        |
+| `GITHUB_API_URL`          | GitHub REST base URL; defaults to `https://api.github.com` |
+| `PORT`                    | Worker HTTP port; defaults to `8080`                       |
+
+For the first deployment, use a short-lived fine-grained PAT restricted to this
+repository with **Contents: read and write** and **Issues: read and write**.
+Store it only as an encrypted worker secret. A GitHub App can replace it later
+if installation-token rotation and service attribution justify the additional
+registration, private-key, JWT, and token-refresh machinery.
+
 ## Deployment outline
 
 1. Create `meme-requests.fifo` and a same-region FIFO dead-letter queue.
@@ -96,11 +156,19 @@ has only the permissions it needs.
 4. Build `Dockerfile.webhook`, push it to Scaleway Container Registry, and
    deploy it as a public Serverless Container with zero minimum instances.
 5. Configure the ingress environment and encrypted secrets listed above.
-6. Deploy the worker container privately with one replica and request
-   concurrency of one initially.
+6. Build `Dockerfile.worker` and deploy it with request concurrency one and
+   maximum scale one initially; a FIFO queue permits one in-flight message.
 7. Add a Scaleway Queues trigger for `meme-requests.fifo` using receive-only
    queue credentials.
 8. Configure a GitHub webhook for issue events with JSON content and the same
    secret as `GITHUB_WEBHOOK_SECRET`.
 9. Disable `.github/workflows/meme-on-issue.yml` only after an end-to-end
    delivery succeeds through the hosted worker.
+
+Scaleway documents only that queue content appears in the event object's
+`body` and responses of 300 or greater retry up to three times. It does not
+document the method, default path, complete envelope, acknowledgement/deletion
+timing, or private-container trigger compatibility. Layer 4 must run a
+logging-only canary to verify the observed envelope, deliberate redelivery
+after `500`, acknowledgement after `200`, and private-container compatibility
+before the Actions cutover.

@@ -12,7 +12,8 @@
     "test:coverage": "vitest run --coverage",
     "test:coverage:ci": "vitest run --coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile.junit=reports/junit.xml --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=html --coverage.reporter=lcovonly",
     "test:watch": "vitest",
-    "start:webhook": "tsx scripts/webhook-server.ts"
+    "start:webhook": "tsx scripts/webhook-server.ts",
+    "start:worker": "tsx scripts/worker-server.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1126.0",

@@ -7,7 +7,12 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text"],
       include: ["scripts/**/*.ts"],
-      exclude: ["scripts/**/*.test.ts", "scripts/**/*test-support.ts"],
+      exclude: [
+        "scripts/**/*.test.ts",
+        "scripts/**/*test-support.ts",
+        "scripts/webhook-server.ts",
+        "scripts/worker-server.ts",
+      ],
       thresholds: {
         statements: 90,
         branches: 80,

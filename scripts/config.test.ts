@@ -4,6 +4,7 @@ import {
   AppConfigLayer,
   AppConfigService,
   IssueFields,
+  makeRequestAppConfig,
   parseIssueBody,
 } from "./config.js";
 import { failureOrThrow } from "./test-support.js";
@@ -172,5 +173,29 @@ describe("AppConfigLayer", () => {
     expect(config.memePrompt).toBe("make a sequel");
     expect(config.readSaga).toBe("origin");
     expect(config.writeSaga).toBe("next");
+  });
+
+  describe("request-scoped AppConfig", () => {
+    it("builds config from a queued task without changing process environment", async () => {
+      const issueBody =
+        "sender: hhb\nmessage: saga:origin make a sequel\nchannel: #memes\nlink: https://slack.com/x";
+
+      const config = await Effect.runPromise(
+        makeRequestAppConfig({
+          issueBody,
+          issueNumber: "823",
+          repo: "henrikgrubbe/memes",
+          slackWebhookUrl: "https://slack.com/webhook",
+        }),
+      );
+
+      expect(config).toMatchObject({
+        issueNumber: "823",
+        memePrompt: "make a sequel",
+        readSaga: "origin",
+        repo: "henrikgrubbe/memes",
+        writeSaga: "origin",
+      });
+    });
   });
 });
