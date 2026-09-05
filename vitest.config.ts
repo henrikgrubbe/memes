@@ -2,16 +2,16 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["scripts/**/*.test.ts"],
+    include: ["src/**/*.test.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text"],
-      include: ["scripts/**/*.ts"],
+      include: ["src/**/*.ts"],
       exclude: [
-        "scripts/**/*.test.ts",
-        "scripts/**/*test-support.ts",
-        "scripts/webhook-server.ts",
-        "scripts/worker-server.ts",
+        "src/**/*.test.ts",
+        "src/**/*test-support.ts",
+        "src/hosted/ingress/webhook-server.ts",
+        "src/hosted/worker/worker-server.ts",
       ],
       thresholds: {
         statements: 90,

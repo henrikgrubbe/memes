@@ -72,7 +72,7 @@ jobs:
         run: |
           mkdir -p reports
           set +e
-          npm exec -- tsx scripts/generate-meme.ts 2>&1 | tee reports/generate-meme.log
+          npm exec -- tsx src/cli/generate-meme.ts 2>&1 | tee reports/generate-meme.log
           status=${PIPESTATUS[0]}
           set -e
 

@@ -4,12 +4,12 @@ output "registry_endpoint" {
 }
 
 output "ingress_image" {
-  description = "Expected ingress image reference."
+  description = "Bootstrap ingress image reference; CI owns later revisions."
   value       = local.ingress_image
 }
 
 output "worker_image" {
-  description = "Expected worker image reference."
+  description = "Bootstrap worker image reference; CI owns later revisions."
   value       = local.worker_image
 }
 
@@ -48,6 +48,16 @@ output "ingress_endpoint" {
 output "worker_endpoint" {
   description = "Worker endpoint for health and trigger diagnostics."
   value       = var.deploy_containers ? scaleway_container.worker[0].public_endpoint : null
+}
+
+output "ingress_container_id" {
+  description = "Ingress container ID used by application deployment automation."
+  value       = var.deploy_containers ? split("/", scaleway_container.ingress[0].id)[1] : null
+}
+
+output "worker_container_id" {
+  description = "Worker container ID used by application deployment automation."
+  value       = var.deploy_containers ? split("/", scaleway_container.worker[0].id)[1] : null
 }
 
 output "worker_trigger_id" {

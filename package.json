@@ -2,9 +2,9 @@
   "type": "module",
   "scripts": {
     "prepare": "effect-tsgo patch --typescript --no-oxlint",
-    "format": "prettier --write \"scripts/**/*.ts\" \"*.{json,ts}\" \".github/workflows/*.yml\"",
-    "format:check": "prettier --check \"scripts/**/*.ts\" \"*.{json,ts}\" \".github/workflows/*.yml\"",
-    "lint": "oxlint --import-plugin -D import/order --deny-warnings scripts",
+    "format": "prettier --write \"src/**/*.ts\" \"*.{json,ts}\" \".github/workflows/*.yml\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"*.{json,ts}\" \".github/workflows/*.yml\"",
+    "lint": "oxlint --import-plugin -D import/order --deny-warnings src",
     "lint:ci": "npm run lint -- --format=github",
     "typecheck": "tsc --noEmit",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage",
@@ -12,8 +12,8 @@
     "test:coverage": "vitest run --coverage",
     "test:coverage:ci": "vitest run --coverage --reporter=default --reporter=github-actions --reporter=junit --outputFile.junit=reports/junit.xml --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=html --coverage.reporter=lcovonly",
     "test:watch": "vitest",
-    "start:webhook": "tsx scripts/webhook-server.ts",
-    "start:worker": "tsx scripts/worker-server.ts"
+    "start:webhook": "tsx src/hosted/ingress/webhook-server.ts",
+    "start:worker": "tsx src/hosted/worker/worker-server.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1126.0",

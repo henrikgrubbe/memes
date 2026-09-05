@@ -52,25 +52,29 @@ Sources:
 
 The repository contains the public ingress slice:
 
-- `scripts/webhook-server.ts` exposes `/health` and `/webhooks/github`.
-- `scripts/github-webhook.ts` validates and decodes GitHub deliveries.
-- `scripts/scaleway-queue.ts` publishes deduplicated messages to a FIFO queue.
-- `Dockerfile.webhook` builds the ingress container.
+- `src/hosted/ingress/webhook-server.ts` exposes `/health` and
+  `/webhooks/github`.
+- `src/hosted/ingress/github-webhook.ts` validates and decodes GitHub
+  deliveries.
+- `src/hosted/ingress/scaleway-queue.ts` publishes deduplicated messages to a
+  FIFO queue.
+- `infra/scaleway/images/ingress.Dockerfile` builds the ingress container.
 
 The repository also contains the queue worker slice:
 
-- `scripts/worker-server.ts` accepts trigger requests at `POST /` and
+- `src/hosted/worker/worker-server.ts` accepts trigger requests at `POST /` and
   `POST /queue`, and exposes `GET /health`.
-- `scripts/worker-transport.ts` tolerates either a direct JSON task or an event
-  object whose `body` is the task object or its serialized JSON.
-- `scripts/worker-server.ts` creates request-scoped configuration, while
-  `scripts/hosted-worker.ts` orchestrates the existing provider, prompt,
-  publisher, saga, and notifier interfaces in hosted-safe order.
-- `scripts/hosted-github.ts` uses the Contents API for reads and the Git Data
-  API for atomic writes, issue comments, and issue closure.
-- `scripts/hosted-notifier.ts` posts the existing Slack payload contract with
-  the Node HTTP client rather than shelling out to `curl`.
-- `Dockerfile.worker` builds the dedicated production worker image.
+- `src/hosted/worker/worker-transport.ts` tolerates either a direct JSON task or
+  an event object whose `body` is the task object or its serialized JSON.
+- `src/hosted/worker/worker-server.ts` creates request-scoped configuration,
+  while `src/hosted/worker/hosted-worker.ts` orchestrates the existing provider,
+  prompt, publisher, saga, and notifier interfaces in hosted-safe order.
+- `src/hosted/worker/hosted-github.ts` uses the Contents API for reads and the
+  Git Data API for atomic writes, issue comments, and issue closure.
+- `src/hosted/worker/hosted-notifier.ts` posts the existing Slack payload
+  contract with the Node HTTP client rather than shelling out to `curl`.
+- `infra/scaleway/images/worker.Dockerfile` builds the dedicated production
+  worker image.
 
 Malformed envelopes, invalid task identities, and invalid Slack issue bodies
 receive a terminal `200` response with `disposition: rejected`. Processing and
@@ -155,10 +159,10 @@ registration, private-key, JWT, and token-refresh machinery.
 The repeatable deployment lives in `infra/scaleway`. Run
 `infra/scaleway/setup.sh`; do not deploy directly from this outline.
 
-1. Apply phase one with `deploy_containers=false`. OpenTofu creates the private
+1. Apply phase one with `deploy_containers=false`. OpenTofu creates the public
    registry, SQS service, FIFO request queue, same-region FIFO DLQ, scoped SQS
    credentials, and Containers namespace.
-2. Build `Dockerfile.webhook` and `Dockerfile.worker`, tag both with an immutable
+2. Build the Dockerfiles in `infra/scaleway/images`, tag both with an immutable
    commit identifier, and push them to the newly created registry.
 3. Apply phase two with `deploy_containers=true`,
    `hosted_ingress_mode=off`, `worker_mode=diagnostic`, and
@@ -209,10 +213,43 @@ default to `false`.
 
 OpenTofu state contains SQS credentials and values supplied to container
 secrets. Local state and `.env.scaleway` are gitignored, but gitignore is not
-encryption. Keep them mode `0600`, back them up only to an encrypted secret/state
-store, and migrate to an encrypted remote backend before treating the
-deployment as production. Never commit a plan file: saved plans contain secret
-values.
+encryption. Keep them mode `0600` and back them up only to an encrypted
+secret/state store. Never commit a plan file: saved plans contain secret values.
+
+### Continuous application deployment
+
+OpenTofu owns infrastructure and container configuration, but deliberately
+ignores later changes to each container's image fields. Application deployment
+is owned by GitHub Actions:
+
+- `deploy-ingress.yml` runs only when ingress code, its task contract, build
+  inputs, or deployment implementation changes.
+- `deploy-worker.yml` runs for worker or shared processing code and its build
+  inputs. CLI-only and test-only changes do not deploy it.
+- Both call `deploy-runtime.yml`, build an immutable full-commit-SHA image, and
+  update only the selected Scaleway container.
+- The `production` GitHub Environment supplies deployment credentials and
+  creates the repository's deployment history. Runtime secrets remain in
+  Scaleway and are not copied into GitHub.
+- The deployment script waits for Scaleway readiness, verifies the selected
+  image, and restores the previous image if update or verification fails.
+
+The `production` Environment requires these variables:
+
+| Variable                   | Purpose                                      |
+| -------------------------- | -------------------------------------------- |
+| `SCW_PROJECT_ID`           | Scaleway project containing the deployment   |
+| `SCW_ORGANIZATION_ID`      | Organization used by the Scaleway CLI        |
+| `SCW_REGION`               | Runtime region, currently `nl-ams`           |
+| `SCW_REGISTRY_HOST`        | Registry hostname used by Docker login       |
+| `SCW_REGISTRY_ENDPOINT`    | Namespace endpoint used for image references |
+| `SCW_INGRESS_CONTAINER_ID` | Public ingress container ID                  |
+| `SCW_WORKER_CONTAINER_ID`  | Private worker container ID                  |
+| `PRODUCTION_URL`           | Public ingress URL for deployment health     |
+
+It also requires `SCW_ACCESS_KEY` and `SCW_SECRET_KEY` Environment secrets from
+a deployment identity allowed to push registry images and update the two
+containers. Infrastructure administration should use a separate identity.
 
 Provider references:
 

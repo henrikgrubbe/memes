@@ -7,22 +7,34 @@ on:
   push:
     branches: [main]
     paths:
-      - "scripts/**"
+      - "src/**"
       - "package.json"
       - "package-lock.json"
       - ".prettierignore"
       - ".github/workflows/*.yml"
       - "tsconfig.json"
+      - "tsconfig.ingress.json"
+      - "tsconfig.worker.json"
       - "vitest.config.ts"
+      - "infra/scaleway/images/**"
+      - "infra/scaleway/deploy/**"
+      - "infra/scaleway/*.tf"
+      - "infra/scaleway/*.sh"
   pull_request:
     paths:
-      - "scripts/**"
+      - "src/**"
       - "package.json"
       - "package-lock.json"
       - ".prettierignore"
       - ".github/workflows/*.yml"
       - "tsconfig.json"
+      - "tsconfig.ingress.json"
+      - "tsconfig.worker.json"
       - "vitest.config.ts"
+      - "infra/scaleway/images/**"
+      - "infra/scaleway/deploy/**"
+      - "infra/scaleway/*.tf"
+      - "infra/scaleway/*.sh"
 
 concurrency:
   group: test-${{ github.workflow }}-${{ github.ref }}
@@ -117,3 +129,44 @@ jobs:
             coverage/
           if-no-files-found: warn
           retention-days: 14
+
+  images:
+    name: Build ${{ matrix.runtime }} image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: ingress
+            dockerfile: infra/scaleway/images/ingress.Dockerfile
+          - runtime: worker
+            dockerfile: infra/scaleway/images/worker.Dockerfile
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Build image
+        run: docker build --file "${{ matrix.dockerfile }}" .
+
+  infrastructure:
+    name: OpenTofu
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@v1
+
+      - name: Initialize providers
+        run: tofu -chdir=infra/scaleway init -backend=false
+
+      - name: Check formatting
+        run: tofu -chdir=infra/scaleway fmt -check
+
+      - name: Validate configuration
+        run: tofu -chdir=infra/scaleway validate

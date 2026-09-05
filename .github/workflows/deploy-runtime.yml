@@ -1,0 +1,111 @@
+name: Deploy runtime
+
+on:
+  workflow_call:
+    inputs:
+      dockerfile:
+        required: true
+        type: string
+      image_name:
+        required: true
+        type: string
+      runtime:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run project checks
+        run: npm run check
+
+  deploy:
+    name: Deploy ${{ inputs.runtime }}
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    concurrency:
+      group: scaleway-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to Scaleway Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.SCW_REGISTRY_HOST }}
+          username: nologin
+          password: ${{ secrets.SCW_SECRET_KEY }}
+
+      - name: Build and push immutable image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ inputs.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ vars.SCW_REGISTRY_ENDPOINT }}/${{ inputs.image_name }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=${{ inputs.runtime }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.runtime }}
+
+      - name: Install Scaleway CLI
+        uses: scaleway/action-scw@2e34a1eb35cf3cac627f24643a101fea269cbd83
+        with:
+          version: v2.62.0
+          access-key: ${{ secrets.SCW_ACCESS_KEY }}
+          secret-key: ${{ secrets.SCW_SECRET_KEY }}
+          default-project-id: ${{ vars.SCW_PROJECT_ID }}
+          default-organization-id: ${{ vars.SCW_ORGANIZATION_ID }}
+          export-config: true
+
+      - name: Deploy runtime
+        env:
+          DEPLOY_HEALTH_URL: ${{ inputs.runtime == 'ingress' && format('{0}/health', vars.PRODUCTION_URL) || '' }}
+          SCW_INGRESS_CONTAINER_ID: ${{ vars.SCW_INGRESS_CONTAINER_ID }}
+          SCW_REGION: ${{ vars.SCW_REGION }}
+          SCW_WORKER_CONTAINER_ID: ${{ vars.SCW_WORKER_CONTAINER_ID }}
+        run: |
+          infra/scaleway/deploy/deploy-runtime.sh \
+            "${{ inputs.runtime }}" \
+            "${{ vars.SCW_REGISTRY_ENDPOINT }}/${{ inputs.image_name }}:${{ github.sha }}"
+
+      - name: Record deployment
+        run: |
+          {
+            echo "## Scaleway production deployment"
+            echo
+            echo "- Runtime: \`${{ inputs.runtime }}\`"
+            echo "- Image: \`${{ vars.SCW_REGISTRY_ENDPOINT }}/${{ inputs.image_name }}:${{ github.sha }}\`"
+            echo "- Region: \`${{ vars.SCW_REGION }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
