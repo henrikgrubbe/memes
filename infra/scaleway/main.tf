@@ -116,6 +116,25 @@ resource "scaleway_object_bucket_policy" "images" {
           "${scaleway_object_bucket.images.name}/memes/*",
           "${scaleway_object_bucket.images.name}/terminal-outcomes/*",
         ]
+      },
+      {
+        Sid    = "AllowProvisioningObjectStorageManagement"
+        Effect = "Allow"
+        Principal = {
+          SCW = var.object_storage_provisioning_principal
+        }
+        Action = [
+          "s3:GetBucketAcl",
+          "s3:GetBucketCORS",
+          "s3:GetBucketLocation",
+          "s3:GetBucketObjectLockConfiguration",
+          "s3:GetBucketTagging",
+          "s3:GetBucketVersioning",
+          "s3:GetLifecycleConfiguration",
+          "s3:ListBucket",
+          "s3:PutBucketAcl",
+        ]
+        Resource = [scaleway_object_bucket.images.name]
       }
     ]
   })
@@ -142,12 +161,25 @@ resource "scaleway_iam_policy" "worker_storage" {
   }
 }
 
+resource "time_rotating" "worker_storage" {
+  rotation_days = 300
+  triggers = {
+    application_id = scaleway_iam_application.worker_storage.id
+    project_id     = var.project_id
+  }
+}
+
 resource "scaleway_iam_api_key" "worker_storage" {
   application_id     = scaleway_iam_application.worker_storage.id
   default_project_id = var.project_id
   description        = "Hosted meme worker Object Storage credentials"
+  expires_at         = timeadd(time_rotating.worker_storage.rotation_rfc3339, "720h")
 
   depends_on = [scaleway_iam_policy.worker_storage]
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "scaleway_mnq_sqs_queue" "dead_letter" {

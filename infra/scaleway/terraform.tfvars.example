@@ -5,6 +5,10 @@ name_prefix          = "memes"
 github_repository    = "henrikgrubbe/memes"
 github_target_branch = "main"
 
+# Principal attached to the API key used by OpenTofu. The setup wizard derives
+# this from SCW_ACCESS_KEY when possible.
+object_storage_provisioning_principal = "user_id:00000000-0000-0000-0000-000000000000"
+
 # Optional override. The default includes the project ID and is globally unique.
 # object_storage_bucket_name = "memes-example-images"
 

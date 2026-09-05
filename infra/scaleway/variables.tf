@@ -40,6 +40,19 @@ variable "object_storage_bucket_name" {
   }
 }
 
+variable "object_storage_provisioning_principal" {
+  description = "Scaleway IAM principal that runs OpenTofu, formatted as user_id:<uuid> or application_id:<uuid>."
+  type        = string
+
+  validation {
+    condition = can(regex(
+      "^(user_id|application_id):[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      var.object_storage_provisioning_principal,
+    ))
+    error_message = "object_storage_provisioning_principal must be user_id:<uuid> or application_id:<uuid>."
+  }
+}
+
 variable "deploy_containers" {
   description = "Create containers only after both images have been pushed."
   type        = bool

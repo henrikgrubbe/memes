@@ -226,12 +226,51 @@ select_container_cli() {
 export_tofu_env() {
   export SCW_ACCESS_KEY SCW_SECRET_KEY SCW_DEFAULT_PROJECT_ID
   export TF_VAR_project_id="$SCW_DEFAULT_PROJECT_ID"
+  export TF_VAR_object_storage_provisioning_principal
   export TF_VAR_github_webhook_secret
   export TF_VAR_github_fine_grained_pat
   export TF_VAR_slack_webhook_url
   export TF_VAR_openai_api_key
   export TF_VAR_xai_api_key
   export TF_VAR_image_tag
+}
+
+derive_object_storage_provisioning_principal() {
+  local details principal
+  details=""
+
+  if command -v scw >/dev/null 2>&1; then
+    details=$(
+      export SCW_ACCESS_KEY SCW_SECRET_KEY SCW_DEFAULT_PROJECT_ID
+      scw iam api-key get "$SCW_ACCESS_KEY" with-policies=false -o json \
+        2>/dev/null || true
+    )
+  fi
+
+  if [[ -z "$details" ]]; then
+    details=$(
+      printf 'X-Auth-Token: %s\n' "$SCW_SECRET_KEY" |
+        curl --fail --silent --show-error \
+          --header @- \
+          "https://api.scaleway.com/iam/v1alpha1/api-keys/$SCW_ACCESS_KEY" \
+          2>/dev/null || true
+    )
+  fi
+
+  principal=$(jq -r '
+    if (.application_id // "") != "" then
+      "application_id:" + .application_id
+    elif (.user_id // "") != "" then
+      "user_id:" + .user_id
+    else
+      empty
+    end
+  ' <<<"$details" 2>/dev/null || true)
+  printf '%s' "$principal"
+}
+
+validate_object_storage_provisioning_principal() {
+  [[ "$1" =~ ^(user_id|application_id):[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]
 }
 
 get_processing_backend() {
@@ -288,6 +327,7 @@ apply_storage_upgrade_stage() {
     -target=scaleway_object_bucket_policy.images \
     -target=scaleway_iam_application.worker_storage \
     -target=scaleway_iam_policy.worker_storage \
+    -target=time_rotating.worker_storage \
     -target=scaleway_iam_api_key.worker_storage \
     -out="$plan_file"; then
     rm -f "$plan_file"
@@ -303,6 +343,34 @@ apply_storage_upgrade_stage() {
   if ! tofu -chdir="$INFRA_DIR" apply "$plan_file"; then
     rm -f "$plan_file"
     CURRENT_PLAN_FILE=""
+    return 1
+  fi
+  rm -f "$plan_file"
+  CURRENT_PLAN_FILE=""
+}
+
+apply_storage_policy_repair_stage() {
+  local plan_file
+  plan_file=$(mktemp)
+  CURRENT_PLAN_FILE="$plan_file"
+  if ! tofu -chdir="$INFRA_DIR" plan \
+    -refresh=false \
+    -target=scaleway_object_bucket_policy.images \
+    -out="$plan_file"; then
+    rm -f "$plan_file"
+    CURRENT_PLAN_FILE=""
+    return 1
+  fi
+  if ! confirm "$1"; then
+    rm -f "$plan_file"
+    CURRENT_PLAN_FILE=""
+    warn "Policy repair cancelled. A normal refresh may remain blocked by the current bucket policy."
+    return 1
+  fi
+  if ! tofu -chdir="$INFRA_DIR" apply "$plan_file"; then
+    rm -f "$plan_file"
+    CURRENT_PLAN_FILE=""
+    warn "Policy repair failed. An Organization Owner must replace or remove the bucket policy before a normal plan can refresh the ACL."
     return 1
   fi
   rm -f "$plan_file"
@@ -345,7 +413,9 @@ ask SCW_DEFAULT_PROJECT_ID "Paste the Scaleway Project ID:"
 write_env SCW_DEFAULT_PROJECT_ID "$SCW_DEFAULT_PROJECT_ID"
 write_env TF_VAR_project_id "$SCW_DEFAULT_PROJECT_ID"
 select_container_cli
+require_command curl
 require_command gh
+require_command jq
 require_command tofu
 if ! gh auth status >/dev/null 2>&1; then
   warn "GitHub CLI must be authenticated before setup."
@@ -361,6 +431,26 @@ ask SCW_ACCESS_KEY "Paste the access key:"
 ask_secret SCW_SECRET_KEY "Paste the secret key:"
 write_env SCW_ACCESS_KEY "$SCW_ACCESS_KEY"
 write_env SCW_SECRET_KEY "$SCW_SECRET_KEY"
+DERIVED_STORAGE_PRINCIPAL=$(derive_object_storage_provisioning_principal)
+if [[ -n "$DERIVED_STORAGE_PRINCIPAL" ]]; then
+  TF_VAR_object_storage_provisioning_principal="$DERIVED_STORAGE_PRINCIPAL"
+else
+  TF_VAR_object_storage_provisioning_principal=$(
+    _existing TF_VAR_object_storage_provisioning_principal || true
+  )
+fi
+if [[ -z "$TF_VAR_object_storage_provisioning_principal" ]]; then
+  step "Open the API key details and copy its bearer User ID or Application ID."
+  ask TF_VAR_object_storage_provisioning_principal \
+    "Paste user_id:<uuid> or application_id:<uuid> for this deployment key:"
+fi
+if ! validate_object_storage_provisioning_principal \
+  "$TF_VAR_object_storage_provisioning_principal"; then
+  warn "The provisioning principal must be user_id:<uuid> or application_id:<uuid>."
+  exit 1
+fi
+write_env TF_VAR_object_storage_provisioning_principal \
+  "$TF_VAR_object_storage_provisioning_principal"
 
 stage "Fine-grained GitHub token" 8
 say "Create a short-lived fine-grained PAT restricted to henrikgrubbe/memes."
@@ -410,6 +500,12 @@ if [[ "$CURRENT_BACKEND" == "hosted" ]]; then
   say "Use the rotation and rollback procedures in docs/hosting-webhook.md instead."
   exit 1
 fi
+if tofu -chdir="$INFRA_DIR" state show \
+  scaleway_object_bucket_policy.images >/dev/null 2>&1; then
+  note "An existing bucket policy can block normal refresh until it explicitly retains this provisioning principal."
+  apply_storage_policy_repair_stage \
+    "Repair the bucket policy without refreshing the currently restricted ACL?"
+fi
 if tofu -chdir="$INFRA_DIR" state list 2>/dev/null | grep -q '^scaleway_container\.'; then
   note "Existing containers detected; the migration will target only the new storage and IAM resources."
   apply_storage_upgrade_stage "Provision Object Storage without changing the existing containers?"
@@ -418,8 +514,10 @@ else
 fi
 OBJECT_STORAGE_BUCKET=$(tofu -chdir="$INFRA_DIR" output -raw object_storage_bucket)
 OBJECT_STORAGE_PUBLIC_BASE_URL=$(tofu -chdir="$INFRA_DIR" output -raw object_storage_public_base_url)
+OBJECT_STORAGE_KEY_ROTATION_AT=$(tofu -chdir="$INFRA_DIR" output -raw worker_object_storage_key_rotation_at)
 note "New hosted images will publish to ${OBJECT_STORAGE_BUCKET}/memes/*."
 note "Permanent public image base URL: $OBJECT_STORAGE_PUBLIC_BASE_URL"
+note "Worker Object Storage key rotation is due by $OBJECT_STORAGE_KEY_ROTATION_AT; run OpenTofu at least monthly."
 
 stage "Build and push immutable images" 8
 REGISTRY_ENDPOINT=$(tofu -chdir="$INFRA_DIR" output -raw registry_endpoint)

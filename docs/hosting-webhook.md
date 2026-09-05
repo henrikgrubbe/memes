@@ -25,6 +25,8 @@ Sources:
 - [Bucket policies](https://www.scaleway.com/en/docs/object-storage/api-cli/bucket-policy/)
 - [Combining IAM and bucket policies](https://www.scaleway.com/en/docs/object-storage/api-cli/combining-iam-and-object-storage/)
 - [IAM permission sets](https://www.scaleway.com/en/docs/iam/reference-content/permission-sets/)
+- [Scaleway CLI API-key lookup](https://cli.scaleway.com/iam/#get-an-api-key)
+- [`time_rotating` provider resource](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/rotating)
 
 ## Target flow
 
@@ -161,8 +163,10 @@ commits remain untouched.
 Use this order for an existing hosted deployment:
 
 1. Check out the migration branch while GitHub Actions remains authoritative.
-2. Load the existing `.env.scaleway`, preserve the currently applied ingress,
-   worker, and trigger modes, and run OpenTofu from this branch.
+2. Load the existing `.env.scaleway`, set
+   `TF_VAR_object_storage_provisioning_principal` to the `user_id:<uuid>` or
+   `application_id:<uuid>` that owns `SCW_ACCESS_KEY`, preserve the currently
+   applied ingress, worker, and trigger modes, and run OpenTofu from this branch.
 3. Review and apply a plan that creates the bucket, private ACL, bucket policy,
    IAM application/policy, and API key and updates the existing worker
    container with all six `OBJECT_STORAGE_*` values. Keep
@@ -179,10 +183,35 @@ Use this order for an existing hosted deployment:
 
 When the setup wizard detects existing containers, its durable-services stage
 uses a one-time targeted plan for only the new bucket, bucket policy, IAM
-application/policy, and API key so `deploy_containers=false` cannot remove the
-running services. Continue to the inert-container apply to wire the six worker
-values while retaining the old image, then stop before live-canary stages until
-the migration has merged and the worker deployment has completed.
+application/policy, rotating clock, and API key so `deploy_containers=false`
+cannot remove the running services. It derives the provisioning principal from
+the active Scaleway API key when possible and otherwise asks for it. Continue to
+the inert-container apply to wire the six worker values while retaining the old
+image, then stop before live-canary stages until the migration has merged and
+the worker deployment has completed.
+
+#### Recovering a partially applied Object Storage migration
+
+If the bucket policy already exists without the provisioning-principal
+statement, normal refresh can fail with `403` while reading the bucket ACL. Do
+not remove partially created resources from state or recreate the bucket.
+
+1. Identify the bearer of the active deployment key with
+   `scw iam api-key get "$SCW_ACCESS_KEY" with-policies=false -o json`, and set
+   `TF_VAR_object_storage_provisioning_principal` from its `user_id` or
+   `application_id`.
+2. Run the setup wizard from the migration branch. When it finds
+   `scaleway_object_bucket_policy.images` in state, approve its targeted
+   `-refresh=false` policy-repair plan. This avoids the blocked ACL refresh and
+   adds the provisioning principal before the provider reads the ACL again.
+3. If that policy update is denied, an Organization Owner must replace or
+   remove the bucket policy first; owners retain policy-management rights even
+   when they are not listed in the policy.
+4. After repair, approve the targeted durable-services plan. It reuses the
+   existing bucket, ACL, IAM application, and IAM policy, then creates only the
+   rotating clock/API key still absent from state.
+5. Continue to the inert-container apply so the existing worker receives the
+   Object Storage environment and secrets without changing its image.
 
 ## Configuration
 
@@ -224,6 +253,14 @@ The worker requires:
 | `GITHUB_REPOSITORY`                | Only repository the worker is allowed to mutate            |
 | `WORKER_MODE`                      | `diagnostic` or `live`; defaults to `diagnostic`           |
 | `WORKER_DIAGNOSTIC_RESPONSE`       | `success` (200) or `retry` (503) for trigger validation    |
+
+OpenTofu also requires
+`object_storage_provisioning_principal = "user_id:<uuid>"` or
+`"application_id:<uuid>"`. This is the principal attached to the API key
+running OpenTofu, not the dedicated worker application. The bucket policy grants
+it only the bucket read/ACL/list actions exercised by the managed bucket
+resources. Bucket-policy get/put/delete remains governed by Scaleway's IAM and
+Organization Owner rules rather than delegable bucket-policy actions.
 
 For the first deployment, use a short-lived fine-grained PAT restricted to this
 repository with **Contents: read and write** and **Issues: read and write**.
@@ -280,6 +317,9 @@ image bucket is fixed in `nl-ams`. It creates:
   and no delete or bucket-administration permission (project is the narrowest
   IAM scope supported by the provider). Scaleway intersects IAM with a bucket
   policy, so both grants are required;
+- one 300-day `time_rotating` trigger. Worker keys expire 30 days after the
+  rotation deadline (330 days total), and `create_before_destroy` lets OpenTofu
+  update the container secret before revoking the previous key;
 - `memes-requests.fifo` and `memes-requests-dlq.fifo` in the selected region, with explicit
   deduplication IDs, one-day retention, 240-second visibility, long polling,
   and redrive after four receives;
@@ -300,11 +340,18 @@ than a placeholder image. `deploy_containers` and `worker_trigger_enabled` both
 default to `false`.
 
 OpenTofu state contains SQS credentials, the worker Object Storage API secret,
-and values supplied to container secrets. Sensitive credential outputs are
-marked accordingly. Local state and `.env.scaleway` are gitignored, but
-gitignore is not encryption. Keep them mode `0600` and back them up only to an
-encrypted secret/state store. Never commit a plan file: saved plans contain
-secret values.
+the rotation anchor, and values supplied to container secrets. Sensitive
+credential outputs are marked accordingly. Local state and `.env.scaleway` are
+gitignored, but gitignore is not encryption. Keep them mode `0600` and back them
+up only to an encrypted secret/state store. Never commit a plan file: saved
+plans contain secret values.
+
+Run an OpenTofu plan/apply at least monthly. `time_rotating` advances only when
+OpenTofu runs after its deadline; an apply at or after day 300 replaces the key
+and updates the worker secret in place before destroying the old key. The
+30-day expiry margin is recovery time, not a substitute for scheduled
+maintenance. Monitor `worker_object_storage_key_rotation_at` and
+`worker_object_storage_key_expires_at`.
 
 ### Continuous application deployment
 
@@ -349,6 +396,8 @@ containers. Infrastructure administration should use a separate identity.
 Provider references:
 
 - [Scaleway provider](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs)
+- [Scaleway IAM API key resource](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/iam_api_key)
+- [HashiCorp time provider](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/rotating)
 - [SQS queue resource](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/mnq_sqs_queue)
 - [Serverless Container resource](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/container)
 - [Container trigger resource](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/container_trigger)
@@ -358,7 +407,8 @@ Provider references:
 The human must:
 
 1. create/select the Scaleway project, enable billing and MFA, and create a
-   deployment API key;
+   deployment API key; the wizard derives that key's bearer principal when
+   possible and otherwise asks for its User or Application ID;
 2. create a short-lived fine-grained PAT for only `henrikgrubbe/memes` with
    Contents and Issues read/write;
 3. supply the Slack, OpenAI, optional xAI, and webhook-signing secrets;
