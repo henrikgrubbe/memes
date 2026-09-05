@@ -222,10 +222,12 @@ OpenTofu owns infrastructure and container configuration, but deliberately
 ignores later changes to each container's image fields. Application deployment
 is owned by GitHub Actions:
 
-- `deploy-ingress.yml` runs only when ingress code, its task contract, build
-  inputs, or deployment implementation changes.
-- `deploy-worker.yml` runs for worker or shared processing code and its build
-  inputs. CLI-only and test-only changes do not deploy it.
+- `deploy-ingress.yml` runs automatically only when ingress code, its task
+  contract, or image build inputs change.
+- `deploy-worker.yml` runs automatically for worker or shared processing code
+  and its image build inputs. CLI-only and test-only changes do not deploy it.
+- Deployment workflow and script changes are validated in CI and deployed
+  deliberately with `workflow_dispatch`.
 - Both call `deploy-runtime.yml`, build an immutable full-commit-SHA image, and
   update only the selected Scaleway container.
 - The `production` GitHub Environment supplies deployment credentials and
