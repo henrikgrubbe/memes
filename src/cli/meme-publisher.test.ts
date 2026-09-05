@@ -4,10 +4,12 @@ import { NodePath } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { MemePublishError, PushFailedError } from "../shared/errors.js";
-import { MemePublisherServiceTag } from "../shared/meme-publisher.js";
 import { failureOrThrow } from "../shared/test-support.js";
 import { makeGitLayer } from "./git.js";
-import { MemePublisherLayer } from "./meme-publisher.js";
+import {
+  MemePublisherLayer,
+  MemePublisherServiceTag,
+} from "./meme-publisher.js";
 
 describe("MemePublisherService", () => {
   it("preserves the filesystem and git publication behavior", async () => {

@@ -29,35 +29,29 @@ import {
 } from "./worker-transport.js";
 
 interface WorkerRuntimeConfig {
-  readonly githubApiUrl: string;
   readonly githubRepository: string;
   readonly githubToken: string;
   readonly objectStorageAccessKey: string;
   readonly objectStorageBucket: string;
   readonly objectStorageEndpoint: string;
   readonly objectStoragePublicBaseUrl: string;
-  readonly objectStorageRegion: string;
   readonly objectStorageSecretKey: string;
   readonly openAiApiKey: string | null;
   readonly slackWebhookUrl: string;
-  readonly targetBranch: string;
 }
-
-export type WorkerProcessingError =
-  ConfigError | HostedTaskError | WorkerMessageError;
 
 interface WorkerProcessor {
   readonly process: (
     task: MemeRequestTask,
-  ) => Effect.Effect<HostedTaskResult, WorkerProcessingError>;
+  ) => Effect.Effect<
+    HostedTaskResult,
+    ConfigError | HostedTaskError | WorkerMessageError
+  >;
 }
 
-export type WorkerMode = "diagnostic" | "live";
-export type WorkerDiagnosticResponse = "retry" | "success";
-
-export interface WorkerRequestPolicy {
-  readonly diagnosticResponse: WorkerDiagnosticResponse;
-  readonly mode: WorkerMode;
+interface WorkerRequestPolicy {
+  readonly diagnosticResponse: "retry" | "success";
+  readonly mode: "diagnostic" | "live";
 }
 
 export class WorkerProcessorTag extends Context.Tag("WorkerProcessor")<
@@ -71,22 +65,15 @@ class WorkerRequestPolicyTag extends Context.Tag("WorkerRequestPolicy")<
 >() {}
 
 const WorkerConfig = Config.all({
-  githubApiUrl: Config.string("GITHUB_API_URL").pipe(
-    Config.withDefault("https://api.github.com"),
-  ),
   githubRepository: Config.string("GITHUB_REPOSITORY"),
   githubToken: Config.string("GITHUB_FINE_GRAINED_PAT"),
   objectStorageAccessKey: Config.string("OBJECT_STORAGE_ACCESS_KEY"),
   objectStorageBucket: Config.string("OBJECT_STORAGE_BUCKET"),
   objectStorageEndpoint: Config.string("OBJECT_STORAGE_ENDPOINT"),
   objectStoragePublicBaseUrl: Config.string("OBJECT_STORAGE_PUBLIC_BASE_URL"),
-  objectStorageRegion: Config.string("OBJECT_STORAGE_REGION"),
   objectStorageSecretKey: Config.string("OBJECT_STORAGE_SECRET_KEY"),
   openAiApiKey: Config.option(Config.string("OPENAI_API_KEY")),
   slackWebhookUrl: Config.string("SLACK_WEBHOOK_URL"),
-  targetBranch: Config.string("GITHUB_TARGET_BRANCH").pipe(
-    Config.withDefault("main"),
-  ),
 });
 
 const WorkerRuntimeConfigTag = Context.GenericTag<WorkerRuntimeConfig>(
@@ -122,13 +109,12 @@ const WorkerProcessorLive = Layer.effect(
   Effect.gen(function* () {
     const runtime = yield* WorkerRuntimeConfigTag;
     const api = makeGitHubApi({
-      baseUrl: runtime.githubApiUrl,
       token: runtime.githubToken,
     });
     const storageApi = makeS3ObjectStorageApi({
       accessKeyId: runtime.objectStorageAccessKey,
       endpoint: runtime.objectStorageEndpoint,
-      region: runtime.objectStorageRegion,
+      region: "nl-ams",
       secretAccessKey: runtime.objectStorageSecretKey,
     });
     const slack = makeSlackSender({
@@ -159,7 +145,7 @@ const WorkerProcessorLive = Layer.effect(
               Effect.flatMap((config) => {
                 const repository = makeHostedGitHubRepository({
                   api,
-                  branch: runtime.targetBranch,
+                  branch: "main",
                   task,
                 });
                 return runHostedTask(task, config, {
@@ -181,7 +167,7 @@ const WorkerProcessorLive = Layer.effect(
   }),
 );
 
-export interface WorkerHttpResult {
+interface WorkerHttpResult {
   readonly body: Readonly<Record<string, string>>;
   readonly status: 200 | 503;
 }
@@ -259,7 +245,6 @@ const workerRequest = HttpServerRequest.HttpServerRequest.pipe(
 
 const router = HttpRouter.empty.pipe(
   HttpRouter.get("/health", HttpServerResponse.unsafeJson({ status: "ok" })),
-  HttpRouter.post("/", workerRequest),
   HttpRouter.post("/queue", workerRequest),
 );
 

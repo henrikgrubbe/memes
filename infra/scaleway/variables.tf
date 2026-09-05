@@ -96,12 +96,6 @@ variable "github_repository" {
   default     = "henrikgrubbe/memes"
 }
 
-variable "github_target_branch" {
-  description = "Branch that receives hosted worker Saga commits."
-  type        = string
-  default     = "main"
-}
-
 variable "hosted_ingress_mode" {
   description = "Ingress routing: off, exclusive labelled canary, or live."
   type        = string
@@ -110,17 +104,6 @@ variable "hosted_ingress_mode" {
   validation {
     condition     = contains(["off", "canary", "live"], var.hosted_ingress_mode)
     error_message = "hosted_ingress_mode must be off, canary, or live."
-  }
-}
-
-variable "hosted_canary_label" {
-  description = "Reserved issue label routed exclusively to hosted processing in canary mode."
-  type        = string
-  default     = "hosted-canary"
-
-  validation {
-    condition     = var.hosted_canary_label == "hosted-canary"
-    error_message = "hosted_canary_label must match the workflow's reserved hosted-canary label."
   }
 }
 
@@ -143,17 +126,6 @@ variable "worker_diagnostic_response" {
   validation {
     condition     = contains(["success", "retry"], var.worker_diagnostic_response)
     error_message = "worker_diagnostic_response must be success or retry."
-  }
-}
-
-variable "worker_privacy" {
-  description = "Start private; use public temporarily only if live canary disproves trigger compatibility."
-  type        = string
-  default     = "private"
-
-  validation {
-    condition     = contains(["private", "public"], var.worker_privacy)
-    error_message = "worker_privacy must be private or public."
   }
 }
 

@@ -317,66 +317,6 @@ apply_stage() {
   CURRENT_PLAN_FILE=""
 }
 
-apply_storage_upgrade_stage() {
-  local plan_file
-  plan_file=$(mktemp)
-  CURRENT_PLAN_FILE="$plan_file"
-  if ! tofu -chdir="$INFRA_DIR" plan \
-    -target=scaleway_object_bucket.images \
-    -target=scaleway_object_bucket_acl.images \
-    -target=scaleway_object_bucket_policy.images \
-    -target=scaleway_iam_application.worker_storage \
-    -target=scaleway_iam_policy.worker_storage \
-    -target=time_rotating.worker_storage \
-    -target=scaleway_iam_api_key.worker_storage \
-    -out="$plan_file"; then
-    rm -f "$plan_file"
-    CURRENT_PLAN_FILE=""
-    return 1
-  fi
-  if ! confirm "$1"; then
-    rm -f "$plan_file"
-    CURRENT_PLAN_FILE=""
-    warn "Apply cancelled. This plan made no infrastructure changes."
-    return 1
-  fi
-  if ! tofu -chdir="$INFRA_DIR" apply "$plan_file"; then
-    rm -f "$plan_file"
-    CURRENT_PLAN_FILE=""
-    return 1
-  fi
-  rm -f "$plan_file"
-  CURRENT_PLAN_FILE=""
-}
-
-apply_storage_policy_repair_stage() {
-  local plan_file
-  plan_file=$(mktemp)
-  CURRENT_PLAN_FILE="$plan_file"
-  if ! tofu -chdir="$INFRA_DIR" plan \
-    -refresh=false \
-    -target=scaleway_object_bucket_policy.images \
-    -out="$plan_file"; then
-    rm -f "$plan_file"
-    CURRENT_PLAN_FILE=""
-    return 1
-  fi
-  if ! confirm "$1"; then
-    rm -f "$plan_file"
-    CURRENT_PLAN_FILE=""
-    warn "Policy repair cancelled. A normal refresh may remain blocked by the current bucket policy."
-    return 1
-  fi
-  if ! tofu -chdir="$INFRA_DIR" apply "$plan_file"; then
-    rm -f "$plan_file"
-    CURRENT_PLAN_FILE=""
-    warn "Policy repair failed. An Organization Owner must replace or remove the bucket policy before a normal plan can refresh the ACL."
-    return 1
-  fi
-  rm -f "$plan_file"
-  CURRENT_PLAN_FILE=""
-}
-
 restore_actions_after_failed_cutover() {
   [[ "${CUTOVER_AUTHORITY_MOVED:-false}" == "true" ]] || return 0
   CUTOVER_AUTHORITY_MOVED=false
@@ -500,15 +440,8 @@ if [[ "$CURRENT_BACKEND" == "hosted" ]]; then
   say "Use the rotation and rollback procedures in docs/hosting-webhook.md instead."
   exit 1
 fi
-if tofu -chdir="$INFRA_DIR" state show \
-  scaleway_object_bucket_policy.images >/dev/null 2>&1; then
-  note "An existing bucket policy can block normal refresh until it explicitly retains this provisioning principal."
-  apply_storage_policy_repair_stage \
-    "Repair the bucket policy without refreshing the currently restricted ACL?"
-fi
 if tofu -chdir="$INFRA_DIR" state list 2>/dev/null | grep -q '^scaleway_container\.'; then
-  note "Existing containers detected; the migration will target only the new storage and IAM resources."
-  apply_storage_upgrade_stage "Provision Object Storage without changing the existing containers?"
+  note "Existing containers detected; preserving them and skipping the phase-one apply."
 else
   apply_stage "Apply phase one to the selected Scaleway project?"
 fi

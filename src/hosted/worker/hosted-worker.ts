@@ -56,29 +56,10 @@ const generatedOutcome = (
   provider: providerFrom(result),
 });
 
-export type HostedGenerationDisposition = "terminal";
-
-export const classifyHostedGenerationError = (
-  error: GenerationError,
-): HostedGenerationDisposition => {
-  switch (error._tag) {
-    case "AllProvidersExhaustedError":
-    case "ModerationFailedError":
-    case "ProviderError":
-    case "QuotaExhaustedError":
-    case "RateLimitError":
-      return "terminal";
-  }
-};
-
-const failedOutcome = (error: GenerationError): FailureDeliveryOutcome => {
-  switch (classifyHostedGenerationError(error)) {
-    case "terminal": {
-      const disposition = failureDisposition(error);
-      return { kind: "failure", ...disposition };
-    }
-  }
-};
+const failedOutcome = (error: GenerationError): FailureDeliveryOutcome => ({
+  kind: "failure",
+  ...failureDisposition(error),
+});
 
 const runIndependently = <E1, R1, E2, R2>(
   first: Effect.Effect<void, E1, R1>,
@@ -235,7 +216,7 @@ const runWriteOnlyDelivery = (
     return folded ? ("processed" as const) : ("resumed" as const);
   });
 
-export interface HostedTaskDependencies {
+interface HostedTaskDependencies {
   readonly compressSaga: SagaCompressor;
   readonly repository: HostedGitHubRepository;
   readonly slack: SlackSender;

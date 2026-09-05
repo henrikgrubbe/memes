@@ -10,13 +10,14 @@ import {
   failureDisposition,
   type FailureDisposition,
 } from "../shared/disposition.js";
-import { MemePublisherServiceTag } from "../shared/meme-publisher.js";
-import { NotifierServiceTag } from "../shared/notifier.js";
 import { ProvidersLayer, ProvidersServiceTag } from "../shared/providers.js";
 import { buildMemePrompt, SagaServiceTag } from "../shared/saga.js";
 import { GitLayer } from "./git.js";
-import { MemePublisherLayer } from "./meme-publisher.js";
-import { NotifierLayer } from "./notifier.js";
+import {
+  MemePublisherLayer,
+  MemePublisherServiceTag,
+} from "./meme-publisher.js";
+import { NotifierLayer, NotifierServiceTag } from "./notifier.js";
 import { SagaLayer } from "./saga.js";
 import { ShellLayer } from "./shell.js";
 

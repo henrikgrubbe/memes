@@ -40,16 +40,12 @@ const run = (
         tasks.push(task);
       }),
   });
-  const effect = handleGitHubWebhook(
-    secret,
-    { canaryLabel: "hosted-canary", mode: "live" },
-    {
-      body,
-      deliveryId: options.deliveryId ?? "delivery-1",
-      event: options.event ?? "issues",
-      signature: options.signature ?? signature(body),
-    },
-  );
+  const effect = handleGitHubWebhook(secret, "live", {
+    body,
+    deliveryId: options.deliveryId ?? "delivery-1",
+    event: options.event ?? "issues",
+    signature: options.signature ?? signature(body),
+  });
 
   return Effect.runPromise(
     effect.pipe(Effect.provide(layer), Effect.exit),
@@ -160,18 +156,18 @@ describe("handleGitHubWebhook", () => {
       event: "issues",
     };
     const ignored = await Effect.runPromise(
-      handleGitHubWebhook(
-        secret,
-        { canaryLabel: "hosted-canary", mode: "canary" },
-        { ...request, body: payload, signature: signature(payload) },
-      ).pipe(Effect.provide(layer)),
+      handleGitHubWebhook(secret, "canary", {
+        ...request,
+        body: payload,
+        signature: signature(payload),
+      }).pipe(Effect.provide(layer)),
     );
     const queued = await Effect.runPromise(
-      handleGitHubWebhook(
-        secret,
-        { canaryLabel: "hosted-canary", mode: "canary" },
-        { ...request, body: canaryBody, signature: signature(canaryBody) },
-      ).pipe(Effect.provide(layer)),
+      handleGitHubWebhook(secret, "canary", {
+        ...request,
+        body: canaryBody,
+        signature: signature(canaryBody),
+      }).pipe(Effect.provide(layer)),
     );
 
     expect(ignored.disposition).toBe("ignored");
@@ -182,16 +178,12 @@ describe("handleGitHubWebhook", () => {
   it("ignores all issues when hosted ingress is off", async () => {
     const tasks: Array<MemeRequestTask> = [];
     const result = await Effect.runPromise(
-      handleGitHubWebhook(
-        secret,
-        { canaryLabel: "hosted-canary", mode: "off" },
-        {
-          body: payload,
-          deliveryId: "delivery-1",
-          event: "issues",
-          signature: signature(payload),
-        },
-      ).pipe(
+      handleGitHubWebhook(secret, "off", {
+        body: payload,
+        deliveryId: "delivery-1",
+        event: "issues",
+        signature: signature(payload),
+      }).pipe(
         Effect.provide(
           makeWebhookQueueLayer({
             enqueue: (task) =>

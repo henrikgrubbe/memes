@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Effect, Layer } from "effect";
 import { AppConfigService, type AppConfig } from "../shared/config.js";
-import { NotifierServiceTag } from "../shared/notifier.js";
-import { NotifierLayer } from "./notifier.js";
+import { NotifierLayer, NotifierServiceTag } from "./notifier.js";
 import { makeShellLayer, type Shell } from "./shell.js";
 
 describe("NotifierService through the Shell seam", () => {

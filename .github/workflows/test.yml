@@ -178,14 +178,12 @@ jobs:
             )
           else
             configuration=(
-              --env GITHUB_API_URL=https://api.github.invalid
               --env GITHUB_FINE_GRAINED_PAT=ci-dummy
               --env GITHUB_REPOSITORY=example/memes
               --env OBJECT_STORAGE_ACCESS_KEY=ci-dummy
               --env OBJECT_STORAGE_BUCKET=ci-images
               --env OBJECT_STORAGE_ENDPOINT=https://s3.nl-ams.scw.cloud
               --env OBJECT_STORAGE_PUBLIC_BASE_URL=https://ci-images.s3.nl-ams.scw.cloud
-              --env OBJECT_STORAGE_REGION=nl-ams
               --env OBJECT_STORAGE_SECRET_KEY=ci-dummy
               --env SLACK_WEBHOOK_URL=https://example.invalid/webhook
               --env WORKER_MODE=diagnostic

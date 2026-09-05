@@ -3,7 +3,7 @@ import { Config, Effect, Layer, Schema } from "effect";
 import { MemeRequestTask, type MemeRequestTask as Task } from "../task.js";
 import { WebhookQueueError, WebhookQueueTag } from "./github-webhook.js";
 
-export interface ScalewayQueueConfig {
+interface ScalewayQueueConfig {
   readonly accessKey: string;
   readonly endpoint: string;
   readonly queueUrl: string;
@@ -47,23 +47,17 @@ const ScalewayQueueConfig = Config.all({
   secretKey: Config.string("SQS_SECRET_KEY"),
 });
 
-export const makeScalewayQueueLayer = (
-  config: ScalewayQueueConfig,
-): Layer.Layer<WebhookQueueTag> => {
-  const client = new SQSClient({
-    credentials: {
-      accessKeyId: config.accessKey,
-      secretAccessKey: config.secretKey,
-    },
-    endpoint: config.endpoint,
-    region: config.region,
-  });
-  return Layer.succeed(WebhookQueueTag, makeScalewayQueue(client, config));
-};
-
 export const ScalewayQueueLive = Layer.unwrapEffect(
   Effect.gen(function* () {
     const config = yield* ScalewayQueueConfig;
-    return makeScalewayQueueLayer(config);
+    const client = new SQSClient({
+      credentials: {
+        accessKeyId: config.accessKey,
+        secretAccessKey: config.secretKey,
+      },
+      endpoint: config.endpoint,
+      region: config.region,
+    });
+    return Layer.succeed(WebhookQueueTag, makeScalewayQueue(client, config));
   }),
 );

@@ -21,18 +21,6 @@ describe("Scaleway queue transport", () => {
     expect(decoded).toEqual(task);
   });
 
-  it("tolerates an object body and a direct JSON task for canary compatibility", async () => {
-    const objectBody = await Effect.runPromise(
-      decodeScalewayQueueRequest(encode({ body: task })),
-    );
-    const direct = await Effect.runPromise(
-      decodeScalewayQueueRequest(encode(task)),
-    );
-
-    expect(objectBody).toEqual(task);
-    expect(direct).toEqual(task);
-  });
-
   it("rejects malformed envelopes and every invalid task identity", async () => {
     const malformed = await Effect.runPromise(
       decodeScalewayQueueRequest("{").pipe(Effect.exit),

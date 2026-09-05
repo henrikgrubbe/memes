@@ -10,11 +10,10 @@ export class WorkerMessageError extends Data.TaggedError("WorkerMessageError")<{
 }
 
 const QueueEnvelope = Schema.Struct({
-  body: Schema.Union(Schema.String, MemeRequestTask),
+  body: Schema.String,
 });
 
-const QueueInput = Schema.Union(MemeRequestTask, QueueEnvelope);
-const decodeInput = Schema.decodeUnknown(Schema.parseJson(QueueInput));
+const decodeEnvelope = Schema.decodeUnknown(Schema.parseJson(QueueEnvelope));
 const decodeEmbeddedTask = Schema.decodeUnknown(
   Schema.parseJson(MemeRequestTask),
 );
@@ -27,15 +26,9 @@ const invalidMessage = () =>
 export const decodeScalewayQueueRequest = (
   requestBody: string,
 ): Effect.Effect<MemeRequestTask, WorkerMessageError> =>
-  decodeInput(requestBody).pipe(
+  decodeEnvelope(requestBody).pipe(
     Effect.mapError(invalidMessage),
-    Effect.filterOrElse(
-      (input): input is MemeRequestTask => "deliveryId" in input,
-      (envelope) =>
-        typeof envelope.body === "string"
-          ? decodeEmbeddedTask(envelope.body).pipe(
-              Effect.mapError(invalidMessage),
-            )
-          : Effect.succeed(envelope.body),
+    Effect.flatMap((envelope) =>
+      decodeEmbeddedTask(envelope.body).pipe(Effect.mapError(invalidMessage)),
     ),
   );

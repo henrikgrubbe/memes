@@ -2,18 +2,10 @@ import { Deferred, Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import type { AppConfig } from "../../shared/config.js";
 import {
-  AllProvidersExhaustedError,
   ModerationBlockedError,
-  ModerationFailedError,
   NotificationError,
-  ProviderError,
-  QuotaExhaustedError,
-  RateLimitError,
 } from "../../shared/errors.js";
-import {
-  makeProvidersLayer,
-  type GenerationError,
-} from "../../shared/providers.js";
+import { makeProvidersLayer } from "../../shared/providers.js";
 import { failureOfType } from "../../shared/test-support.js";
 import type { DeliveryOutcome } from "./hosted-delivery.js";
 import {
@@ -22,10 +14,7 @@ import {
 } from "./hosted-github.js";
 import type { SlackSender } from "./hosted-notifier.js";
 import type { HostedObjectStorage } from "./hosted-object-storage.js";
-import {
-  classifyHostedGenerationError,
-  runHostedTask,
-} from "./hosted-worker.js";
+import { runHostedTask } from "./hosted-worker.js";
 
 const task = {
   deliveryId: "delivery-1",
@@ -169,24 +158,6 @@ const dependencies = (harness: Harness) => ({
 });
 
 describe("hosted worker orchestration", () => {
-  it("classifies every exhausted generation outcome as terminal", () => {
-    const errors: ReadonlyArray<GenerationError> = [
-      new AllProvidersExhaustedError({ providers: ["OpenAI"] }),
-      new ModerationFailedError({
-        detail: "blocked",
-        fallbackProvider: null,
-        provider: "OpenAI",
-      }),
-      new ProviderError({ detail: "unavailable", provider: "OpenAI" }),
-      new QuotaExhaustedError({ detail: "no credits", provider: "OpenAI" }),
-      new RateLimitError({ attempts: 10, provider: "OpenAI" }),
-    ];
-
-    for (const error of errors) {
-      expect(classifyHostedGenerationError(error)).toBe("terminal");
-    }
-  });
-
   it("publishes a first no-Saga success before notifying", async () => {
     const harness = makeHarness();
     let providerPrompt = "";
