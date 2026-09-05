@@ -73,7 +73,7 @@ const rlWithHeader = () => (): Promise<ImageResponse> =>
   Promise.reject({
     status: 429,
     message: "rate limited",
-    headers: { "retry-after": "0" },
+    headers: new Headers({ "retry-after": "0" }),
   });
 const mod = () => (): Promise<ImageResponse> =>
   Promise.reject({

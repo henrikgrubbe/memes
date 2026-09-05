@@ -1,6 +1,8 @@
 import { Effect, Layer, Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { handleWorkerRequest, WorkerProcessorTag } from "./worker-server.js";
+import { HostedGitHubError } from "./hosted-github.js";
+import { handleWorkerRequest, WorkerProcessorTag } from "./worker-app.js";
+import { WorkerMessageError } from "./worker-transport.js";
 
 const encode = Schema.encodeSync(Schema.parseJson(Schema.Unknown));
 
@@ -39,7 +41,13 @@ describe("worker HTTP handling", () => {
 
   it("returns a retryable status when processing fails", async () => {
     const processor = Layer.succeed(WorkerProcessorTag, {
-      process: () => Effect.fail("temporary failure"),
+      process: () =>
+        Effect.fail(
+          new HostedGitHubError({
+            detail: "temporary failure",
+            operation: "test",
+          }),
+        ),
     });
 
     const result = await Effect.runPromise(
@@ -52,6 +60,32 @@ describe("worker HTTP handling", () => {
     expect(result).toEqual({
       body: { disposition: "retry" },
       status: 503,
+    });
+  });
+
+  it("acknowledges processor-rejected tasks without retrying", async () => {
+    const processor = Layer.succeed(WorkerProcessorTag, {
+      process: () =>
+        Effect.fail(
+          new WorkerMessageError({
+            detail: "Queued task repository is not allowed",
+          }),
+        ),
+    });
+
+    const result = await Effect.runPromise(
+      handleWorkerRequest(validRequest, {
+        diagnosticResponse: "success",
+        mode: "live",
+      }).pipe(Effect.provide(processor)),
+    );
+
+    expect(result).toEqual({
+      body: {
+        disposition: "rejected",
+        error: "Queued task repository is not allowed",
+      },
+      status: 200,
     });
   });
 

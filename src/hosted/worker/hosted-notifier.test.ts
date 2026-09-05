@@ -27,7 +27,6 @@ const completed = (outcome: DeliveryOutcome): CompletedDeliveryState => ({
   memeId: "meme-1",
   outcome,
   repo: "owner/repo",
-  slack: "pending",
   status: "completed",
   version: 1,
 });

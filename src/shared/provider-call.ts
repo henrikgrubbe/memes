@@ -31,7 +31,7 @@ type CallError =
 interface ApiError {
   readonly status?: number;
   readonly message?: string;
-  readonly headers?: Readonly<Record<string, string>>;
+  readonly headers?: Headers | Readonly<Record<string, string>>;
   readonly error?: {
     readonly code?: string;
     readonly moderation_details?: {
@@ -52,7 +52,11 @@ function isQuotaExhausted(error: ApiError | null | undefined): boolean {
 }
 
 function parseRetryDelayMs(error: ApiError): number | null {
-  const fromHeader = parseInt(error.headers?.["retry-after"] ?? "", 10);
+  const retryAfter =
+    error.headers instanceof Headers
+      ? error.headers.get("retry-after")
+      : error.headers?.["retry-after"];
+  const fromHeader = parseInt(retryAfter ?? "", 10);
   if (!isNaN(fromHeader)) {
     return fromHeader * 1000 + RETRY_DELAY_PADDING_MS;
   }
@@ -174,7 +178,7 @@ export function callWithRetry(
           Effect.as(Duration.millis(error.delayMs)),
         );
       }),
-      Schedule.jittered,
+      Schedule.jitteredWith({ min: 1, max: 1.2 }),
     );
 
     const { buffer, metadata } = yield* Effect.retry(attempt, retryPolicy).pipe(

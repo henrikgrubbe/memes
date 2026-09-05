@@ -62,15 +62,15 @@ export interface ProvidersService {
   readonly generateWithFallback: (
     prompt: string,
     user?: string,
-  ) => Effect.Effect<
-    GenerationResult,
-    | ModerationFailedError
-    | AllProvidersExhaustedError
-    | ProviderError
-    | RateLimitError
-    | QuotaExhaustedError
-  >;
+  ) => Effect.Effect<GenerationResult, GenerationError>;
 }
+
+export type GenerationError =
+  | ModerationFailedError
+  | AllProvidersExhaustedError
+  | ProviderError
+  | RateLimitError
+  | QuotaExhaustedError;
 
 export class ProvidersServiceTag extends Context.Tag("ProvidersService")<
   ProvidersServiceTag,

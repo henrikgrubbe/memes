@@ -1,4 +1,4 @@
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type { AppConfig } from "../../shared/config.js";
 import { NotificationError } from "../../shared/errors.js";
 import {
@@ -9,13 +9,10 @@ import {
   formatSlackSuccessPayload,
   formatSuccessComment,
 } from "../../shared/notification-format.js";
-import {
-  type NotifierService,
-  NotifierServiceTag,
-} from "../../shared/notifier.js";
 import type {
   CompletedDeliveryState,
   DeliveryOutcome,
+  HostedGitHubError,
   HostedGitHubRepository,
 } from "./hosted-github.js";
 
@@ -139,22 +136,19 @@ const completionPlan = (
   }
 };
 
-const mapGitHubError = (error: { readonly message: string }) =>
-  new NotificationError({ detail: error.message });
-
 const completedState = (
   repository: HostedGitHubRepository,
-): Effect.Effect<CompletedDeliveryState, NotificationError> =>
+): Effect.Effect<
+  CompletedDeliveryState,
+  HostedGitHubError | NotificationError
+> =>
   repository.getDelivery().pipe(
-    Effect.mapError(mapGitHubError),
-    Effect.flatMap((state) =>
-      state?.status === "completed"
-        ? Effect.succeed(state)
-        : Effect.fail(
-            new NotificationError({
-              detail: "Delivery is not complete enough to notify",
-            }),
-          ),
+    Effect.filterOrFail(
+      (state): state is CompletedDeliveryState => state?.status === "completed",
+      () =>
+        new NotificationError({
+          detail: "Delivery is not complete enough to notify",
+        }),
     ),
   );
 
@@ -162,44 +156,13 @@ export const deliverHostedCompletion = (
   config: AppConfig,
   repository: HostedGitHubRepository,
   slack: SlackSender,
-): Effect.Effect<void, NotificationError> =>
+): Effect.Effect<void, HostedGitHubError | NotificationError> =>
   Effect.gen(function* () {
     const state = yield* completedState(repository);
     const plan = completionPlan(config, repository.branch, state.outcome);
-    if (state.slack !== "claimed") {
-      yield* slack.post(plan.slackPayload);
-    }
-    yield* repository
-      .commentOnce(plan.comment)
-      .pipe(Effect.mapError(mapGitHubError));
+    yield* slack.post(plan.slackPayload);
+    yield* repository.commentOnce(plan.comment);
     if (plan.close) {
-      yield* repository
-        .closeIssue(plan.closeReason)
-        .pipe(Effect.mapError(mapGitHubError));
+      yield* repository.closeIssue(plan.closeReason);
     }
   });
-
-export const makeHostedNotifier = (
-  config: AppConfig,
-  repository: HostedGitHubRepository,
-  slack: SlackSender,
-): NotifierService => {
-  const deliver = () => deliverHostedCompletion(config, repository, slack);
-  // The legacy notifier interface is total; defects reach the HTTP handler and
-  // become retryable responses instead of being swallowed by this adapter.
-  return {
-    notifyFailure: () => deliver().pipe(Effect.orDie),
-    notifySagaUpdate: () => deliver().pipe(Effect.orDie),
-    notifySuccess: () => deliver().pipe(Effect.orDie),
-  };
-};
-
-export const makeHostedNotifierLayer = (
-  config: AppConfig,
-  repository: HostedGitHubRepository,
-  slack: SlackSender,
-): Layer.Layer<NotifierServiceTag> =>
-  Layer.succeed(
-    NotifierServiceTag,
-    makeHostedNotifier(config, repository, slack),
-  );

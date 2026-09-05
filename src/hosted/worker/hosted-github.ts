@@ -153,15 +153,6 @@ const DeliveryOutcomeSchema = Schema.Union(
   }),
 );
 
-const ReservedDeliveryStateSchema = Schema.Struct({
-  deliveryId: Schema.String,
-  issueNumber: Schema.String,
-  memeId: Schema.String,
-  repo: Schema.String,
-  status: Schema.Literal("reserved"),
-  version: Schema.Literal(1),
-});
-
 const CompletedDeliveryStateSchema = Schema.Struct({
   deliveryId: Schema.String,
   issueNumber: Schema.String,
@@ -169,21 +160,14 @@ const CompletedDeliveryStateSchema = Schema.Struct({
   outcome: DeliveryOutcomeSchema,
   repo: Schema.String,
   saga: Schema.optional(Schema.Literal("pending", "completed")),
-  slack: Schema.optional(Schema.Literal("pending", "claimed")),
   status: Schema.Literal("completed"),
   version: Schema.Literal(1),
 });
 
-const DeliveryStateSchema = Schema.Union(
-  ReservedDeliveryStateSchema,
-  CompletedDeliveryStateSchema,
-);
+const DeliveryStateSchema = CompletedDeliveryStateSchema;
 
 export type DeliveryState = Schema.Schema.Type<typeof DeliveryStateSchema>;
-export type CompletedDeliveryState = Extract<
-  DeliveryState,
-  { readonly status: "completed" }
->;
+export type CompletedDeliveryState = DeliveryState;
 
 export interface RepositoryFile {
   readonly content: string | Uint8Array;
