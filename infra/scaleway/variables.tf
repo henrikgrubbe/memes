@@ -25,6 +25,34 @@ variable "name_prefix" {
   }
 }
 
+variable "object_storage_bucket_name" {
+  description = "Globally unique Object Storage bucket name; defaults to a project-specific name."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = var.object_storage_bucket_name == null || can(regex(
+      "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$",
+      var.object_storage_bucket_name,
+    ))
+    error_message = "object_storage_bucket_name must be a valid 3-63 character lowercase bucket name."
+  }
+}
+
+variable "object_storage_provisioning_principal" {
+  description = "Scaleway IAM principal that runs OpenTofu, formatted as user_id:<uuid> or application_id:<uuid>."
+  type        = string
+
+  validation {
+    condition = can(regex(
+      "^(user_id|application_id):[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      var.object_storage_provisioning_principal,
+    ))
+    error_message = "object_storage_provisioning_principal must be user_id:<uuid> or application_id:<uuid>."
+  }
+}
+
 variable "deploy_containers" {
   description = "Create containers only after both images have been pushed."
   type        = bool
@@ -69,7 +97,7 @@ variable "github_repository" {
 }
 
 variable "github_target_branch" {
-  description = "Branch that receives hosted worker output commits."
+  description = "Branch that receives hosted worker Saga commits."
   type        = string
   default     = "main"
 }

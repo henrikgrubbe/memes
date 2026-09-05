@@ -2,28 +2,26 @@ import type { GenerationMetadata } from "./providers.js";
 import { renderProviderAttempts, type HistoryEntry } from "./history.js";
 
 interface SuccessCommentParams {
-  readonly memeId: string;
-  readonly provider: string;
-  readonly history: ReadonlyArray<HistoryEntry>;
-  readonly prompt: string;
-  readonly requester: string;
   readonly channel: string;
-  readonly slackLink: string;
-  readonly repo: string;
-  readonly branch?: string;
+  readonly history: ReadonlyArray<HistoryEntry>;
+  readonly imageSourceLabel?: string;
+  readonly imageSourceUrl?: string;
+  readonly imageUrl: string;
   readonly metadata?: GenerationMetadata;
+  readonly prompt: string;
+  readonly provider: string;
+  readonly requester: string;
+  readonly slackLink: string;
 }
 
 interface SlackSuccessParams {
-  readonly memeId: string;
-  readonly provider: string;
-  readonly title: string;
-  readonly requester: string;
   readonly channel: string;
-  readonly repo: string;
-  readonly branch?: string;
+  readonly contentUrl: string;
   readonly metadata?: GenerationMetadata;
+  readonly provider: string;
   readonly readSaga?: string;
+  readonly requester: string;
+  readonly title: string;
   readonly writeSaga?: string;
 }
 
@@ -64,16 +62,16 @@ const sagaFields = (readSaga?: string, writeSaga?: string) => ({
 });
 
 export function formatSuccessComment({
-  memeId,
-  provider,
-  history,
-  prompt,
-  requester,
   channel,
-  slackLink,
-  repo,
-  branch = "main",
+  history,
+  imageSourceLabel,
+  imageSourceUrl,
+  imageUrl,
   metadata,
+  prompt,
+  provider,
+  requester,
+  slackLink,
 }: SuccessCommentParams): string {
   const providerNote = ` _(${provider})_`;
   const promptDisplay = inlineCode(prompt);
@@ -85,11 +83,13 @@ export function formatSuccessComment({
       ? null
       : `${metadata.usage.inputTokens} input, ${metadata.usage.outputTokens} output, ${metadata.usage.totalTokens} total tokens`;
   const costCents = formatCostCents(metadata);
-  const blobUrl = `https://github.com/${repo}/blob/${branch}/memes/${memeId}.jpg`;
-  const imageUrl = `https://raw.githubusercontent.com/${repo}/refs/heads/${branch}/memes/${memeId}.jpg`;
+  const publication =
+    imageSourceUrl == null
+      ? `🎉 [Meme generated](${imageUrl})${providerNote}`
+      : `🎉 Meme generated and committed to [${imageSourceLabel ?? "the repository"}](${imageSourceUrl})${providerNote}`;
 
   return [
-    `🎉 Meme generated and committed to [memes/${memeId}.jpg](${blobUrl})${providerNote}`,
+    publication,
     ``,
     `![Generated meme](${imageUrl})`,
     ``,
@@ -140,21 +140,19 @@ export function formatSagaUpdateComment({
 
 /** Format the Slack webhook payload for a successful generation. */
 export function formatSlackSuccessPayload({
-  memeId,
-  provider,
-  title,
-  requester,
   channel,
-  repo,
-  branch = "main",
+  contentUrl,
   metadata,
+  provider,
   readSaga,
+  requester,
+  title,
   writeSaga,
 }: SlackSuccessParams) {
   const costCents = formatCostCents(metadata);
   return {
     status: "success" as const,
-    content_url: `https://raw.githubusercontent.com/${repo}/refs/heads/${branch}/memes/${memeId}.jpg`,
+    content_url: contentUrl,
     title,
     requester,
     channel,

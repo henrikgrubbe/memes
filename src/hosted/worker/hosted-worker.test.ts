@@ -15,13 +15,13 @@ import {
   type GenerationError,
 } from "../../shared/providers.js";
 import { failureOfType } from "../../shared/test-support.js";
-import type {
-  CompletedDeliveryState,
-  DeliveryState,
-  HostedGitHubRepository,
+import type { DeliveryOutcome } from "./hosted-delivery.js";
+import {
+  HostedGitHubError,
+  type HostedGitHubRepository,
 } from "./hosted-github.js";
-import { HostedGitHubError } from "./hosted-github.js";
 import type { SlackSender } from "./hosted-notifier.js";
+import type { HostedObjectStorage } from "./hosted-object-storage.js";
 import {
   classifyHostedGenerationError,
   runHostedTask,
@@ -46,16 +46,35 @@ const config: AppConfig = {
   writeSaga: "story",
 };
 
+const storedSuccess: DeliveryOutcome = {
+  history: [{ provider: "OpenAI", status: "success" }],
+  imageUrl: "https://images.example/memes/meme-1.jpg",
+  kind: "success",
+  memeId: "meme-1",
+  prompt: config.memePrompt,
+  provider: "OpenAI",
+};
+
+type StoredOutcome = Exclude<
+  DeliveryOutcome,
+  { readonly kind: "saga-updated" }
+>;
+
 interface Harness {
-  readonly currentState: () => DeliveryState | null;
+  readonly currentOutcome: () => StoredOutcome | null;
   readonly events: () => ReadonlyArray<string>;
   readonly repository: HostedGitHubRepository;
   readonly slack: SlackSender;
+  readonly storage: HostedObjectStorage;
 }
 
-const makeHarness = (initialState: DeliveryState | null = null): Harness => {
+const makeHarness = (
+  initialOutcome: StoredOutcome | null = null,
+  initialSagaFolded = false,
+): Harness => {
   let events: ReadonlyArray<string> = [];
-  let state = initialState;
+  let outcome = initialOutcome;
+  let sagaFolded = initialSagaFolded;
   const record = (event: string) => {
     events = [...events, event];
   };
@@ -69,47 +88,15 @@ const makeHarness = (initialState: DeliveryState | null = null): Harness => {
       Effect.sync(() => {
         record("github:comment");
       }),
-    complete: (plan) =>
-      Effect.sync(() => {
-        if (state?.status === "completed") {
-          return state;
-        }
-        record(
-          `github:complete:${plan.files?.map(({ path }) => path).join(",") ?? ""}:${plan.sagaPending ? "saga-pending" : ""}`,
-        );
-        const completed: CompletedDeliveryState = {
-          deliveryId: task.deliveryId,
-          issueNumber: task.issueNumber,
-          memeId: "meme-1",
-          outcome: plan.outcome,
-          repo: task.repo,
-          ...(plan.sagaPending ? { saga: "pending" as const } : {}),
-          status: "completed",
-          version: 1,
-        };
-        state = completed;
-        return completed;
-      }),
-    contributeSaga: (plan) =>
-      Effect.gen(function* () {
-        if (state?.status === "completed" && state.saga !== "pending") {
-          return false;
-        }
-        const saga = yield* plan.saga.derive("Existing canon");
-        record(`github:saga:${plan.saga.path}:${saga}`);
-        state = {
-          deliveryId: task.deliveryId,
-          issueNumber: task.issueNumber,
-          memeId: "meme-1",
-          outcome: plan.outcome,
-          repo: task.repo,
-          saga: "completed",
-          status: "completed",
-          version: 1,
-        };
-        return true;
-      }),
-    getDelivery: () => Effect.succeed(state),
+    foldSaga: (plan) =>
+      sagaFolded
+        ? Effect.succeed(false)
+        : Effect.gen(function* () {
+            const saga = yield* plan.derive("Existing canon");
+            record(`github:saga:${plan.path}:${saga}`);
+            sagaFolded = true;
+            return true;
+          }),
     memeId: "meme-1",
     readText: () => Effect.succeed("Existing canon"),
   };
@@ -119,12 +106,39 @@ const makeHarness = (initialState: DeliveryState | null = null): Harness => {
         record("slack:post");
       }),
   };
+  const storage: HostedObjectStorage = {
+    getOutcome: () =>
+      Effect.sync(() => {
+        record("storage:get");
+        return outcome;
+      }),
+    publishImage: ({ outcome: generated }) =>
+      Effect.sync(() => {
+        record("storage:put-image");
+        const published = {
+          ...generated,
+          imageUrl: "https://images.example/memes/meme-1.jpg",
+        };
+        outcome = published;
+        return published;
+      }),
+    recordTerminalFailure: (_prompt, failure) =>
+      Effect.sync(() => {
+        record("storage:put-failure");
+        if (outcome?.kind === "success") {
+          return outcome;
+        }
+        outcome = failure;
+        return failure;
+      }),
+  };
 
   return {
-    currentState: () => state,
+    currentOutcome: () => outcome,
     events: () => events,
     repository,
     slack,
+    storage,
   };
 };
 
@@ -141,6 +155,14 @@ const successProviders = (
         };
       }),
   });
+
+const dependencies = (harness: Harness) => ({
+  compressSaga: (_saga: string, canon: string, prompt: string) =>
+    Effect.succeed(`${canon}\n- ${prompt}`),
+  repository: harness.repository,
+  slack: harness.slack,
+  storage: harness.storage,
+});
 
 describe("hosted worker orchestration", () => {
   it("classifies every exhausted generation outcome as terminal", () => {
@@ -161,18 +183,15 @@ describe("hosted worker orchestration", () => {
     }
   });
 
-  it("processes a plain success without Saga work", async () => {
+  it("publishes a first no-Saga success before notifying", async () => {
     const harness = makeHarness();
     let providerPrompt = "";
+
     const result = await Effect.runPromise(
       runHostedTask(
         task,
         { ...config, readSaga: null, writeSaga: null },
-        {
-          compressSaga: (_saga, canon) => Effect.succeed(canon),
-          repository: harness.repository,
-          slack: harness.slack,
-        },
+        dependencies(harness),
       ).pipe(
         Effect.provide(
           successProviders((prompt) => {
@@ -185,30 +204,27 @@ describe("hosted worker orchestration", () => {
     expect(result).toBe("processed");
     expect(providerPrompt).toBe(config.memePrompt);
     expect(harness.events()).toEqual([
-      "github:complete:memes/meme-1.jpg:",
+      "storage:get",
+      "storage:put-image",
       "slack:post",
       "github:comment",
       "github:close",
     ]);
-    expect(harness.currentState()).toMatchObject({
-      outcome: { kind: "success" },
-      status: "completed",
+    expect(harness.currentOutcome()).toMatchObject({
+      imageUrl: "https://images.example/memes/meme-1.jpg",
+      kind: "success",
     });
   });
 
-  it("processes a write-only Saga without calling an image provider", async () => {
-    const harness = makeHarness();
+  it("resumes an existing image without calling a provider", async () => {
+    const harness = makeHarness(storedSuccess);
     let providerCalls = 0;
+
     const result = await Effect.runPromise(
       runHostedTask(
         task,
-        { ...config, readSaga: null },
-        {
-          compressSaga: (_saga, canon, prompt) =>
-            Effect.succeed(`${canon}\n- ${prompt}`),
-          repository: harness.repository,
-          slack: harness.slack,
-        },
+        { ...config, readSaga: null, writeSaga: null },
+        dependencies(harness),
       ).pipe(
         Effect.provide(
           successProviders(() => {
@@ -218,47 +234,55 @@ describe("hosted worker orchestration", () => {
       ),
     );
 
-    expect(result).toBe("processed");
+    expect(result).toBe("resumed");
     expect(providerCalls).toBe(0);
     expect(harness.events()).toEqual([
-      "github:saga:context/story.md:Existing canon\n- A functional meme",
+      "storage:get",
       "slack:post",
       "github:comment",
       "github:close",
     ]);
-    expect(harness.currentState()).toMatchObject({
-      outcome: { kind: "saga-updated", updated: true },
-      saga: "completed",
-    });
   });
 
-  it("resumes a pending Saga without regenerating the image", async () => {
-    const completed: CompletedDeliveryState = {
-      deliveryId: task.deliveryId,
-      issueNumber: task.issueNumber,
-      memeId: "meme-1",
-      outcome: {
-        history: [{ provider: "OpenAI", status: "success" }],
-        kind: "success",
-        memeId: "meme-1",
-        prompt: config.memePrompt,
-        provider: "OpenAI",
-      },
-      repo: task.repo,
-      saga: "pending",
-      status: "completed",
-      version: 1,
-    };
-    const harness = makeHarness(completed);
-    let providerCalls = 0;
+  it("publishes and folds a read-and-write Saga delivery", async () => {
+    const harness = makeHarness();
+    let providerPrompt = "";
 
-    const result = await Effect.runPromise(
-      runHostedTask(task, config, {
-        compressSaga: (_saga, canon, prompt) =>
-          Effect.succeed(`${canon}\n- ${prompt}`),
-        repository: harness.repository,
-        slack: harness.slack,
-      }).pipe(
+    await Effect.runPromise(
+      runHostedTask(task, config, dependencies(harness)).pipe(
+        Effect.provide(
+          successProviders((prompt) => {
+            providerPrompt = prompt;
+          }),
+        ),
+      ),
+    );
+
+    expect(providerPrompt).toContain("Existing canon");
+    expect(harness.events()).toContain("storage:put-image");
+    expect(harness.events()).toContain(
+      "github:saga:context/story.md:Existing canon\n- A functional meme",
+    );
+    expect(harness.events()).toContain("slack:post");
+  });
+
+  it("processes and resumes a write-only Saga without storage or providers", async () => {
+    const harness = makeHarness();
+    let providerCalls = 0;
+    const writeOnly = { ...config, readSaga: null };
+    const deps = dependencies(harness);
+
+    const first = await Effect.runPromise(
+      runHostedTask(task, writeOnly, deps).pipe(
+        Effect.provide(
+          successProviders(() => {
+            providerCalls += 1;
+          }),
+        ),
+      ),
+    );
+    const second = await Effect.runPromise(
+      runHostedTask(task, writeOnly, deps).pipe(
         Effect.provide(
           successProviders(() => {
             providerCalls += 1;
@@ -267,156 +291,86 @@ describe("hosted worker orchestration", () => {
       ),
     );
 
-    expect(result).toBe("resumed");
+    expect(first).toBe("processed");
+    expect(second).toBe("resumed");
     expect(providerCalls).toBe(0);
-    expect(harness.events()).toEqual([
-      "github:saga:context/story.md:Existing canon\n- A functional meme",
-      "slack:post",
-      "github:comment",
-      "github:close",
-    ]);
-    expect(harness.currentState()).toMatchObject({ saga: "completed" });
+    expect(harness.events().filter((event) => event === "storage:get")).toEqual(
+      [],
+    );
+    expect(
+      harness
+        .events()
+        .filter((event) => event.startsWith("github:saga:context/story.md")),
+    ).toHaveLength(1);
   });
 
-  it("does not regenerate or reapply Saga for an already completed delivery", async () => {
-    const completed: CompletedDeliveryState = {
-      deliveryId: task.deliveryId,
-      issueNumber: task.issueNumber,
-      memeId: "meme-1",
-      outcome: {
-        history: [{ provider: "OpenAI", status: "success" }],
-        kind: "success",
-        memeId: "meme-1",
-        prompt: config.memePrompt,
-        provider: "OpenAI",
-      },
-      repo: task.repo,
-      saga: "completed",
-      status: "completed",
-      version: 1,
-    };
-    const harness = makeHarness(completed);
+  it("persists a terminal failure so a notification retry skips providers", async () => {
+    const harness = makeHarness();
     let providerCalls = 0;
-
-    const result = await Effect.runPromise(
-      runHostedTask(task, config, {
-        compressSaga: (_saga, canon) => Effect.succeed(canon),
-        repository: harness.repository,
-        slack: harness.slack,
-      }).pipe(
-        Effect.provide(
-          successProviders(() => {
-            providerCalls += 1;
-          }),
+    const providers = makeProvidersLayer({
+      OpenAI: () =>
+        Effect.sync(() => {
+          providerCalls += 1;
+        }).pipe(
+          Effect.zipRight(
+            Effect.fail(
+              new ModerationBlockedError({
+                detail: "unsafe",
+                provider: "OpenAI",
+              }),
+            ),
+          ),
         ),
+    });
+    const noSaga = { ...config, readSaga: null, writeSaga: null };
+
+    const first = await Effect.runPromise(
+      runHostedTask(task, noSaga, dependencies(harness)).pipe(
+        Effect.provide(providers),
+      ),
+    );
+    const second = await Effect.runPromise(
+      runHostedTask(task, noSaga, dependencies(harness)).pipe(
+        Effect.provide(providers),
       ),
     );
 
-    expect(result).toBe("resumed");
-    expect(providerCalls).toBe(0);
-    expect(harness.events()).toEqual([
-      "slack:post",
-      "github:comment",
-      "github:close",
-    ]);
-  });
-
-  it("persists and notifies a moderation failure as terminal", async () => {
-    const harness = makeHarness();
-    const providers = makeProvidersLayer({
-      OpenAI: () =>
-        Effect.fail(
-          new ModerationBlockedError({
-            detail: "unsafe",
-            provider: "OpenAI",
-          }),
-        ),
+    expect(first).toBe("processed");
+    expect(second).toBe("resumed");
+    expect(providerCalls).toBe(1);
+    expect(
+      harness.events().filter((event) => event === "storage:put-failure"),
+    ).toHaveLength(1);
+    expect(harness.currentOutcome()).toMatchObject({
+      closeNotPlanned: true,
+      kind: "failure",
     });
-
-    const result = await Effect.runPromise(
-      runHostedTask(
-        task,
-        { ...config, readSaga: null, writeSaga: null },
-        {
-          compressSaga: (_saga, canon) => Effect.succeed(canon),
-          repository: harness.repository,
-          slack: harness.slack,
-        },
-      ).pipe(Effect.provide(providers)),
-    );
-
-    expect(result).toBe("processed");
-    expect(harness.currentState()).toMatchObject({
-      outcome: {
-        closeNotPlanned: true,
-        kind: "failure",
-      },
-    });
-    expect(harness.events()).toEqual([
-      "github:complete::",
-      "slack:post",
-      "github:comment",
-      "github:close",
-    ]);
-  });
-
-  it("persists and notifies an exhausted provider failure as terminal", async () => {
-    const harness = makeHarness();
-    const providers = makeProvidersLayer({
-      OpenAI: () =>
-        Effect.fail(
-          new ProviderError({
-            detail: "provider unavailable",
-            provider: "OpenAI",
-          }),
-        ),
-    });
-
-    const result = await Effect.runPromise(
-      runHostedTask(
-        task,
-        { ...config, readSaga: null, writeSaga: null },
-        {
-          compressSaga: (_saga, canon) => Effect.succeed(canon),
-          repository: harness.repository,
-          slack: harness.slack,
-        },
-      ).pipe(Effect.provide(providers)),
-    );
-
-    expect(result).toBe("processed");
-    expect(harness.currentState()).toMatchObject({
-      outcome: {
-        closeNotPlanned: false,
-        kind: "failure",
-      },
-    });
-    expect(harness.events()).toEqual([
-      "github:complete::",
-      "slack:post",
-      "github:comment",
-    ]);
   });
 
   it("lets Saga persistence finish when Slack fails quickly", async () => {
     const harness = makeHarness();
     const slackFailed = await Effect.runPromise(Deferred.make<void>());
-    const exit = await Effect.runPromise(
-      runHostedTask(task, config, {
-        compressSaga: (_saga, canon, prompt) =>
-          Deferred.await(slackFailed).pipe(Effect.as(`${canon}\n- ${prompt}`)),
-        repository: harness.repository,
-        slack: {
-          post: () =>
-            Deferred.succeed(slackFailed, undefined).pipe(
-              Effect.zipRight(
-                Effect.fail(
-                  new NotificationError({ detail: "Slack unavailable" }),
-                ),
+    const deps = {
+      ...dependencies(harness),
+      compressSaga: (_saga: string, canon: string, prompt: string) =>
+        Deferred.await(slackFailed).pipe(Effect.as(`${canon}\n- ${prompt}`)),
+      slack: {
+        post: () =>
+          Deferred.succeed(slackFailed, undefined).pipe(
+            Effect.zipRight(
+              Effect.fail(
+                new NotificationError({ detail: "Slack unavailable" }),
               ),
             ),
-        },
-      }).pipe(Effect.provide(successProviders()), Effect.exit),
+          ),
+      },
+    };
+
+    const exit = await Effect.runPromise(
+      runHostedTask(task, config, deps).pipe(
+        Effect.provide(successProviders()),
+        Effect.exit,
+      ),
     );
 
     expect(failureOfType(exit, NotificationError).message).toContain(
@@ -425,7 +379,6 @@ describe("hosted worker orchestration", () => {
     expect(harness.events()).toContain(
       "github:saga:context/story.md:Existing canon\n- A functional meme",
     );
-    expect(harness.currentState()).toMatchObject({ saga: "completed" });
   });
 
   it("lets notification finish when Saga persistence fails quickly", async () => {
@@ -433,11 +386,11 @@ describe("hosted worker orchestration", () => {
     const sagaFailed = await Effect.runPromise(Deferred.make<void>());
     const sagaError = new HostedGitHubError({
       detail: "Saga persistence unavailable",
-      operation: "contribute saga",
+      operation: "fold saga",
     });
     const repository: HostedGitHubRepository = {
       ...harness.repository,
-      contributeSaga: () =>
+      foldSaga: () =>
         Deferred.succeed(sagaFailed, undefined).pipe(
           Effect.zipRight(Effect.fail(sagaError)),
         ),
@@ -451,19 +404,15 @@ describe("hosted worker orchestration", () => {
 
     const exit = await Effect.runPromise(
       runHostedTask(task, config, {
-        compressSaga: (_saga, canon) => Effect.succeed(canon),
+        ...dependencies(harness),
         repository,
         slack,
       }).pipe(Effect.provide(successProviders()), Effect.exit),
     );
 
     expect(failureOfType(exit, HostedGitHubError)).toBe(sagaError);
-    expect(harness.events()).toEqual([
-      "github:complete:memes/meme-1.jpg:saga-pending",
-      "slack:post",
-      "github:comment",
-      "github:close",
-    ]);
-    expect(harness.currentState()).toMatchObject({ saga: "pending" });
+    expect(harness.events()).toContain("slack:post");
+    expect(harness.events()).toContain("github:comment");
+    expect(harness.events()).toContain("github:close");
   });
 });

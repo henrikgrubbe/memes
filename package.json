@@ -16,6 +16,7 @@
     "start:worker": "tsx src/hosted/worker/worker-server.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1127.0",
     "@aws-sdk/client-sqs": "^3.1126.0",
     "@effect/platform": "^0.97.1",
     "@effect/platform-node": "^0.108.1",

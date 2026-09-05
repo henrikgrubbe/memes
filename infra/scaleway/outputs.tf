@@ -28,6 +28,43 @@ output "sqs_endpoint" {
   value       = scaleway_mnq_sqs.main.endpoint
 }
 
+output "object_storage_bucket" {
+  description = "Bucket receiving newly hosted meme images."
+  value       = scaleway_object_bucket.images.name
+}
+
+output "object_storage_endpoint" {
+  description = "Regional S3-compatible endpoint used by the worker."
+  value       = local.object_storage_endpoint
+}
+
+output "object_storage_public_base_url" {
+  description = "Permanent public base URL for objects under the memes prefix."
+  value       = local.object_storage_public_url
+}
+
+output "worker_object_storage_access_key" {
+  description = "Dedicated worker Object Storage access key."
+  value       = scaleway_iam_api_key.worker_storage.access_key
+  sensitive   = true
+}
+
+output "worker_object_storage_secret_key" {
+  description = "Dedicated worker Object Storage secret key."
+  value       = scaleway_iam_api_key.worker_storage.secret_key
+  sensitive   = true
+}
+
+output "worker_object_storage_key_expires_at" {
+  description = "Expiration timestamp for the current worker Object Storage API key."
+  value       = scaleway_iam_api_key.worker_storage.expires_at
+}
+
+output "worker_object_storage_key_rotation_at" {
+  description = "Next apply-time rotation deadline for the worker Object Storage API key."
+  value       = time_rotating.worker_storage.rotation_rfc3339
+}
+
 output "operations_sqs_access_key" {
   description = "Least-privilege SQS access key for DLQ inspection and replay."
   value       = scaleway_mnq_sqs_credentials.operations.access_key

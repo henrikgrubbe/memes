@@ -1,5 +1,9 @@
 locals {
-  common_tags = ["app=memes", "managed-by=opentofu", "region=${var.region}"]
+  common_tags                = ["app=memes", "managed-by=opentofu", "region=${var.region}"]
+  object_storage_bucket_name = coalesce(var.object_storage_bucket_name, substr("${var.name_prefix}-${var.project_id}-images", 0, 63))
+  object_storage_region      = "nl-ams"
+  object_storage_endpoint    = "https://s3.${local.object_storage_region}.scw.cloud"
+  object_storage_public_url  = "https://${local.object_storage_bucket_name}.s3.${local.object_storage_region}.scw.cloud"
 
   ingress_image = "${scaleway_registry_namespace.main.endpoint}/webhook:${var.image_tag}"
   worker_image  = "${scaleway_registry_namespace.main.endpoint}/worker:${var.image_tag}"
@@ -72,6 +76,110 @@ resource "scaleway_mnq_sqs_credentials" "operations" {
   }
 
   depends_on = [scaleway_mnq_sqs.main]
+}
+
+resource "scaleway_object_bucket" "images" {
+  name       = local.object_storage_bucket_name
+  project_id = var.project_id
+  region     = local.object_storage_region
+}
+
+resource "scaleway_object_bucket_acl" "images" {
+  acl        = "private"
+  bucket     = scaleway_object_bucket.images.id
+  project_id = var.project_id
+  region     = local.object_storage_region
+}
+
+resource "scaleway_object_bucket_policy" "images" {
+  bucket     = scaleway_object_bucket.images.id
+  project_id = var.project_id
+  region     = local.object_storage_region
+  policy = jsonencode({
+    Version = "2023-04-17"
+    Statement = [
+      {
+        Sid       = "AllowAnonymousMemeReads"
+        Effect    = "Allow"
+        Action    = ["s3:GetObject"]
+        Resource  = ["${scaleway_object_bucket.images.name}/memes/*"]
+        Principal = "*"
+      },
+      {
+        Sid    = "AllowWorkerObjectAccess"
+        Effect = "Allow"
+        Principal = {
+          SCW = "application_id:${scaleway_iam_application.worker_storage.id}"
+        }
+        Action = ["s3:GetObject", "s3:PutObject"]
+        Resource = [
+          "${scaleway_object_bucket.images.name}/memes/*",
+          "${scaleway_object_bucket.images.name}/terminal-outcomes/*",
+        ]
+      },
+      {
+        Sid    = "AllowProvisioningObjectStorageManagement"
+        Effect = "Allow"
+        Principal = {
+          SCW = var.object_storage_provisioning_principal
+        }
+        Action = [
+          "s3:GetBucketAcl",
+          "s3:GetBucketCORS",
+          "s3:GetBucketLocation",
+          "s3:GetBucketObjectLockConfiguration",
+          "s3:GetBucketTagging",
+          "s3:GetBucketVersioning",
+          "s3:GetLifecycleConfiguration",
+          "s3:ListBucket",
+          "s3:PutBucketAcl",
+        ]
+        Resource = [scaleway_object_bucket.images.name]
+      }
+    ]
+  })
+
+  depends_on = [scaleway_object_bucket_acl.images]
+}
+
+resource "scaleway_iam_application" "worker_storage" {
+  name        = "${var.name_prefix}-worker-storage"
+  description = "Hosted meme worker Object Storage identity"
+}
+
+resource "scaleway_iam_policy" "worker_storage" {
+  name           = "${var.name_prefix}-worker-storage"
+  description    = "Read and write objects for hosted meme delivery"
+  application_id = scaleway_iam_application.worker_storage.id
+
+  rule {
+    project_ids = [var.project_id]
+    permission_set_names = [
+      "ObjectStorageObjectsRead",
+      "ObjectStorageObjectsWrite",
+    ]
+  }
+}
+
+resource "time_rotating" "worker_storage" {
+  rotation_days = 300
+  triggers = {
+    application_id = scaleway_iam_application.worker_storage.id
+    project_id     = var.project_id
+  }
+}
+
+resource "scaleway_iam_api_key" "worker_storage" {
+  application_id     = scaleway_iam_application.worker_storage.id
+  default_project_id = var.project_id
+  description        = "Hosted meme worker Object Storage credentials"
+  expires_at         = timeadd(time_rotating.worker_storage.rotation_rfc3339, "720h")
+
+  depends_on = [scaleway_iam_policy.worker_storage]
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "scaleway_mnq_sqs_queue" "dead_letter" {
@@ -184,18 +292,24 @@ resource "scaleway_container" "worker" {
   tags               = local.common_tags
 
   environment_variables = {
-    GITHUB_API_URL             = "https://api.github.com"
-    GITHUB_REPOSITORY          = var.github_repository
-    GITHUB_TARGET_BRANCH       = var.github_target_branch
-    WORKER_DIAGNOSTIC_RESPONSE = var.worker_diagnostic_response
-    WORKER_MODE                = var.worker_mode
+    GITHUB_API_URL                 = "https://api.github.com"
+    GITHUB_REPOSITORY              = var.github_repository
+    GITHUB_TARGET_BRANCH           = var.github_target_branch
+    OBJECT_STORAGE_BUCKET          = scaleway_object_bucket.images.name
+    OBJECT_STORAGE_ENDPOINT        = local.object_storage_endpoint
+    OBJECT_STORAGE_PUBLIC_BASE_URL = local.object_storage_public_url
+    OBJECT_STORAGE_REGION          = local.object_storage_region
+    WORKER_DIAGNOSTIC_RESPONSE     = var.worker_diagnostic_response
+    WORKER_MODE                    = var.worker_mode
   }
 
   secret_environment_variables = merge(
     {
-      GITHUB_FINE_GRAINED_PAT = var.github_fine_grained_pat
-      OPENAI_API_KEY          = var.openai_api_key
-      SLACK_WEBHOOK_URL       = var.slack_webhook_url
+      GITHUB_FINE_GRAINED_PAT   = var.github_fine_grained_pat
+      OBJECT_STORAGE_ACCESS_KEY = scaleway_iam_api_key.worker_storage.access_key
+      OBJECT_STORAGE_SECRET_KEY = scaleway_iam_api_key.worker_storage.secret_key
+      OPENAI_API_KEY            = var.openai_api_key
+      SLACK_WEBHOOK_URL         = var.slack_webhook_url
     },
     var.xai_api_key == null ? {} : { XAI_API_KEY = var.xai_api_key },
   )
