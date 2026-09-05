@@ -23,6 +23,7 @@ Sources:
 - [Object Storage concepts and regional endpoints](https://www.scaleway.com/en/docs/object-storage/concepts/#endpoint)
 - [Conditional object writes](https://www.scaleway.com/en/docs/object-storage/api-cli/using-conditional-writes/)
 - [Bucket policies](https://www.scaleway.com/en/docs/object-storage/api-cli/bucket-policy/)
+- [Combining IAM and bucket policies](https://www.scaleway.com/en/docs/object-storage/api-cli/combining-iam-and-object-storage/)
 - [IAM permission sets](https://www.scaleway.com/en/docs/iam/reference-content/permission-sets/)
 
 ## Target flow
@@ -242,11 +243,14 @@ image bucket is fixed in `nl-ams`. It creates:
 - Scaleway SQS activation plus separate manage-only, publish-only,
   receive-only, and operations credentials;
 - one private/non-listable Standard Multi-AZ Object Storage bucket in `nl-ams`;
-  its policy grants anonymous `s3:GetObject` only for `memes/*`;
+  its policy grants anonymous `s3:GetObject` only for `memes/*` and explicitly
+  retains the worker application's `s3:GetObject`/`s3:PutObject` access to
+  `memes/*` and private `terminal-outcomes/*`;
 - one dedicated worker IAM application/API key with project-scoped
   `ObjectStorageObjectsRead` and `ObjectStorageObjectsWrite` permission sets,
   and no delete or bucket-administration permission (project is the narrowest
-  IAM scope supported by the provider);
+  IAM scope supported by the provider). Scaleway intersects IAM with a bucket
+  policy, so both grants are required;
 - `memes-requests.fifo` and `memes-requests-dlq.fifo` in the selected region, with explicit
   deduplication IDs, one-day retention, 240-second visibility, long polling,
   and redrive after four receives;

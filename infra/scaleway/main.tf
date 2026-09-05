@@ -104,6 +104,18 @@ resource "scaleway_object_bucket_policy" "images" {
         Action    = ["s3:GetObject"]
         Resource  = ["${scaleway_object_bucket.images.name}/memes/*"]
         Principal = "*"
+      },
+      {
+        Sid    = "AllowWorkerObjectAccess"
+        Effect = "Allow"
+        Principal = {
+          SCW = "application_id:${scaleway_iam_application.worker_storage.id}"
+        }
+        Action = ["s3:GetObject", "s3:PutObject"]
+        Resource = [
+          "${scaleway_object_bucket.images.name}/memes/*",
+          "${scaleway_object_bucket.images.name}/terminal-outcomes/*",
+        ]
       }
     ]
   })

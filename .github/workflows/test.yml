@@ -243,3 +243,6 @@ jobs:
 
       - name: Validate configuration
         run: tofu -chdir=infra/scaleway validate
+
+      - name: Test configuration
+        run: tofu -chdir=infra/scaleway test
