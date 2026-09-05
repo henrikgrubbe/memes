@@ -145,15 +145,44 @@ update or reuse that comment before idempotently closing the issue.
 ### Forward-only image cutover
 
 The migration does not move or rewrite historical `memes/*.jpg` files. Their
-existing GitHub raw URLs remain permanent. Provision the bucket and worker
-identity first, deploy the worker with the six Object Storage variables, and
-then run the exclusive live canary before transferring processing authority.
-Every newly hosted delivery after that point uses Object Storage; no image or
-general delivery-state JSON is committed to GitHub. Existing repository history
-and historical delivery commits remain untouched. When the setup wizard detects
-existing containers, it uses a one-time targeted plan for only the new bucket,
-bucket policy, IAM application/policy, and API key so `deploy_containers=false`
-cannot remove the running services during this preparatory step.
+existing GitHub raw URLs remain permanent. Every newly hosted delivery after
+cutover uses Object Storage; no image or general delivery-state JSON is
+committed to GitHub. Existing repository history and historical delivery
+commits remain untouched.
+
+> [!IMPORTANT]
+> Do not merge the Object Storage migration before pre-provisioning its
+> resources and all six required `OBJECT_STORAGE_*` worker variables from the
+> migration branch. Merging changes under `src/hosted/worker/**` automatically
+> deploys the new worker image. The worker deployment verifies the selected
+> image but has no HTTP health gate, so missing runtime configuration will not
+> trigger a functional rollback.
+
+Use this order for an existing hosted deployment:
+
+1. Check out the migration branch while GitHub Actions remains authoritative.
+2. Load the existing `.env.scaleway`, preserve the currently applied ingress,
+   worker, and trigger modes, and run OpenTofu from this branch.
+3. Review and apply a plan that creates the bucket, private ACL, bucket policy,
+   IAM application/policy, and API key and updates the existing worker
+   container with all six `OBJECT_STORAGE_*` values. Keep
+   `deploy_containers=true`. The worker resource's lifecycle rule ignores
+   `image` and `registry_sha256`, so this apply must leave the old worker image
+   running.
+4. Verify the worker image reference is unchanged, the existing worker remains
+   healthy, and the new bucket/policy/application outputs exist. Do not merge
+   if the current worker regresses.
+5. Merge the migration. Only now may `deploy-worker.yml` replace the old image
+   with the Object Storage-aware image.
+6. Confirm the worker deployment completes, verify worker health/logs, and run
+   the exclusive live canary before transferring processing authority.
+
+When the setup wizard detects existing containers, its durable-services stage
+uses a one-time targeted plan for only the new bucket, bucket policy, IAM
+application/policy, and API key so `deploy_containers=false` cannot remove the
+running services. Continue to the inert-container apply to wire the six worker
+values while retaining the old image, then stop before live-canary stages until
+the migration has merged and the worker deployment has completed.
 
 ## Configuration
 
@@ -296,6 +325,9 @@ is owned by GitHub Actions:
   Scaleway and are not copied into GitHub.
 - The deployment script waits for Scaleway readiness, verifies the selected
   image, and restores the previous image if update or verification fails.
+  Ingress additionally has an HTTP health gate. Worker deployment does not, so
+  required worker environment changes must be applied before merging code that
+  consumes them.
 
 The `production` Environment requires these variables:
 
