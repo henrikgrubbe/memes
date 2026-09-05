@@ -48,7 +48,7 @@ jobs:
       name: production
       url: ${{ vars.PRODUCTION_URL }}
     concurrency:
-      group: scaleway-production
+      group: scaleway-production-${{ inputs.runtime }}
       cancel-in-progress: false
 
     steps:

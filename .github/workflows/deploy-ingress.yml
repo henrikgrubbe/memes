@@ -8,14 +8,11 @@ on:
       - "src/hosted/task.ts"
       - "!src/**/*.test.ts"
       - "infra/scaleway/images/ingress.Dockerfile"
-      - "infra/scaleway/deploy/**"
       - "package.json"
       - "package-lock.json"
       - "tsconfig.json"
       - "tsconfig.ingress.json"
       - ".dockerignore"
-      - ".github/workflows/deploy-ingress.yml"
-      - ".github/workflows/deploy-runtime.yml"
   workflow_dispatch:
 
 permissions:

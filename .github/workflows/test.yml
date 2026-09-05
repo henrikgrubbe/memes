@@ -131,7 +131,7 @@ jobs:
           retention-days: 14
 
   images:
-    name: Build ${{ matrix.runtime }} image
+    name: Verify ${{ matrix.runtime }} image
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -148,7 +148,74 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Build image
-        run: docker build --file "${{ matrix.dockerfile }}" .
+        run: |
+          docker build \
+            --tag "memes-${{ matrix.runtime }}:ci" \
+            --file "${{ matrix.dockerfile }}" \
+            .
+
+      - name: Start image and check health
+        shell: bash
+        run: |
+          runtime="${{ matrix.runtime }}"
+          image="memes-${runtime}:ci"
+          container="memes-${runtime}-${{ github.run_id }}-${{ github.run_attempt }}"
+
+          cleanup() {
+            docker rm --force "$container" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          if [[ "$runtime" == "ingress" ]]; then
+            configuration=(
+              --env GITHUB_WEBHOOK_SECRET=ci-dummy
+              --env HOSTED_INGRESS_MODE=off
+              --env SQS_ACCESS_KEY=ci-dummy
+              --env SQS_ENDPOINT=https://sqs.invalid
+              --env SQS_QUEUE_URL=https://sqs.invalid/queue
+              --env SQS_REGION=nl-ams
+              --env SQS_SECRET_KEY=ci-dummy
+            )
+          else
+            configuration=(
+              --env GITHUB_API_URL=https://api.github.invalid
+              --env GITHUB_FINE_GRAINED_PAT=ci-dummy
+              --env GITHUB_REPOSITORY=example/memes
+              --env SLACK_WEBHOOK_URL=https://example.invalid/webhook
+              --env WORKER_MODE=diagnostic
+            )
+          fi
+
+          docker run \
+            --detach \
+            --name "$container" \
+            --publish 127.0.0.1::8080 \
+            "${configuration[@]}" \
+            "$image"
+
+          address=$(docker port "$container" 8080/tcp)
+          health_url="http://127.0.0.1:${address##*:}/health"
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error "$health_url"; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs "$container"
+          exit 1
+
+  deployment:
+    name: Deployment script
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Test deployment behavior
+        run: infra/scaleway/deploy/deploy-runtime.test.sh
 
   infrastructure:
     name: OpenTofu
@@ -160,7 +227,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@v2
 
       - name: Initialize providers
         run: tofu -chdir=infra/scaleway init -backend=false
