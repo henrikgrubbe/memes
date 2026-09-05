@@ -5,6 +5,9 @@ name_prefix          = "memes"
 github_repository    = "henrikgrubbe/memes"
 github_target_branch = "main"
 
+# Optional override. The default includes the project ID and is globally unique.
+# object_storage_bucket_name = "memes-example-images"
+
 # Safe deployment defaults:
 deploy_containers      = false
 worker_trigger_enabled = false

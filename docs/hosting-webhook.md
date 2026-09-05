@@ -20,6 +20,10 @@ Sources:
 - [Using Node.js with Scaleway Queues](https://www.scaleway.com/en/docs/queues/api-cli/python-node-queues/)
 - [Scaleway Queues concepts](https://www.scaleway.com/en/docs/queues/concepts/)
 - [Deploying a Serverless Container](https://www.scaleway.com/en/docs/serverless-containers/how-to/deploy-container/)
+- [Object Storage concepts and regional endpoints](https://www.scaleway.com/en/docs/object-storage/concepts/#endpoint)
+- [Conditional object writes](https://www.scaleway.com/en/docs/object-storage/api-cli/using-conditional-writes/)
+- [Bucket policies](https://www.scaleway.com/en/docs/object-storage/api-cli/bucket-policy/)
+- [IAM permission sets](https://www.scaleway.com/en/docs/iam/reference-content/permission-sets/)
 
 ## Target flow
 
@@ -30,7 +34,8 @@ flowchart LR
   Ingress -->|SQS message| Queue[Scaleway FIFO queue]
   Queue -->|native trigger| Worker[Private worker container]
   Worker --> Images[Image provider]
-  Worker --> GitHub
+  Worker --> Storage[Scaleway Object Storage]
+  Worker -->|issues and Sagas| GitHub
   Worker --> Slack
 ```
 
@@ -72,10 +77,13 @@ The repository also contains the queue worker slice:
   an event object whose `body` is the task object or its serialized JSON.
 - `src/hosted/worker/worker-app.ts` creates request-scoped configuration, while
   `src/hosted/worker/hosted-worker.ts` directly orchestrates the hosted
-  repository and Slack adapters around shared provider, prompt, and Saga
-  helpers.
+  Object Storage, GitHub, and Slack adapters around shared provider, prompt, and
+  Saga helpers.
+- `src/hosted/worker/hosted-object-storage.ts` publishes immutable JPEGs through
+  Scaleway's S3-compatible API and persists private terminal outcomes.
 - `src/hosted/worker/hosted-github.ts` uses the Contents API for reads and the
-  Git Data API for atomic writes, issue comments, and issue closure.
+  Git Data API only for atomic Saga canon/receipt writes, issue comments, and
+  issue closure.
 - `src/hosted/worker/hosted-notifier.ts` posts the existing Slack payload
   contract with the Node HTTP client rather than shelling out to `curl`.
 - `infra/scaleway/images/worker.Dockerfile` builds the dedicated production
@@ -85,45 +93,66 @@ Malformed envelopes, invalid task identities, and invalid Slack issue bodies
 receive a terminal `200` response with `disposition: rejected`. Exhausted
 generation outcomes - moderation failure, exhausted quota/providers, exhausted
 rate-limit retries, and provider errors - are also terminal: the worker stores a
-failure marker, posts the normal failure notification, and then returns `200`.
-Moderation retains the existing `not_planned` close behavior; other provider
-failures retain the existing failure comment without automatically closing the
-issue. GitHub, Saga persistence, and Slack I/O failures receive `503`, causing
-the Scaleway trigger to retry. Successful and resumed deliveries receive `200`.
-The CLI and GitHub Actions layers are unchanged and retain their filesystem,
-`git`, `gh`, and `curl` behavior.
+private conditional outcome object, posts the normal failure notification, and
+then returns `200`. Moderation retains the existing `not_planned` close
+behavior; other provider failures retain the existing failure comment without
+automatically closing the issue. Object Storage, GitHub, Saga persistence, and
+Slack I/O failures receive `503`, causing the Scaleway trigger to retry.
+Successful and resumed deliveries receive `200`. The CLI and GitHub Actions
+layers are unchanged and retain their filesystem, `git`, `gh`, `curl`, and
+GitHub raw image URLs.
 
 ### Persistence and idempotency
 
 The durable identity is the repository, issue number, and GitHub delivery ID.
-The worker derives a stable meme UUID and marker path from that identity.
+The worker derives the same stable meme UUID as before and uses
+`memes/<memeId>.jpg` as the Object Storage key.
 
-1. Before calling an image provider, check
-   `.github/meme-worker/deliveries/<sha256>.json` for an existing result.
-2. Read the saga canon, generate the image, then atomically commit the image and
-   completed marker. Saga-backed deliveries mark the Saga update as pending.
-3. Notify Slack while compressing and committing the Saga update in parallel.
-   Each branch runs to completion even if the other fails; after both finish,
-   either failure makes the delivery retryable. A successful Saga commit
-   therefore remains durable when Slack fails. The Saga content and its
-   completed marker state share a second atomic commit.
-4. If the branch ref moves, re-read the marker and Saga, re-derive the update,
-   and retry without force-pushing.
-5. On redelivery, a completed marker skips provider generation and image
-   publication. A pending Saga update is resumed alongside notification.
+1. Before calling an image provider, `HeadObject` checks that deterministic key.
+   An existing image is the successful-publication receipt and resumes
+   notification from its bounded metadata.
+2. If no image or terminal outcome exists, read any Saga canon, generate the
+   JPEG, and write it with `If-None-Match: *`, `Content-Type: image/jpeg`, and
+   immutable cache control. A `412` is a concurrent winner, so the worker reads
+   the winning object's metadata and resumes without regenerating.
+3. Notify Slack while folding an optional Saga in parallel. Each branch runs to
+   completion even if the other fails; after both finish, either failure makes
+   the delivery retryable.
+4. Saga folding commits `context/<saga>.md` and
+   `.github/meme-worker/saga-folds/<sha256>.json` atomically. That receipt
+   contains only the delivery ID, Saga name, and `folded: true`. Ref conflicts
+   re-read the receipt and latest canon, re-derive, and retry without force.
+5. Terminal generation failures use a private conditional
+   `terminal-outcomes/<memeId>.json` record. This is necessary because there is
+   no successful image object to act as the receipt; it prevents notification
+   retries from invoking providers again. Successful images have no sidecar.
 
-Most deliveries create one commit; Saga-backed deliveries create two. There
-are two accepted crash windows:
+No-Saga image deliveries create no Git commit. Read/write and write-only Saga
+deliveries create one atomic canon-plus-receipt commit. There are two accepted
+crash windows:
 
-- A crash after a provider accepts the request but before GitHub records the
-  completed result can cause another billed provider call. Neither the current
+- A crash after a provider accepts the request but before the conditional image
+  write completes can cause another billed provider call. Neither the current
   providers nor Scaleway supply an end-to-end idempotency key.
 - Slack incoming webhooks have no idempotency key or returned message ID. A
   retry after Slack accepts a request but before all processing completes can
   post the notification twice.
 
 Issue completion comments include a hidden delivery marker. Retries find and
-reuse that comment before closing the issue.
+update or reuse that comment before idempotently closing the issue.
+
+### Forward-only image cutover
+
+The migration does not move or rewrite historical `memes/*.jpg` files. Their
+existing GitHub raw URLs remain permanent. Provision the bucket and worker
+identity first, deploy the worker with the six Object Storage variables, and
+then run the exclusive live canary before transferring processing authority.
+Every newly hosted delivery after that point uses Object Storage; no image or
+general delivery-state JSON is committed to GitHub. Existing repository history
+and historical delivery commits remain untouched. When the setup wizard detects
+existing containers, it uses a one-time targeted plan for only the new bucket,
+bucket policy, IAM application/policy, and API key so `deploy_containers=false`
+cannot remove the running services during this preparatory step.
 
 ## Configuration
 
@@ -149,16 +178,22 @@ The worker requires:
 
 | Variable                     | Purpose                                                    |
 | ---------------------------- | ---------------------------------------------------------- |
-| `GITHUB_FINE_GRAINED_PAT`    | Repository-scoped token for hosted persistence             |
-| `SLACK_WEBHOOK_URL`          | Existing Slack Workflow incoming webhook                   |
-| `OPENAI_API_KEY`             | Primary image generation and optional saga compression     |
-| `XAI_API_KEY`                | Optional moderation fallback provider                      |
-| `GITHUB_TARGET_BRANCH`       | Branch receiving output commits; defaults to `main`        |
-| `GITHUB_API_URL`             | GitHub REST base URL; defaults to `https://api.github.com` |
-| `PORT`                       | Worker HTTP port; defaults to `8080`                       |
-| `GITHUB_REPOSITORY`          | Only repository the worker is allowed to mutate            |
-| `WORKER_MODE`                | `diagnostic` or `live`; defaults to `diagnostic`           |
-| `WORKER_DIAGNOSTIC_RESPONSE` | `success` (200) or `retry` (503) for trigger validation    |
+| `GITHUB_FINE_GRAINED_PAT`          | Repository-scoped token for issues and Saga commits       |
+| `SLACK_WEBHOOK_URL`                | Existing Slack Workflow incoming webhook                  |
+| `OPENAI_API_KEY`                   | Primary image generation and optional Saga compression    |
+| `XAI_API_KEY`                      | Optional moderation fallback provider                     |
+| `GITHUB_TARGET_BRANCH`             | Branch receiving Saga commits; defaults to `main`         |
+| `GITHUB_API_URL`                   | GitHub REST base URL; defaults to `https://api.github.com` |
+| `OBJECT_STORAGE_ENDPOINT`          | Regional S3 endpoint, `https://s3.nl-ams.scw.cloud`        |
+| `OBJECT_STORAGE_REGION`            | Object Storage signing region, `nl-ams`                    |
+| `OBJECT_STORAGE_BUCKET`            | Bucket holding hosted images and terminal outcomes        |
+| `OBJECT_STORAGE_PUBLIC_BASE_URL`   | Permanent public bucket URL used in notifications          |
+| `OBJECT_STORAGE_ACCESS_KEY`        | Dedicated worker IAM application access key               |
+| `OBJECT_STORAGE_SECRET_KEY`        | Dedicated worker IAM application secret key               |
+| `PORT`                             | Worker HTTP port; defaults to `8080`                       |
+| `GITHUB_REPOSITORY`                | Only repository the worker is allowed to mutate            |
+| `WORKER_MODE`                      | `diagnostic` or `live`; defaults to `diagnostic`           |
+| `WORKER_DIAGNOSTIC_RESPONSE`       | `success` (200) or `retry` (503) for trigger validation    |
 
 For the first deployment, use a short-lived fine-grained PAT restricted to this
 repository with **Contents: read and write** and **Issues: read and write**.
@@ -173,7 +208,8 @@ The repeatable deployment lives in `infra/scaleway`. Run
 
 1. Apply phase one with `deploy_containers=false`. OpenTofu creates the public
    registry, SQS service, FIFO request queue, same-region FIFO DLQ, scoped SQS
-   credentials, and Containers namespace.
+   credentials, private Object Storage bucket, public `memes/*` read policy,
+   dedicated object-only worker identity, and Containers namespace.
 2. Build the Dockerfiles in `infra/scaleway/images`, tag both with an immutable
    commit identifier, and push them to the newly created registry.
 3. Apply phase two with `deploy_containers=true`,
@@ -196,14 +232,21 @@ before the Actions cutover.
 
 ## OpenTofu resources and defaults
 
-`infra/scaleway` uses `scaleway/scaleway ~> 2.82.0`, OpenTofu-compatible HCL,
-and defaults to `nl-ams` (`fr-par` is also supported). It creates:
+`infra/scaleway` uses `scaleway/scaleway ~> 2.82.0`, OpenTofu-compatible HCL.
+The runtime region defaults to `nl-ams` (`fr-par` is also supported), while the
+image bucket is fixed in `nl-ams`. It creates:
 
 - one public Container Registry namespace and one Serverless Containers
   namespace; public images are free up to Scaleway's documented 75 GB allowance
   and contain no runtime secrets;
 - Scaleway SQS activation plus separate manage-only, publish-only,
   receive-only, and operations credentials;
+- one private/non-listable Standard Multi-AZ Object Storage bucket in `nl-ams`;
+  its policy grants anonymous `s3:GetObject` only for `memes/*`;
+- one dedicated worker IAM application/API key with project-scoped
+  `ObjectStorageObjectsRead` and `ObjectStorageObjectsWrite` permission sets,
+  and no delete or bucket-administration permission (project is the narrowest
+  IAM scope supported by the provider);
 - `memes-requests.fifo` and `memes-requests-dlq.fifo` in the selected region, with explicit
   deduplication IDs, one-day retention, 240-second visibility, long polling,
   and redrive after four receives;
@@ -223,10 +266,12 @@ registry. The configuration therefore uses an explicit two-phase flow rather
 than a placeholder image. `deploy_containers` and `worker_trigger_enabled` both
 default to `false`.
 
-OpenTofu state contains SQS credentials and values supplied to container
-secrets. Local state and `.env.scaleway` are gitignored, but gitignore is not
-encryption. Keep them mode `0600` and back them up only to an encrypted
-secret/state store. Never commit a plan file: saved plans contain secret values.
+OpenTofu state contains SQS credentials, the worker Object Storage API secret,
+and values supplied to container secrets. Sensitive credential outputs are
+marked accordingly. Local state and `.env.scaleway` are gitignored, but
+gitignore is not encryption. Keep them mode `0600` and back them up only to an
+encrypted secret/state store. Never commit a plan file: saved plans contain
+secret values.
 
 ### Continuous application deployment
 
@@ -285,11 +330,12 @@ The human must:
 5. create the GitHub webhook, run every canary observation, pause/resume the
    upstream Slack intake, and approve cutover.
 
-OpenTofu creates all registry, queue, scoped queue credential, container,
-encrypted secret wiring, probe, scaling, and optional trigger resources. It
-does not create a Scaleway account, billing method, MFA, GitHub PAT, provider
-API keys, Slack/OpenAI credentials, GitHub webhook, GitHub repository variable,
-or remote state backend.
+OpenTofu creates all registry, queue, scoped queue credential, Object Storage
+bucket/policy, worker storage identity/key, container, encrypted secret wiring,
+probe, scaling, and optional trigger resources. It does not create a Scaleway
+account, billing method, MFA, GitHub PAT, provider API keys, Slack/OpenAI
+credentials, GitHub webhook, GitHub repository variable, or remote state
+backend.
 
 The wizard stores captured values only in ignored `.env.scaleway` with a
 restrictive umask. It never writes secrets to tracked HCL or GitHub Actions.
@@ -359,8 +405,9 @@ processing, record evidence for all of the following:
    queue.
 5. Repeated failures interact with `max_receive_count=4` as expected and land in
    the DLQ.
-6. A new exclusive live canary produces exactly one provider request, output
-   commit, issue completion, and Slack completion.
+6. A new exclusive live canary produces exactly one provider request, one
+   `memes/<memeId>.jpg` object, issue completion, and Slack completion; it does
+   not add an image or general delivery marker to GitHub.
 7. Registry, Queues, and Serverless Containers all create successfully in
    the selected region; Scaleway's current product-availability table is client-rendered
    and was not statically verifiable.
@@ -416,9 +463,9 @@ trusted machine and delete it when done. To replay, receive one message with a
 300-second visibility timeout, confirm its repository/issue/delivery identity,
 send its body to `request_queue` with group ID `meme-requests` and a new replay
 deduplication ID, then delete the DLQ receipt only after `send-message`
-succeeds. Never bulk replay: the durable GitHub marker makes completed
-deliveries resumable, but unresolved failures can still repeat billed provider
-calls. Use the official [Scaleway SQS
+succeeds. Never bulk replay: published image objects and terminal outcome
+objects make completed deliveries resumable, but a provider-success crash
+before `PutObject` can still repeat a billed call. Use the official [Scaleway SQS
 endpoint](https://www.scaleway.com/en/docs/queues/api-cli/aws-cli/) instructions.
 
 ## Rotation, rollback, and cost
@@ -427,9 +474,9 @@ Rotate the GitHub PAT before its recorded expiry: create the replacement with
 the same narrow repository permissions, update
 `TF_VAR_github_fine_grained_pat`, apply, run an exclusive canary, then revoke
 the old token. Use the same replace-apply-canary-revoke sequence for Slack and
-provider secrets. Rotate queue credentials by replacing their OpenTofu
-resources during paused intake; never delete the credential currently used by
-an attached trigger.
+provider secrets. Rotate queue and worker Object Storage credentials by
+replacing their OpenTofu resources during paused intake; never delete a
+credential currently used by an attached trigger or live worker.
 
 Rollback is deliberately asymmetric:
 

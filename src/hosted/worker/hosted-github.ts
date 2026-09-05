@@ -1,11 +1,9 @@
 import { createHash } from "node:crypto";
 import { Data, Effect, Schema } from "effect";
-import type { HistoryEntry } from "../../shared/history.js";
-import type { GenerationMetadata } from "../../shared/providers.js";
 import type { MemeRequestTask } from "../task.js";
 
-const GITHUB_API_VERSION = "2022-11-28";
 const FILE_MODE = "100644";
+const GITHUB_API_VERSION = "2022-11-28";
 const MAX_COMMIT_ATTEMPTS = 5;
 const encodeJson = Schema.encodeSync(Schema.parseJson(Schema.Unknown));
 
@@ -86,108 +84,10 @@ export const makeGitHubApi = ({
     }),
 });
 
-const HistoryEntrySchema = Schema.Struct({
-  provider: Schema.String,
-  status: Schema.Literal("success", "rate-limited", "failed"),
-  message: Schema.optional(Schema.String),
-});
-
-const GenerationMetadataSchema = Schema.Struct({
-  revisedPrompt: Schema.optional(Schema.String),
-  usage: Schema.optional(
-    Schema.Struct({
-      inputTokens: Schema.Number,
-      outputTokens: Schema.Number,
-      totalTokens: Schema.Number,
-    }),
-  ),
-  costCents: Schema.optional(Schema.Number),
-});
-
-export interface SuccessDeliveryOutcome {
-  readonly kind: "success";
-  readonly history: ReadonlyArray<HistoryEntry>;
-  readonly memeId: string;
-  readonly metadata?: GenerationMetadata;
-  readonly prompt: string;
-  readonly provider: string;
-}
-
-export interface SagaDeliveryOutcome {
-  readonly contribution: string;
-  readonly kind: "saga-updated";
-  readonly saga: string;
-  readonly updated: boolean;
-}
-
-export interface FailureDeliveryOutcome {
-  readonly closeNotPlanned: boolean;
-  readonly history?: ReadonlyArray<HistoryEntry>;
-  readonly kind: "failure";
-  readonly message: string;
-}
-
-export type DeliveryOutcome =
-  SuccessDeliveryOutcome | SagaDeliveryOutcome | FailureDeliveryOutcome;
-
-const DeliveryOutcomeSchema = Schema.Union(
-  Schema.Struct({
-    kind: Schema.Literal("success"),
-    history: Schema.Array(HistoryEntrySchema),
-    memeId: Schema.String,
-    metadata: Schema.optional(GenerationMetadataSchema),
-    prompt: Schema.String,
-    provider: Schema.String,
-  }),
-  Schema.Struct({
-    contribution: Schema.String,
-    kind: Schema.Literal("saga-updated"),
-    saga: Schema.String,
-    updated: Schema.Boolean,
-  }),
-  Schema.Struct({
-    closeNotPlanned: Schema.Boolean,
-    history: Schema.optional(Schema.Array(HistoryEntrySchema)),
-    kind: Schema.Literal("failure"),
-    message: Schema.String,
-  }),
-);
-
-const CompletedDeliveryStateSchema = Schema.Struct({
-  deliveryId: Schema.String,
-  issueNumber: Schema.String,
-  memeId: Schema.String,
-  outcome: DeliveryOutcomeSchema,
-  repo: Schema.String,
-  saga: Schema.optional(Schema.Literal("pending", "completed")),
-  status: Schema.Literal("completed"),
-  version: Schema.Literal(1),
-});
-
-const DeliveryStateSchema = CompletedDeliveryStateSchema;
-
-export type DeliveryState = Schema.Schema.Type<typeof DeliveryStateSchema>;
-export type CompletedDeliveryState = DeliveryState;
-
-export interface RepositoryFile {
-  readonly content: string | Uint8Array;
-  readonly path: string;
-}
-
 export interface SagaCommit {
   readonly derive: (canon: string) => Effect.Effect<string>;
+  readonly name: string;
   readonly path: string;
-}
-
-interface CompleteDeliveryPlan {
-  readonly files?: ReadonlyArray<RepositoryFile>;
-  readonly outcome: DeliveryOutcome;
-  readonly sagaPending?: boolean;
-}
-
-interface ContributeSagaPlan {
-  readonly outcome: DeliveryOutcome;
-  readonly saga: SagaCommit;
 }
 
 export interface HostedGitHubRepository {
@@ -198,16 +98,9 @@ export interface HostedGitHubRepository {
   readonly commentOnce: (
     body: string,
   ) => Effect.Effect<void, HostedGitHubError>;
-  readonly complete: (
-    plan: CompleteDeliveryPlan,
-  ) => Effect.Effect<CompletedDeliveryState, HostedGitHubError>;
-  readonly contributeSaga: (
-    plan: ContributeSagaPlan,
+  readonly foldSaga: (
+    saga: SagaCommit,
   ) => Effect.Effect<boolean, HostedGitHubError>;
-  readonly getDelivery: () => Effect.Effect<
-    DeliveryState | null,
-    HostedGitHubError
-  >;
   readonly memeId: string;
   readonly readText: (
     path: string,
@@ -226,7 +119,6 @@ interface GitRef {
 }
 
 interface GitCommit {
-  readonly sha: string;
   readonly tree: { readonly sha: string };
 }
 
@@ -243,6 +135,19 @@ interface IssueComment {
   readonly body: string | null;
   readonly id: number;
 }
+
+interface RepositoryFile {
+  readonly content: string;
+  readonly path: string;
+}
+
+const SagaFoldReceiptSchema = Schema.Struct({
+  deliveryId: Schema.String,
+  folded: Schema.Literal(true),
+  saga: Schema.String,
+});
+
+type SagaFoldReceipt = Schema.Schema.Type<typeof SagaFoldReceiptSchema>;
 
 const keyForTask = (task: MemeRequestTask): string =>
   createHash("sha256")
@@ -284,7 +189,7 @@ export const makeHostedGitHubRepository = ({
   task,
 }: HostedRepositoryOptions): HostedGitHubRepository => {
   const key = keyForTask(task);
-  const markerPath = `.github/meme-worker/deliveries/${key}.json`;
+  const sagaReceiptPath = `.github/meme-worker/saga-folds/${key}.json`;
   const memeId = uuidForTask(task);
   const repoPath = `/repos/${task.repo}`;
   const readRefPath = `${repoPath}/git/ref/heads/${encodeURIComponent(branch)}`;
@@ -318,26 +223,6 @@ export const makeHostedGitHubRepository = ({
         Effect.catchIf(isNotFound, () => Effect.succeed(null)),
       );
 
-  const decodeDelivery = (
-    content: string | null,
-  ): Effect.Effect<DeliveryState | null, HostedGitHubError> =>
-    content == null
-      ? Effect.succeed(null)
-      : Schema.decodeUnknown(Schema.parseJson(DeliveryStateSchema))(
-          content,
-        ).pipe(
-          Effect.mapError(
-            () =>
-              new HostedGitHubError({
-                detail: `Delivery marker ${markerPath} is invalid`,
-                operation: "decode delivery marker",
-              }),
-          ),
-        );
-
-  const readDeliveryAt = (ref: string) =>
-    readTextAt(markerPath, ref).pipe(Effect.flatMap(decodeDelivery));
-
   const getHead = () =>
     api.request<GitRef>({ method: "GET", path: readRefPath });
 
@@ -345,13 +230,7 @@ export const makeHostedGitHubRepository = ({
     api.request<GitObject>({
       method: "POST",
       path: `${repoPath}/git/blobs`,
-      body:
-        typeof file.content === "string"
-          ? { content: file.content, encoding: "utf-8" }
-          : {
-              content: Buffer.from(file.content).toString("base64"),
-              encoding: "base64",
-            },
+      body: { content: file.content, encoding: "utf-8" },
     });
 
   const commitFiles = (
@@ -396,25 +275,6 @@ export const makeHostedGitHubRepository = ({
       });
     });
 
-  const markerFile = (state: DeliveryState): RepositoryFile => ({
-    content: `${encodeJson(state)}\n`,
-    path: markerPath,
-  });
-
-  const completedState = (
-    outcome: DeliveryOutcome,
-    saga?: "pending" | "completed",
-  ): CompletedDeliveryState => ({
-    deliveryId: task.deliveryId,
-    issueNumber: task.issueNumber,
-    memeId,
-    outcome,
-    repo: task.repo,
-    ...(saga == null ? {} : { saga }),
-    status: "completed",
-    version: 1,
-  });
-
   const retryConflict = <A, E>(
     attempt: number,
     operation: (attempt: number) => Effect.Effect<A, E | HostedGitHubError>,
@@ -429,56 +289,65 @@ export const makeHostedGitHubRepository = ({
       ),
     );
 
-  const complete = ({
-    files = [],
-    outcome,
-    sagaPending = false,
-  }: CompleteDeliveryPlan): Effect.Effect<
-    CompletedDeliveryState,
-    HostedGitHubError
-  > =>
-    retryConflict(1, () =>
-      Effect.gen(function* () {
-        const head = yield* getHead();
-        const current = yield* readDeliveryAt(head.object.sha);
-        if (current?.status === "completed") {
-          return current;
-        }
-        const completed = completedState(
-          outcome,
-          sagaPending ? "pending" : undefined,
-        );
-        yield* commitFiles(
-          head.object.sha,
-          `Process meme request #${task.issueNumber} (${memeId})`,
-          [...files, markerFile(completed)],
-        );
-        return completed;
-      }),
+  const readSagaReceiptAt = (
+    ref: string,
+    saga: string,
+  ): Effect.Effect<SagaFoldReceipt | null, HostedGitHubError> =>
+    readTextAt(sagaReceiptPath, ref).pipe(
+      Effect.flatMap((content) =>
+        content == null
+          ? Effect.succeed(null)
+          : Schema.decodeUnknown(Schema.parseJson(SagaFoldReceiptSchema))(
+              content,
+            ).pipe(
+              Effect.filterOrFail(
+                (receipt) =>
+                  receipt.deliveryId === task.deliveryId &&
+                  receipt.saga === saga,
+                () =>
+                  new HostedGitHubError({
+                    detail: `Saga fold receipt ${sagaReceiptPath} has the wrong delivery identity`,
+                    operation: "decode saga fold receipt",
+                  }),
+              ),
+              Effect.mapError((error) =>
+                error instanceof HostedGitHubError
+                  ? error
+                  : new HostedGitHubError({
+                      detail: `Saga fold receipt ${sagaReceiptPath} is invalid`,
+                      operation: "decode saga fold receipt",
+                    }),
+              ),
+            ),
+      ),
     );
 
-  const contributeSaga = ({
-    outcome,
-    saga,
-  }: ContributeSagaPlan): Effect.Effect<boolean, HostedGitHubError> =>
+  const foldSaga = (
+    saga: SagaCommit,
+  ): Effect.Effect<boolean, HostedGitHubError> =>
     retryConflict(1, () =>
       Effect.gen(function* () {
         const head = yield* getHead();
-        const current = yield* readDeliveryAt(head.object.sha);
-        if (current?.status === "completed" && current.saga !== "pending") {
+        const receipt = yield* readSagaReceiptAt(head.object.sha, saga.name);
+        if (receipt != null) {
           return false;
         }
         const canon = (yield* readTextAt(saga.path, head.object.sha)) ?? "";
-        const completed =
-          current?.status === "completed"
-            ? { ...current, saga: "completed" as const }
-            : completedState(outcome, "completed");
+        const folded = yield* saga.derive(canon);
+        const sagaReceipt: SagaFoldReceipt = {
+          deliveryId: task.deliveryId,
+          folded: true,
+          saga: saga.name,
+        };
         yield* commitFiles(
           head.object.sha,
           `Update saga for meme request #${task.issueNumber}`,
           [
-            { content: `${yield* saga.derive(canon)}\n`, path: saga.path },
-            markerFile(completed),
+            { content: `${folded}\n`, path: saga.path },
+            {
+              content: `${encodeJson(sagaReceipt)}\n`,
+              path: sagaReceiptPath,
+            },
           ],
         );
         return true;
@@ -548,9 +417,7 @@ export const makeHostedGitHubRepository = ({
     branch,
     closeIssue,
     commentOnce,
-    complete,
-    contributeSaga,
-    getDelivery: () => readDeliveryAt(branch),
+    foldSaga,
     memeId,
     readText: (path) => readTextAt(path, branch),
   };

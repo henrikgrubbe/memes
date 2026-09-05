@@ -1,12 +1,8 @@
 import { Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";
 import type { AppConfig } from "../../shared/config.js";
-import { NotificationError } from "../../shared/errors.js";
-import type {
-  CompletedDeliveryState,
-  DeliveryOutcome,
-  HostedGitHubRepository,
-} from "./hosted-github.js";
+import type { DeliveryOutcome } from "./hosted-delivery.js";
+import type { HostedGitHubRepository } from "./hosted-github.js";
 import { deliverHostedCompletion, makeSlackSender } from "./hosted-notifier.js";
 
 const config: AppConfig = {
@@ -21,18 +17,7 @@ const config: AppConfig = {
   writeSaga: "story",
 };
 
-const completed = (outcome: DeliveryOutcome): CompletedDeliveryState => ({
-  deliveryId: "delivery-1",
-  issueNumber: "42",
-  memeId: "meme-1",
-  outcome,
-  repo: "owner/repo",
-  status: "completed",
-  version: 1,
-});
-
 const makeRepository = (
-  outcome: DeliveryOutcome,
   record: (event: string) => void,
 ): HostedGitHubRepository => ({
   branch: "main",
@@ -44,9 +29,7 @@ const makeRepository = (
     Effect.sync(() => {
       record(`comment:${body}`);
     }),
-  complete: () => Effect.succeed(completed(outcome)),
-  contributeSaga: () => Effect.succeed(true),
-  getDelivery: () => Effect.succeed(completed(outcome)),
+  foldSaga: () => Effect.succeed(true),
   memeId: "meme-1",
   readText: () => Effect.succeed(null),
 });
@@ -79,13 +62,48 @@ describe("hosted notifier", () => {
 
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) {
-      const failure = exit.cause;
-      expect(String(failure)).toContain("HTTP 500");
-      expect(String(failure)).not.toContain("secret");
+      expect(String(exit.cause)).toContain("HTTP 500");
+      expect(String(exit.cause)).not.toContain("secret");
     }
   });
 
-  it("uses the saga status contract and closes a successful saga issue", async () => {
+  it("uses the permanent Object Storage URL without claiming a GitHub commit", async () => {
+    let events: ReadonlyArray<string> = [];
+    let payloads: ReadonlyArray<unknown> = [];
+    const outcome: DeliveryOutcome = {
+      history: [{ provider: "OpenAI", status: "success" }],
+      imageUrl: "https://images.example/memes/meme-1.jpg",
+      kind: "success",
+      memeId: "meme-1",
+      prompt: "Prompt",
+      provider: "OpenAI",
+    };
+
+    await Effect.runPromise(
+      deliverHostedCompletion(
+        config,
+        outcome,
+        makeRepository((event) => {
+          events = [...events, event];
+        }),
+        {
+          post: (payload) =>
+            Effect.sync(() => {
+              payloads = [...payloads, payload];
+            }),
+        },
+      ),
+    );
+
+    expect(payloads).toMatchObject([
+      { content_url: outcome.imageUrl, status: "success" },
+    ]);
+    expect(events.join("\n")).toContain(outcome.imageUrl);
+    expect(events.join("\n")).not.toContain("committed");
+    expect(events.at(-1)).toBe("close:completed");
+  });
+
+  it("uses the Saga status contract and closes a successful Saga issue", async () => {
     let events: ReadonlyArray<string> = [];
     const outcome: DeliveryOutcome = {
       contribution: "New beat",
@@ -98,7 +116,8 @@ describe("hosted notifier", () => {
     await Effect.runPromise(
       deliverHostedCompletion(
         config,
-        makeRepository(outcome, (event) => {
+        outcome,
+        makeRepository((event) => {
           events = [...events, event];
         }),
         {
@@ -127,7 +146,8 @@ describe("hosted notifier", () => {
     await Effect.runPromise(
       deliverHostedCompletion(
         config,
-        makeRepository(outcome, (event) => {
+        outcome,
+        makeRepository((event) => {
           events = [...events, event];
         }),
         { post: () => Effect.void },
@@ -135,34 +155,5 @@ describe("hosted notifier", () => {
     );
 
     expect(events).toContain("close:not_planned");
-  });
-
-  it("rejects notification before a delivery is complete", async () => {
-    const repository = {
-      ...makeRepository(
-        {
-          closeNotPlanned: false,
-          kind: "failure",
-          message: "failure",
-        },
-        () => undefined,
-      ),
-      getDelivery: () => Effect.succeed(null),
-    };
-
-    const exit = await Effect.runPromise(
-      deliverHostedCompletion(config, repository, {
-        post: () => Effect.void,
-      }).pipe(Effect.exit),
-    );
-
-    expect(Exit.isFailure(exit)).toBe(true);
-    if (Exit.isFailure(exit)) {
-      expect(String(exit.cause)).toContain(
-        new NotificationError({
-          detail: "Delivery is not complete enough to notify",
-        }).message,
-      );
-    }
   });
 });

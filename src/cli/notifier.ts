@@ -85,17 +85,17 @@ const makeNotifier = (config: AppConfig, shell: Shell): NotifierService => ({
       const provider =
         history.find(({ status }) => status === "success")?.provider ??
         "unknown";
+      const imageUrl = `https://raw.githubusercontent.com/${config.repo}/refs/heads/main/memes/${memeId}.jpg`;
 
       yield* postSlack(
         config,
         shell,
         formatSlackSuccessPayload({
-          memeId,
+          contentUrl: imageUrl,
           provider,
           title: config.memePrompt,
           requester: config.requester,
           channel: config.channel,
-          repo: config.repo,
           metadata,
           readSaga: config.readSaga ?? undefined,
           writeSaga: config.writeSaga ?? undefined,
@@ -105,14 +105,15 @@ const makeNotifier = (config: AppConfig, shell: Shell): NotifierService => ({
         config,
         shell,
         formatSuccessComment({
-          memeId,
           provider,
           history,
+          imageSourceLabel: `memes/${memeId}.jpg`,
+          imageSourceUrl: `https://github.com/${config.repo}/blob/main/memes/${memeId}.jpg`,
+          imageUrl,
           prompt,
           requester: config.requester,
           channel: config.channel,
           slackLink: config.slackLink,
-          repo: config.repo,
           metadata,
         }),
       );

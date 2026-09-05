@@ -15,14 +15,6 @@ const task = {
   repo: "owner/repo",
 };
 
-const outcome = {
-  history: [{ provider: "OpenAI", status: "success" as const }],
-  kind: "success" as const,
-  memeId: "meme-id",
-  prompt: "prompt",
-  provider: "OpenAI",
-};
-
 type Handler = (
   request: GitHubApiRequest,
 ) => Effect.Effect<unknown, HostedGitHubError>;
@@ -58,10 +50,7 @@ const gitDataHandler = (
       return Effect.fail(notFound(request.path));
     }
     if (request.method === "GET" && request.path.includes("/git/commits/")) {
-      return Effect.succeed({
-        sha: "head-1",
-        tree: { sha: "tree-1" },
-      });
+      return Effect.succeed({ tree: { sha: "tree-1" } });
     }
     if (request.method === "POST" && request.path.endsWith("/git/blobs")) {
       blob += 1;
@@ -134,10 +123,15 @@ describe("hosted GitHub persistence", () => {
     }
   });
 
-  it("commits the image with a pending Saga marker", async () => {
+  it("commits the Saga canon and minimal fold receipt atomically", async () => {
     let treeBody: unknown;
+    let blobs: ReadonlyArray<string> = [];
     const api = makeApi(
       gitDataHandler((request) => {
+        if (request.method === "POST" && request.path.endsWith("/git/blobs")) {
+          const body = request.body as { readonly content: string };
+          blobs = [...blobs, body.content];
+        }
         if (request.method === "POST" && request.path.endsWith("/git/trees")) {
           treeBody = request.body;
         }
@@ -149,71 +143,63 @@ describe("hosted GitHub persistence", () => {
       task,
     });
 
-    const completed = await Effect.runPromise(
-      repository.complete({
-        files: [
-          {
-            content: Buffer.from("image"),
-            path: `memes/${repository.memeId}.jpg`,
-          },
-        ],
-        outcome: { ...outcome, memeId: repository.memeId },
-        sagaPending: true,
+    const folded = await Effect.runPromise(
+      repository.foldSaga({
+        derive: (canon) => Effect.succeed(`${canon}\nNew beat`),
+        name: "story",
+        path: "context/story.md",
       }),
     );
 
-    expect(completed.status).toBe("completed");
-    expect(completed.saga).toBe("pending");
+    expect(folded).toBe(true);
     expect(treeBody).toMatchObject({
       base_tree: "tree-1",
       tree: [
-        { path: `memes/${repository.memeId}.jpg` },
-        { path: expect.stringContaining(".github/meme-worker/deliveries/") },
+        { path: "context/story.md" },
+        { path: expect.stringContaining(".github/meme-worker/saga-folds/") },
       ],
     });
+    const receipt = blobs
+      .map((content) => {
+        try {
+          return JSON.parse(content) as unknown;
+        } catch {
+          return null;
+        }
+      })
+      .find((content) => content != null);
+    expect(receipt).toEqual({
+      deliveryId: "delivery-1",
+      folded: true,
+      saga: "story",
+    });
+    expect(JSON.stringify(treeBody)).not.toContain("deliveries/");
   });
 
-  it("retries completion from a fresh head after a ref conflict", async () => {
-    let headReads = 0;
-    let patchAttempts = 0;
+  it("uses an existing Saga fold receipt without reapplying the contribution", async () => {
+    let writes = 0;
+    const receipt = JSON.stringify({
+      deliveryId: task.deliveryId,
+      folded: true,
+      saga: "story",
+    });
     const api = makeApi((request) => {
       if (
         request.method === "GET" &&
         request.path.includes("/git/ref/heads/")
       ) {
-        headReads += 1;
-        return Effect.succeed({ object: { sha: `head-${headReads}` } });
+        return Effect.succeed({ object: { sha: "head-1" } });
       }
-      if (request.method === "GET" && request.path.includes("/contents/")) {
-        return Effect.fail(notFound(request.path));
-      }
-      if (request.method === "GET" && request.path.includes("/git/commits/")) {
+      if (
+        request.method === "GET" &&
+        request.path.includes("/contents/.github/meme-worker/saga-folds/")
+      ) {
         return Effect.succeed({
-          sha: `head-${headReads}`,
-          tree: { sha: `tree-${headReads}` },
+          content: Buffer.from(receipt).toString("base64"),
+          encoding: "base64",
         });
       }
-      if (request.method === "POST" && request.path.endsWith("/git/blobs")) {
-        return Effect.succeed({ sha: `blob-${headReads}` });
-      }
-      if (request.method === "POST" && request.path.endsWith("/git/trees")) {
-        return Effect.succeed({ sha: `tree-new-${headReads}` });
-      }
-      if (request.method === "POST" && request.path.endsWith("/git/commits")) {
-        return Effect.succeed({ sha: `commit-${headReads}` });
-      }
-      if (request.method === "PATCH" && request.path.includes("/git/refs/")) {
-        patchAttempts += 1;
-        return patchAttempts === 1
-          ? Effect.fail(
-              new HostedGitHubError({
-                detail: "ref conflict",
-                operation: "update ref",
-                status: 422,
-              }),
-            )
-          : Effect.succeed({});
-      }
+      writes += 1;
       return Effect.fail(notFound(request.path));
     });
     const repository = makeHostedGitHubRepository({
@@ -221,40 +207,30 @@ describe("hosted GitHub persistence", () => {
       branch: "main",
       task,
     });
+    let derives = 0;
 
-    const completed = await Effect.runPromise(
-      repository.complete({
-        files: [
-          {
-            content: Buffer.from("image"),
-            path: `memes/${repository.memeId}.jpg`,
-          },
-        ],
-        outcome: { ...outcome, memeId: repository.memeId },
+    const folded = await Effect.runPromise(
+      repository.foldSaga({
+        derive: () =>
+          Effect.sync(() => {
+            derives += 1;
+            return "duplicate";
+          }),
+        name: "story",
+        path: "context/story.md",
       }),
     );
 
-    expect(completed.status).toBe("completed");
-    expect(headReads).toBe(2);
-    expect(patchAttempts).toBe(2);
+    expect(folded).toBe(false);
+    expect(derives).toBe(0);
+    expect(writes).toBe(0);
   });
 
-  it("re-reads and re-derives saga content after a ref conflict", async () => {
+  it("re-reads and re-derives Saga content after a ref conflict", async () => {
     let headReads = 0;
     let patchAttempts = 0;
     let blob = 0;
-    const canons: ReadonlyArray<string> = [];
-    let observedCanons = canons;
-    const pending = {
-      deliveryId: task.deliveryId,
-      issueNumber: task.issueNumber,
-      memeId: "meme-id",
-      outcome,
-      repo: task.repo,
-      saga: "pending",
-      status: "completed",
-      version: 1,
-    };
+    let observedCanons: ReadonlyArray<string> = [];
     const api = makeApi((request) => {
       if (
         request.method === "GET" &&
@@ -271,16 +247,10 @@ describe("hosted GitHub persistence", () => {
             encoding: "base64",
           });
         }
-        return Effect.succeed({
-          content: Buffer.from(JSON.stringify(pending)).toString("base64"),
-          encoding: "base64",
-        });
+        return Effect.fail(notFound(request.path));
       }
       if (request.method === "GET" && request.path.includes("/git/commits/")) {
-        return Effect.succeed({
-          sha: `head-${headReads}`,
-          tree: { sha: `tree-${headReads}` },
-        });
+        return Effect.succeed({ tree: { sha: `tree-${headReads}` } });
       }
       if (request.method === "POST" && request.path.endsWith("/git/blobs")) {
         blob += 1;
@@ -313,16 +283,14 @@ describe("hosted GitHub persistence", () => {
     });
 
     await Effect.runPromise(
-      repository.contributeSaga({
-        outcome: { ...outcome, memeId: repository.memeId },
-        saga: {
-          derive: (canon) =>
-            Effect.sync(() => {
-              observedCanons = [...observedCanons, canon];
-              return `${canon}\nupdated`;
-            }),
-          path: "context/story.md",
-        },
+      repository.foldSaga({
+        derive: (canon) =>
+          Effect.sync(() => {
+            observedCanons = [...observedCanons, canon];
+            return `${canon}\nupdated`;
+          }),
+        name: "story",
+        path: "context/story.md",
       }),
     );
 
@@ -330,12 +298,13 @@ describe("hosted GitHub persistence", () => {
     expect(patchAttempts).toBe(2);
   });
 
-  it("does not duplicate a completion comment", async () => {
+  it("creates, reuses, and updates the idempotent completion comment", async () => {
     let comments: ReadonlyArray<{
       readonly body: string;
       readonly id: number;
     }> = [];
     let posts = 0;
+    let patches = 0;
     const api = makeApi((request) => {
       if (
         request.method === "GET" &&
@@ -352,6 +321,13 @@ describe("hosted GitHub persistence", () => {
         comments = [{ body, id: 1 }];
         return Effect.succeed({});
       }
+      if (
+        request.method === "PATCH" &&
+        request.path.includes("/issues/comments/1")
+      ) {
+        patches += 1;
+        return Effect.succeed({});
+      }
       return Effect.fail(notFound(request.path));
     });
     const repository = makeHostedGitHubRepository({
@@ -362,7 +338,25 @@ describe("hosted GitHub persistence", () => {
 
     await Effect.runPromise(repository.commentOnce("Done"));
     await Effect.runPromise(repository.commentOnce("Done"));
+    await Effect.runPromise(repository.commentOnce("Done with details"));
 
     expect(posts).toBe(1);
+    expect(patches).toBe(1);
+  });
+
+  it("closes issues with the requested state reason", async () => {
+    let body: unknown;
+    const repository = makeHostedGitHubRepository({
+      api: makeApi((request) => {
+        body = request.body;
+        return Effect.succeed({});
+      }),
+      branch: "main",
+      task,
+    });
+
+    await Effect.runPromise(repository.closeIssue("not_planned"));
+
+    expect(body).toEqual({ state: "closed", state_reason: "not_planned" });
   });
 });

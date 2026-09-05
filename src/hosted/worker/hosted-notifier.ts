@@ -9,9 +9,8 @@ import {
   formatSlackSuccessPayload,
   formatSuccessComment,
 } from "../../shared/notification-format.js";
+import type { DeliveryOutcome } from "./hosted-delivery.js";
 import type {
-  CompletedDeliveryState,
-  DeliveryOutcome,
   HostedGitHubError,
   HostedGitHubRepository,
 } from "./hosted-github.js";
@@ -79,25 +78,21 @@ const completionPlan = (
       return {
         close: true,
         comment: formatSuccessComment({
-          branch,
           channel: config.channel,
           history: outcome.history,
-          memeId: outcome.memeId,
+          imageUrl: outcome.imageUrl,
           metadata: outcome.metadata,
           prompt: outcome.prompt,
           provider: outcome.provider,
-          repo: config.repo,
           requester: config.requester,
           slackLink: config.slackLink,
         }),
         slackPayload: formatSlackSuccessPayload({
-          branch,
           channel: config.channel,
-          memeId: outcome.memeId,
+          contentUrl: outcome.imageUrl,
           metadata: outcome.metadata,
           provider: outcome.provider,
           readSaga: config.readSaga ?? undefined,
-          repo: config.repo,
           requester: config.requester,
           title: config.memePrompt,
           writeSaga: config.writeSaga ?? undefined,
@@ -136,30 +131,14 @@ const completionPlan = (
   }
 };
 
-const completedState = (
-  repository: HostedGitHubRepository,
-): Effect.Effect<
-  CompletedDeliveryState,
-  HostedGitHubError | NotificationError
-> =>
-  repository.getDelivery().pipe(
-    Effect.filterOrFail(
-      (state): state is CompletedDeliveryState => state?.status === "completed",
-      () =>
-        new NotificationError({
-          detail: "Delivery is not complete enough to notify",
-        }),
-    ),
-  );
-
 export const deliverHostedCompletion = (
   config: AppConfig,
+  outcome: DeliveryOutcome,
   repository: HostedGitHubRepository,
   slack: SlackSender,
 ): Effect.Effect<void, HostedGitHubError | NotificationError> =>
   Effect.gen(function* () {
-    const state = yield* completedState(repository);
-    const plan = completionPlan(config, repository.branch, state.outcome);
+    const plan = completionPlan(config, repository.branch, outcome);
     yield* slack.post(plan.slackPayload);
     yield* repository.commentOnce(plan.comment);
     if (plan.close) {

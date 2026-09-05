@@ -12,18 +12,24 @@ import {
 describe("formatSuccessComment", () => {
   it("includes repo-backed image links without crashing", () => {
     const comment = formatSuccessComment({
-      memeId: "meme-123",
-      provider: "xAI",
-      history: [{ provider: "xAI", status: "success" }],
-      prompt: "make a meme",
-      requester: "U123",
       channel: "#memes",
+      history: [{ provider: "xAI", status: "success" }],
+      imageSourceLabel: "memes/meme-123.jpg",
+      imageSourceUrl:
+        "https://github.com/henrikgrubbe/memes/blob/main/memes/meme-123.jpg",
+      imageUrl:
+        "https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg",
+      prompt: "make a meme",
+      provider: "xAI",
+      requester: "U123",
       slackLink: "https://slack.example/message",
-      repo: "henrikgrubbe/memes",
     });
 
     expect(comment).toContain(
       "https://github.com/henrikgrubbe/memes/blob/main/memes/meme-123.jpg",
+    );
+    expect(comment).toContain(
+      "Meme generated and committed to [memes/meme-123.jpg]",
     );
     expect(comment).toContain(
       "https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg",
@@ -32,22 +38,22 @@ describe("formatSuccessComment", () => {
 
   it("renders revised prompt and usage metadata when present", () => {
     const comment = formatSuccessComment({
-      memeId: "meme-123",
-      provider: "OpenAI",
+      channel: "#memes",
       history: [
         { provider: "xAI", status: "rate-limited" },
         { provider: "OpenAI", status: "success" },
       ],
-      prompt: "make a meme",
-      requester: "U123",
-      channel: "#memes",
-      slackLink: "https://slack.example/message",
-      repo: "henrikgrubbe/memes",
+      imageUrl:
+        "https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg",
       metadata: {
         revisedPrompt: "revised prompt text",
         usage: { inputTokens: 12, outputTokens: 34, totalTokens: 46 },
         costCents: 0.108,
       },
+      prompt: "make a meme",
+      provider: "OpenAI",
+      requester: "U123",
+      slackLink: "https://slack.example/message",
     });
 
     expect(comment).toContain("**Revised prompt:** `revised prompt text`");
@@ -61,14 +67,14 @@ describe("formatSuccessComment", () => {
 
   it("omits estimated cost when no usage metadata is available", () => {
     const comment = formatSuccessComment({
-      memeId: "meme-456",
-      provider: "xAI",
-      history: [{ provider: "xAI", status: "success" }],
-      prompt: "make a meme",
-      requester: "U456",
       channel: "#memes",
+      history: [{ provider: "xAI", status: "success" }],
+      imageUrl:
+        "https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-456.jpg",
+      prompt: "make a meme",
+      provider: "xAI",
+      requester: "U456",
       slackLink: "https://slack.example/message",
-      repo: "henrikgrubbe/memes",
     });
 
     expect(comment).not.toContain("**Estimated cost:**");
@@ -156,12 +162,12 @@ describe("formatCostCents", () => {
 
 describe("formatSlackSuccessPayload", () => {
   const base = {
-    memeId: "meme-123",
+    contentUrl:
+      "https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg",
     provider: "OpenAI",
     title: "make a meme",
     requester: "U123",
     channel: "#memes",
-    repo: "henrikgrubbe/memes",
   };
 
   it("includes a display-ready cost_cents string when cost is present", () => {
