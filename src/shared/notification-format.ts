@@ -3,13 +3,14 @@ import { renderProviderAttempts, type HistoryEntry } from "./history.js";
 
 interface SuccessCommentParams {
   readonly channel: string;
+  readonly generationPrompt?: string;
   readonly history: ReadonlyArray<HistoryEntry>;
   readonly imageSourceLabel?: string;
   readonly imageSourceUrl?: string;
   readonly imageUrl: string;
   readonly metadata?: GenerationMetadata;
-  readonly prompt: string;
   readonly provider: string;
+  readonly requestedPrompt: string;
   readonly requester: string;
   readonly slackLink: string;
 }
@@ -56,6 +57,15 @@ export function formatCostCents(metadata?: GenerationMetadata): string | null {
 const inlineCode = (value: string): string =>
   value.includes("`") ? `\`\`${value}\`\`` : `\`${value}\``;
 
+const fencedCode = (value: string): ReadonlyArray<string> => {
+  const longestBacktickRun = Math.max(
+    0,
+    ...Array.from(value.matchAll(/`+/g), ([run]) => run.length),
+  );
+  const fence = "`".repeat(Math.max(3, longestBacktickRun + 1));
+  return [`${fence}text`, value, fence];
+};
+
 const sagaFields = (readSaga?: string, writeSaga?: string) => ({
   ...(readSaga == null ? {} : { read_saga: readSaga }),
   ...(writeSaga == null ? {} : { write_saga: writeSaga }),
@@ -63,18 +73,30 @@ const sagaFields = (readSaga?: string, writeSaga?: string) => ({
 
 export function formatSuccessComment({
   channel,
+  generationPrompt,
   history,
   imageSourceLabel,
   imageSourceUrl,
   imageUrl,
   metadata,
-  prompt,
   provider,
+  requestedPrompt,
   requester,
   slackLink,
 }: SuccessCommentParams): string {
   const providerNote = ` _(${provider})_`;
-  const promptDisplay = inlineCode(prompt);
+  const requestedPromptDisplay = inlineCode(requestedPrompt);
+  const fullPromptDetails =
+    generationPrompt == null || generationPrompt === requestedPrompt
+      ? []
+      : [
+          ``,
+          `<details>`,
+          `<summary><strong>Full generation prompt</strong></summary>`,
+          ``,
+          ...fencedCode(generationPrompt),
+          `</details>`,
+        ];
   const revisedPrompt = metadata?.revisedPrompt;
   const revisedPromptDisplay =
     revisedPrompt == null ? null : inlineCode(revisedPrompt);
@@ -94,7 +116,8 @@ export function formatSuccessComment({
     `![Generated meme](${imageUrl})`,
     ``,
     `**Requested by:** ${requester} in ${channel} - [View in Slack](${slackLink})`,
-    `**Prompt:** ${promptDisplay}`,
+    `**Requested prompt:** ${requestedPromptDisplay}`,
+    ...fullPromptDetails,
     ...(revisedPromptDisplay == null
       ? []
       : [`**Revised prompt:** ${revisedPromptDisplay}`]),
