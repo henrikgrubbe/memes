@@ -1,0 +1,3 @@
+# Canon: Henrikg Saga
+
+- Hjemme på gården sidder Henrik og overvejer, om meme-maskinen overhovedet stadigvæk virker...
