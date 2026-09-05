@@ -163,10 +163,7 @@ export const deliverHostedCompletion = (
   Effect.gen(function* () {
     const state = yield* completedState(repository);
     const plan = completionPlan(config, repository.branch, state.outcome);
-    const claimed = yield* repository
-      .claimSlack()
-      .pipe(Effect.mapError(mapGitHubError));
-    if (claimed) {
+    if (state.slack !== "claimed") {
       yield* slack.post(plan.slackPayload);
     }
     yield* repository

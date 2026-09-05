@@ -28,7 +28,6 @@ import {
 } from "./saga.js";
 
 interface PendingDelivery {
-  readonly image?: Uint8Array;
   readonly outcome?: DeliveryOutcome;
 }
 
@@ -78,20 +77,20 @@ const makeCoordinator = (
         memeId: repository.memeId,
         publish: (image) =>
           requireOutcome().pipe(
-            Effect.flatMap((outcome) => {
-              if (config.writeSaga != null) {
-                pending = { ...pending, image };
-                return Effect.void;
-              }
-              return repository
-                .complete({ files: imageFile(image), outcome })
+            Effect.flatMap((outcome) =>
+              repository
+                .complete({
+                  files: imageFile(image),
+                  outcome,
+                  sagaPending: config.writeSaga != null,
+                })
                 .pipe(
                   Effect.mapError(
                     (error) => new MemePublishError({ detail: error.message }),
                   ),
                   Effect.asVoid,
-                );
-            }),
+                ),
+            ),
           ),
       }),
   };
@@ -104,8 +103,7 @@ const makeCoordinator = (
       requireOutcome().pipe(
         Effect.flatMap((outcome) =>
           repository
-            .complete({
-              files: pending.image == null ? [] : imageFile(pending.image),
+            .contributeSaga({
               outcome,
               saga: {
                 derive: (canon) => compressSaga(name, canon, prompt),
@@ -194,15 +192,25 @@ const runNewDelivery = (config: AppConfig, coordinator: HostedCoordinator) =>
       generatedOutcome(prepared.memeId, config.memePrompt, result),
     );
     yield* prepared.publish(result.buffer);
-    if (config.writeSaga != null) {
-      yield* coordinator.saga.contribute(config.writeSaga, config.memePrompt);
-    }
-    yield* notifier.notifySuccess({
+    const notification = notifier.notifySuccess({
       history: result.history,
       memeId: prepared.memeId,
       metadata: result.metadata,
       prompt: config.memePrompt,
     });
+    if (config.writeSaga != null) {
+      yield* Effect.all(
+        [
+          coordinator.saga
+            .contribute(config.writeSaga, config.memePrompt)
+            .pipe(Effect.asVoid),
+          notification,
+        ],
+        { concurrency: "unbounded" },
+      );
+    } else {
+      yield* notification;
+    }
     return "processed" as const;
   }).pipe(
     Effect.catchTag("ModerationFailedError", (error) => {
@@ -242,13 +250,27 @@ export const runHostedTask = (
   { compressSaga, repository, slack }: HostedTaskDependencies,
 ) =>
   Effect.gen(function* () {
-    const state = yield* repository.reserve();
-    if (state.status === "completed") {
-      yield* deliverHostedCompletion(config, repository, slack);
+    const state = yield* repository.getDelivery();
+    const coordinator = makeCoordinator(config, repository, compressSaga);
+    if (state?.status === "completed") {
+      yield* coordinator.setOutcome(state.outcome);
+      const notification = deliverHostedCompletion(config, repository, slack);
+      if (state.saga === "pending" && config.writeSaga != null) {
+        yield* Effect.all(
+          [
+            coordinator.saga
+              .contribute(config.writeSaga, config.memePrompt)
+              .pipe(Effect.asVoid),
+            notification,
+          ],
+          { concurrency: "unbounded" },
+        );
+      } else {
+        yield* notification;
+      }
       return "resumed" as const;
     }
 
-    const coordinator = makeCoordinator(config, repository, compressSaga);
     const requestLayer = Layer.mergeAll(
       makeMemePublisherLayer(coordinator.memePublisher),
       makeSagaLayer(coordinator.saga),

@@ -7,8 +7,8 @@ locals {
 
 resource "scaleway_registry_namespace" "main" {
   name        = "${var.name_prefix}-containers"
-  description = "Private images for hosted meme processing"
-  is_public   = false
+  description = "Public images for hosted meme processing"
+  is_public   = true
   project_id  = var.project_id
   region      = var.region
 }
@@ -79,7 +79,7 @@ resource "scaleway_mnq_sqs_queue" "dead_letter" {
   fifo_queue                  = true
   content_based_deduplication = false
   message_max_age             = var.queue_retention_seconds
-  visibility_timeout_seconds = var.queue_visibility_timeout_seconds
+  visibility_timeout_seconds  = var.queue_visibility_timeout_seconds
   project_id                  = var.project_id
   region                      = var.region
   sqs_endpoint                = scaleway_mnq_sqs.main.endpoint

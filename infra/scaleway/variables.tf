@@ -6,11 +6,11 @@ variable "project_id" {
 variable "region" {
   description = "Scaleway region for registry, queues, and containers."
   type        = string
-  default     = "fr-par"
+  default     = "nl-ams"
 
   validation {
-    condition     = var.region == "fr-par"
-    error_message = "This deployment is intentionally constrained to fr-par."
+    condition     = contains(["fr-par", "nl-ams"], var.region)
+    error_message = "region must be fr-par or nl-ams."
   }
 }
 
@@ -132,7 +132,7 @@ variable "worker_privacy" {
 variable "queue_visibility_timeout_seconds" {
   description = "Time a received request stays hidden; must exceed worker timeout."
   type        = number
-  default     = 900
+  default     = 240
 
   validation {
     condition     = var.queue_visibility_timeout_seconds > var.worker_timeout_seconds && var.queue_visibility_timeout_seconds <= 43200
@@ -154,11 +154,11 @@ variable "queue_retention_seconds" {
 variable "worker_timeout_seconds" {
   description = "Maximum worker request duration."
   type        = number
-  default     = 840
+  default     = 180
 
   validation {
-    condition     = var.worker_timeout_seconds >= 60 && var.worker_timeout_seconds < 900
-    error_message = "Worker timeout must be at least 60 and below 900 seconds."
+    condition     = var.worker_timeout_seconds >= 60 && var.worker_timeout_seconds < 3600
+    error_message = "Worker timeout must be at least 60 and below 3600 seconds."
   }
 }
 

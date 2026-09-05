@@ -168,7 +168,8 @@ const CompletedDeliveryStateSchema = Schema.Struct({
   memeId: Schema.String,
   outcome: DeliveryOutcomeSchema,
   repo: Schema.String,
-  slack: Schema.Literal("pending", "claimed"),
+  saga: Schema.optional(Schema.Literal("pending", "completed")),
+  slack: Schema.optional(Schema.Literal("pending", "claimed")),
   status: Schema.Literal("completed"),
   version: Schema.Literal(1),
 });
@@ -197,12 +198,16 @@ export interface SagaCommit {
 interface CompleteDeliveryPlan {
   readonly files?: ReadonlyArray<RepositoryFile>;
   readonly outcome: DeliveryOutcome;
-  readonly saga?: SagaCommit;
+  readonly sagaPending?: boolean;
+}
+
+interface ContributeSagaPlan {
+  readonly outcome: DeliveryOutcome;
+  readonly saga: SagaCommit;
 }
 
 export interface HostedGitHubRepository {
   readonly branch: string;
-  readonly claimSlack: () => Effect.Effect<boolean, HostedGitHubError>;
   readonly closeIssue: (
     reason?: "not_planned",
   ) => Effect.Effect<void, HostedGitHubError>;
@@ -212,6 +217,9 @@ export interface HostedGitHubRepository {
   readonly complete: (
     plan: CompleteDeliveryPlan,
   ) => Effect.Effect<CompletedDeliveryState, HostedGitHubError>;
+  readonly contributeSaga: (
+    plan: ContributeSagaPlan,
+  ) => Effect.Effect<boolean, HostedGitHubError>;
   readonly getDelivery: () => Effect.Effect<
     DeliveryState | null,
     HostedGitHubError
@@ -220,7 +228,6 @@ export interface HostedGitHubRepository {
   readonly readText: (
     path: string,
   ) => Effect.Effect<string | null, HostedGitHubError>;
-  readonly reserve: () => Effect.Effect<DeliveryState, HostedGitHubError>;
 }
 
 interface HostedRepositoryOptions {
@@ -410,12 +417,17 @@ export const makeHostedGitHubRepository = ({
     path: markerPath,
   });
 
-  const reservedState = (): DeliveryState => ({
+  const completedState = (
+    outcome: DeliveryOutcome,
+    saga?: "pending" | "completed",
+  ): CompletedDeliveryState => ({
     deliveryId: task.deliveryId,
     issueNumber: task.issueNumber,
     memeId,
+    outcome,
     repo: task.repo,
-    status: "reserved",
+    ...(saga == null ? {} : { saga }),
+    status: "completed",
     version: 1,
   });
 
@@ -433,28 +445,10 @@ export const makeHostedGitHubRepository = ({
       ),
     );
 
-  const reserve = (): Effect.Effect<DeliveryState, HostedGitHubError> =>
-    retryConflict(1, () =>
-      Effect.gen(function* () {
-        const head = yield* getHead();
-        const current = yield* readDeliveryAt(head.object.sha);
-        if (current != null) {
-          return current;
-        }
-        const reserved = reservedState();
-        yield* commitFiles(
-          head.object.sha,
-          `Reserve meme request #${task.issueNumber}`,
-          [markerFile(reserved)],
-        );
-        return reserved;
-      }),
-    );
-
   const complete = ({
     files = [],
     outcome,
-    saga,
+    sagaPending = false,
   }: CompleteDeliveryPlan): Effect.Effect<
     CompletedDeliveryState,
     HostedGitHubError
@@ -466,59 +460,42 @@ export const makeHostedGitHubRepository = ({
         if (current?.status === "completed") {
           return current;
         }
-        const sagaFiles =
-          saga == null
-            ? []
-            : [
-                {
-                  path: saga.path,
-                  content: `${yield* saga.derive(
-                    (yield* readTextAt(saga.path, head.object.sha)) ?? "",
-                  )}\n`,
-                },
-              ];
-        const completed: CompletedDeliveryState = {
-          deliveryId: task.deliveryId,
-          issueNumber: task.issueNumber,
-          memeId,
+        const completed = completedState(
           outcome,
-          repo: task.repo,
-          slack: "pending",
-          status: "completed",
-          version: 1,
-        };
+          sagaPending ? "pending" : undefined,
+        );
         yield* commitFiles(
           head.object.sha,
           `Process meme request #${task.issueNumber} (${memeId})`,
-          [...files, ...sagaFiles, markerFile(completed)],
+          [...files, markerFile(completed)],
         );
         return completed;
       }),
     );
 
-  const claimSlack = (): Effect.Effect<boolean, HostedGitHubError> =>
+  const contributeSaga = ({
+    outcome,
+    saga,
+  }: ContributeSagaPlan): Effect.Effect<boolean, HostedGitHubError> =>
     retryConflict(1, () =>
       Effect.gen(function* () {
         const head = yield* getHead();
         const current = yield* readDeliveryAt(head.object.sha);
-        if (current?.status !== "completed") {
-          return yield* new HostedGitHubError({
-            detail:
-              "Cannot claim Slack notification before delivery completion",
-            operation: "claim Slack notification",
-          });
-        }
-        if (current.slack === "claimed") {
+        if (current?.status === "completed" && current.saga !== "pending") {
           return false;
         }
-        const claimed: CompletedDeliveryState = {
-          ...current,
-          slack: "claimed",
-        };
+        const canon = (yield* readTextAt(saga.path, head.object.sha)) ?? "";
+        const completed =
+          current?.status === "completed"
+            ? { ...current, saga: "completed" as const }
+            : completedState(outcome, "completed");
         yield* commitFiles(
           head.object.sha,
-          `Claim Slack notification for issue #${task.issueNumber}`,
-          [markerFile(claimed)],
+          `Update saga for meme request #${task.issueNumber}`,
+          [
+            { content: `${yield* saga.derive(canon)}\n`, path: saga.path },
+            markerFile(completed),
+          ],
         );
         return true;
       }),
@@ -585,13 +562,12 @@ export const makeHostedGitHubRepository = ({
 
   return {
     branch,
-    claimSlack,
     closeIssue,
     commentOnce,
     complete,
+    contributeSaga,
     getDelivery: () => readDeliveryAt(branch),
     memeId,
     readText: (path) => readTextAt(path, branch),
-    reserve,
   };
 };

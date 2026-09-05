@@ -207,6 +207,22 @@ require_command() {
   fi
 }
 
+select_container_cli() {
+  if command -v docker >/dev/null 2>&1; then
+    CONTAINER_CLI=docker
+  elif command -v podman >/dev/null 2>&1; then
+    CONTAINER_CLI=podman
+  else
+    warn "Docker or Podman is required before this wizard can continue."
+    exit 1
+  fi
+
+  if ! "$CONTAINER_CLI" info >/dev/null 2>&1; then
+    warn "$CONTAINER_CLI is installed but its container runtime is not running."
+    exit 1
+  fi
+}
+
 export_tofu_env() {
   export SCW_ACCESS_KEY SCW_SECRET_KEY SCW_DEFAULT_PROJECT_ID
   export TF_VAR_project_id="$SCW_DEFAULT_PROJECT_ID"
@@ -289,7 +305,7 @@ trap 'exit 143' TERM
 banner "Scaleway hosted meme processing"
 
 stage "Prerequisites and account safety" 8
-say "You need a Scaleway account with MFA and billing enabled, plus Docker, OpenTofu, and GitHub CLI."
+say "You need a Scaleway account with MFA and billing enabled, plus Docker or Podman, OpenTofu, and GitHub CLI."
 open_url "https://console.scaleway.com/"
 step "Create or select the project, enable billing, and enable MFA for your user."
 step "Use Scaleway's project settings page to copy the Project ID; UI labels may change."
@@ -297,7 +313,7 @@ open_url "https://www.scaleway.com/en/docs/identity-and-access-management/iam/ho
 ask SCW_DEFAULT_PROJECT_ID "Paste the Scaleway Project ID:"
 write_env SCW_DEFAULT_PROJECT_ID "$SCW_DEFAULT_PROJECT_ID"
 write_env TF_VAR_project_id "$SCW_DEFAULT_PROJECT_ID"
-require_command docker
+select_container_cli
 require_command gh
 require_command tofu
 if ! gh auth status >/dev/null 2>&1; then
@@ -374,16 +390,16 @@ REGISTRY_ENDPOINT=$(tofu -chdir="$INFRA_DIR" output -raw registry_endpoint)
 REGISTRY_HOST=${REGISTRY_ENDPOINT%%/*}
 INGRESS_IMAGE="${REGISTRY_ENDPOINT}/webhook:${TF_VAR_image_tag}"
 WORKER_IMAGE="${REGISTRY_ENDPOINT}/worker:${TF_VAR_image_tag}"
-say "Docker will build both repository Dockerfiles for linux/amd64 and push tag $TF_VAR_image_tag."
-if ! confirm "Authenticate Docker and push both images to $REGISTRY_ENDPOINT?"; then
+say "$CONTAINER_CLI will build both repository Dockerfiles for linux/amd64 and push tag $TF_VAR_image_tag."
+if ! confirm "Authenticate $CONTAINER_CLI and push both images to $REGISTRY_ENDPOINT?"; then
   warn "Image push cancelled."
   exit 1
 fi
-printf '%s' "$SCW_SECRET_KEY" | docker login "$REGISTRY_HOST" --username nologin --password-stdin
-docker build --platform linux/amd64 --file "$ROOT_DIR/Dockerfile.webhook" --tag "$INGRESS_IMAGE" "$ROOT_DIR"
-docker build --platform linux/amd64 --file "$ROOT_DIR/Dockerfile.worker" --tag "$WORKER_IMAGE" "$ROOT_DIR"
-docker push "$INGRESS_IMAGE"
-docker push "$WORKER_IMAGE"
+printf '%s' "$SCW_SECRET_KEY" | "$CONTAINER_CLI" login "$REGISTRY_HOST" --username nologin --password-stdin
+"$CONTAINER_CLI" build --platform linux/amd64 --file "$ROOT_DIR/Dockerfile.webhook" --tag "$INGRESS_IMAGE" "$ROOT_DIR"
+"$CONTAINER_CLI" build --platform linux/amd64 --file "$ROOT_DIR/Dockerfile.worker" --tag "$WORKER_IMAGE" "$ROOT_DIR"
+"$CONTAINER_CLI" push "$INGRESS_IMAGE"
+"$CONTAINER_CLI" push "$WORKER_IMAGE"
 
 stage "Phase two: inert containers" 7
 say "Create public ingress in off mode and a private worker in diagnostic mode."
@@ -436,7 +452,7 @@ pause "Press Enter after acknowledgement behavior is observed."
 stage "Exclusive live canary" 10
 say "This canary remains exclusive: the hosted-canary label makes Actions skip it while canary ingress admits it."
 warn "Live mode calls an image provider, writes to GitHub, closes the issue, and posts to Slack."
-step "Confirm the request queue has zero visible and zero in-flight messages; a prior 503 diagnostic can remain hidden for 900 seconds."
+step "Confirm the request queue has zero visible and zero in-flight messages; a prior 503 diagnostic can remain hidden for 240 seconds."
 if ! confirm "Is the request queue fully drained, including in-flight messages?"; then
   warn "Live canary cancelled until the diagnostic queue is drained."
   exit 1
