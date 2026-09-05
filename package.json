@@ -24,6 +24,7 @@
     "@types/node": "^26.1.2",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^5.0.0",
+    "@vitest/expect": "^5.0.0",
     "oxlint": "1.81.0",
     "prettier": "3.9.6",
     "tsx": "^4.23.9",
