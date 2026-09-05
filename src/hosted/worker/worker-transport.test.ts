@@ -33,17 +33,28 @@ describe("Scaleway queue transport", () => {
     expect(direct).toEqual(task);
   });
 
-  it("rejects malformed envelopes and invalid task identities", async () => {
+  it("rejects malformed envelopes and every invalid task identity", async () => {
     const malformed = await Effect.runPromise(
       decodeScalewayQueueRequest("{").pipe(Effect.exit),
     );
-    const invalidIssue = await Effect.runPromise(
-      decodeScalewayQueueRequest(
-        encode({ body: encode({ ...task, issueNumber: "not-a-number" }) }),
-      ).pipe(Effect.exit),
+    const invalidTasks = [
+      { ...task, deliveryId: " " },
+      { ...task, issueBody: " \n " },
+      { ...task, issueNumber: "0" },
+      { ...task, issueNumber: "not-a-number" },
+      { ...task, repo: "owner" },
+    ];
+    const invalidExits = await Promise.all(
+      invalidTasks.map((invalidTask) =>
+        Effect.runPromise(
+          decodeScalewayQueueRequest(
+            encode({ body: encode(invalidTask) }),
+          ).pipe(Effect.exit),
+        ),
+      ),
     );
 
     expect(Exit.isFailure(malformed)).toBe(true);
-    expect(Exit.isFailure(invalidIssue)).toBe(true);
+    expect(invalidExits.every(Exit.isFailure)).toBe(true);
   });
 });

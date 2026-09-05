@@ -1,5 +1,5 @@
 import { Data, Effect, Schema } from "effect";
-import type { MemeRequestTask } from "../task.js";
+import { MemeRequestTask } from "../task.js";
 
 export class WorkerMessageError extends Data.TaggedError("WorkerMessageError")<{
   readonly detail: string;
@@ -9,21 +9,14 @@ export class WorkerMessageError extends Data.TaggedError("WorkerMessageError")<{
   }
 }
 
-const ValidMemeRequestTask = Schema.Struct({
-  deliveryId: Schema.NonEmptyTrimmedString,
-  issueBody: Schema.NonEmptyTrimmedString,
-  issueNumber: Schema.String.pipe(Schema.pattern(/^[1-9]\d*$/)),
-  repo: Schema.String.pipe(Schema.pattern(/^[^/\s]+\/[^/\s]+$/)),
-});
-
 const QueueEnvelope = Schema.Struct({
-  body: Schema.Union(Schema.String, ValidMemeRequestTask),
+  body: Schema.Union(Schema.String, MemeRequestTask),
 });
 
-const QueueInput = Schema.Union(ValidMemeRequestTask, QueueEnvelope);
+const QueueInput = Schema.Union(MemeRequestTask, QueueEnvelope);
 const decodeInput = Schema.decodeUnknown(Schema.parseJson(QueueInput));
 const decodeEmbeddedTask = Schema.decodeUnknown(
-  Schema.parseJson(ValidMemeRequestTask),
+  Schema.parseJson(MemeRequestTask),
 );
 
 const invalidMessage = () =>
@@ -36,12 +29,13 @@ export const decodeScalewayQueueRequest = (
 ): Effect.Effect<MemeRequestTask, WorkerMessageError> =>
   decodeInput(requestBody).pipe(
     Effect.mapError(invalidMessage),
-    Effect.flatMap((input) => {
-      if ("deliveryId" in input) {
-        return Effect.succeed(input);
-      }
-      return typeof input.body === "string"
-        ? decodeEmbeddedTask(input.body).pipe(Effect.mapError(invalidMessage))
-        : Effect.succeed(input.body);
-    }),
+    Effect.filterOrElse(
+      (input): input is MemeRequestTask => "deliveryId" in input,
+      (envelope) =>
+        typeof envelope.body === "string"
+          ? decodeEmbeddedTask(envelope.body).pipe(
+              Effect.mapError(invalidMessage),
+            )
+          : Effect.succeed(envelope.body),
+    ),
   );

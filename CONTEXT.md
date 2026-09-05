@@ -57,20 +57,24 @@ owns signature validation and event decoding, while its Scaleway queue adapter
 publishes work to Scaleway Queues. The worker module lives in
 `src/hosted/worker`; its server exposes the native queue-trigger endpoint and
 its GitHub adapter persists hosted results through the GitHub REST API.
-The worker creates request-scoped `AppConfig`, while its hosted adapters satisfy
-the same `MemePublisherService`, `SagaService`, and `NotifierService` interfaces
-used by the CLI pipeline. The CLI and GitHub Actions layers retain their
-filesystem, git, GitHub CLI, and curl behavior.
+The worker creates request-scoped `AppConfig` and directly orchestrates its
+hosted GitHub and Slack adapters around the shared provider, prompt, and Saga
+helpers. The CLI and GitHub Actions layers retain their filesystem, git, GitHub
+CLI, and curl behavior.
 
 Each delivery checks a deterministic GitHub marker before provider work. The
 generated image and completed marker land in one Git Data API commit using a
 non-forced fast-forward with conflict retry. Slack notification and an optional
-Saga update then run in parallel; the Saga and its marker transition share a
-second commit. Completed markers suppress repeated generation and Saga
-application. Slack retries can duplicate a notification in a narrow failure
-window. Deployment is defined in `infra/scaleway`: OpenTofu owns infrastructure,
-while GitHub Actions builds immutable runtime images and records deployments
-through the protected `production` Environment.
+Saga update then run independently in parallel: a failure in either branch does
+not interrupt the other, but still makes the queue delivery retryable after both
+finish. The Saga and its marker transition share a second commit. Completed
+markers suppress repeated generation and Saga application. Slack retries can
+duplicate a notification in a narrow failure window. Terminal provider
+outcomes are persisted and notified instead of being sent to the DLQ; hosted
+GitHub, Saga persistence, and Slack I/O failures remain retryable. Deployment is
+defined in `infra/scaleway`: OpenTofu owns infrastructure, while GitHub Actions
+builds immutable runtime images and records deployments through the protected
+`production` Environment.
 Its safe defaults are ingress off, worker diagnostic, queue trigger absent, and
 GitHub Actions authoritative. The workflow remains in place permanently and is
 selected unless repository variable `MEME_PROCESSING_BACKEND` is exactly

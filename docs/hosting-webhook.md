@@ -37,6 +37,9 @@ flowchart LR
 The ingress validates the raw `X-Hub-Signature-256`, accepts only opened or
 reopened issue events, publishes one message per `X-GitHub-Delivery`, and
 returns `202`. The delivery ID is the FIFO message deduplication ID.
+Ingress and worker transport both validate the same strict queue task schema:
+non-empty delivery ID and issue body, a positive decimal issue number, and an
+`owner/repository` identity.
 
 A native Scaleway queue trigger invokes the worker with the message in the
 event body's `body` field. A response status of 300 or greater is retried up to
@@ -62,13 +65,15 @@ The repository contains the public ingress slice:
 
 The repository also contains the queue worker slice:
 
-- `src/hosted/worker/worker-server.ts` accepts trigger requests at `POST /` and
-  `POST /queue`, and exposes `GET /health`.
+- `src/hosted/worker/worker-app.ts` owns the tested HTTP handler and runtime
+  composition for `POST /`, `POST /queue`, and `GET /health`;
+  `worker-server.ts` is only the executable entry point.
 - `src/hosted/worker/worker-transport.ts` tolerates either a direct JSON task or
   an event object whose `body` is the task object or its serialized JSON.
-- `src/hosted/worker/worker-server.ts` creates request-scoped configuration,
-  while `src/hosted/worker/hosted-worker.ts` orchestrates the existing provider,
-  prompt, publisher, saga, and notifier interfaces in hosted-safe order.
+- `src/hosted/worker/worker-app.ts` creates request-scoped configuration, while
+  `src/hosted/worker/hosted-worker.ts` directly orchestrates the hosted
+  repository and Slack adapters around shared provider, prompt, and Saga
+  helpers.
 - `src/hosted/worker/hosted-github.ts` uses the Contents API for reads and the
   Git Data API for atomic writes, issue comments, and issue closure.
 - `src/hosted/worker/hosted-notifier.ts` posts the existing Slack payload
@@ -77,11 +82,16 @@ The repository also contains the queue worker slice:
   worker image.
 
 Malformed envelopes, invalid task identities, and invalid Slack issue bodies
-receive a terminal `200` response with `disposition: rejected`. Processing and
-dependency failures receive `503`, causing the Scaleway trigger to retry.
-Successful and resumed deliveries receive `200`. The CLI and GitHub Actions
-layers are unchanged and retain their filesystem, `git`, `gh`, and `curl`
-behavior.
+receive a terminal `200` response with `disposition: rejected`. Exhausted
+generation outcomes - moderation failure, exhausted quota/providers, exhausted
+rate-limit retries, and provider errors - are also terminal: the worker stores a
+failure marker, posts the normal failure notification, and then returns `200`.
+Moderation retains the existing `not_planned` close behavior; other provider
+failures retain the existing failure comment without automatically closing the
+issue. GitHub, Saga persistence, and Slack I/O failures receive `503`, causing
+the Scaleway trigger to retry. Successful and resumed deliveries receive `200`.
+The CLI and GitHub Actions layers are unchanged and retain their filesystem,
+`git`, `gh`, and `curl` behavior.
 
 ### Persistence and idempotency
 
@@ -93,7 +103,10 @@ The worker derives a stable meme UUID and marker path from that identity.
 2. Read the saga canon, generate the image, then atomically commit the image and
    completed marker. Saga-backed deliveries mark the Saga update as pending.
 3. Notify Slack while compressing and committing the Saga update in parallel.
-   The Saga content and its completed marker state share a second atomic commit.
+   Each branch runs to completion even if the other fails; after both finish,
+   either failure makes the delivery retryable. A successful Saga commit
+   therefore remains durable when Slack fails. The Saga content and its
+   completed marker state share a second atomic commit.
 4. If the branch ref moves, re-read the marker and Saga, re-derive the update,
    and retry without force-pushing.
 5. On redelivery, a completed marker skips provider generation and image
@@ -107,8 +120,7 @@ are two accepted crash windows:
   providers nor Scaleway supply an end-to-end idempotency key.
 - Slack incoming webhooks have no idempotency key or returned message ID. A
   retry after Slack accepts a request but before all processing completes can
-  post the notification twice. Legacy markers with a claimed Slack send remain
-  compatible and are not reposted.
+  post the notification twice.
 
 Issue completion comments include a hidden delivery marker. Retries find and
 reuse that comment before closing the issue.

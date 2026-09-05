@@ -1,136 +1,33 @@
-import { Effect, Layer } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import type { AppConfig } from "../../shared/config.js";
-import { MemePublishError } from "../../shared/errors.js";
+import { failureDisposition } from "../../shared/disposition.js";
+import type { NotificationError } from "../../shared/errors.js";
 import {
-  makeMemePublisherLayer,
-  type MemePublisherService,
-} from "../../shared/meme-publisher.js";
-import { NotifierServiceTag } from "../../shared/notifier.js";
-import {
+  type GenerationError,
   type GenerationResult,
   ProvidersServiceTag,
 } from "../../shared/providers.js";
 import {
   buildMemePrompt,
-  makeSagaLayer,
   sagaPath,
   type SagaCompressor,
-  type SagaService,
 } from "../../shared/saga.js";
 import type { MemeRequestTask } from "../task.js";
 import type {
   DeliveryOutcome,
+  FailureDeliveryOutcome,
   HostedGitHubError,
   HostedGitHubRepository,
   SuccessDeliveryOutcome,
 } from "./hosted-github.js";
 import {
   deliverHostedCompletion,
-  makeHostedNotifierLayer,
   type SlackSender,
 } from "./hosted-notifier.js";
-
-interface PendingDelivery {
-  readonly outcome?: DeliveryOutcome;
-}
-
-interface HostedCoordinator {
-  readonly memePublisher: MemePublisherService;
-  readonly recordFailure: (
-    outcome: DeliveryOutcome,
-  ) => Effect.Effect<void, HostedGitHubError>;
-  readonly saga: SagaService;
-  readonly setOutcome: (outcome: DeliveryOutcome) => Effect.Effect<void>;
-}
 
 const providerFrom = (result: GenerationResult): string =>
   result.history.find(({ status }) => status === "success")?.provider ??
   "unknown";
-
-const makeCoordinator = (
-  config: AppConfig,
-  repository: HostedGitHubRepository,
-  compressSaga: SagaCompressor,
-): HostedCoordinator => {
-  let pending: PendingDelivery = {};
-
-  const requireOutcome = (): Effect.Effect<
-    DeliveryOutcome,
-    MemePublishError
-  > => {
-    if (pending.outcome == null) {
-      return Effect.fail(
-        new MemePublishError({
-          detail: "Hosted publication outcome was not prepared",
-        }),
-      );
-    }
-    return Effect.succeed(pending.outcome);
-  };
-
-  const imageFile = (
-    image: Uint8Array,
-  ): ReadonlyArray<{ readonly content: Uint8Array; readonly path: string }> => [
-    { content: image, path: `memes/${repository.memeId}.jpg` },
-  ];
-
-  const memePublisher: MemePublisherService = {
-    prepare: () =>
-      Effect.succeed({
-        memeId: repository.memeId,
-        publish: (image) =>
-          requireOutcome().pipe(
-            Effect.flatMap((outcome) =>
-              repository
-                .complete({
-                  files: imageFile(image),
-                  outcome,
-                  sagaPending: config.writeSaga != null,
-                })
-                .pipe(
-                  Effect.mapError(
-                    (error) => new MemePublishError({ detail: error.message }),
-                  ),
-                  Effect.asVoid,
-                ),
-            ),
-          ),
-      }),
-  };
-
-  // The legacy saga interface is total. Hosted persistence defects are caught
-  // by the HTTP handler and translated to a retryable response.
-  const saga: SagaService = {
-    read: (name) => repository.readText(sagaPath(name)).pipe(Effect.orDie),
-    contribute: (name, prompt) =>
-      requireOutcome().pipe(
-        Effect.flatMap((outcome) =>
-          repository
-            .contributeSaga({
-              outcome,
-              saga: {
-                derive: (canon) => compressSaga(name, canon, prompt),
-                path: sagaPath(name),
-              },
-            })
-            .pipe(Effect.orDie),
-        ),
-        Effect.orDie,
-        Effect.as(true),
-      ),
-  };
-
-  return {
-    memePublisher,
-    recordFailure: (outcome) =>
-      repository.complete({ outcome }).pipe(Effect.asVoid),
-    saga,
-    setOutcome: (outcome) =>
-      Effect.sync(() => {
-        pending = { ...pending, outcome };
-      }),
-  };
-};
 
 const sagaContext = (
   saga: string | null,
@@ -151,93 +48,178 @@ const generatedOutcome = (
   provider: providerFrom(result),
 });
 
-const runNewDelivery = (config: AppConfig, coordinator: HostedCoordinator) =>
+export type HostedGenerationDisposition = "terminal";
+
+export const classifyHostedGenerationError = (
+  error: GenerationError,
+): HostedGenerationDisposition => {
+  switch (error._tag) {
+    case "AllProvidersExhaustedError":
+    case "ModerationFailedError":
+    case "ProviderError":
+    case "QuotaExhaustedError":
+    case "RateLimitError":
+      return "terminal";
+  }
+};
+
+const failedOutcome = (error: GenerationError): FailureDeliveryOutcome => {
+  switch (classifyHostedGenerationError(error)) {
+    case "terminal": {
+      const disposition = failureDisposition(error);
+      return { kind: "failure", ...disposition };
+    }
+  }
+};
+
+const runIndependently = <E1, R1, E2, R2>(
+  first: Effect.Effect<void, E1, R1>,
+  second: Effect.Effect<void, E2, R2>,
+): Effect.Effect<void, E1 | E2, R1 | R2> =>
+  Effect.all([Effect.exit(first), Effect.exit(second)] as const, {
+    concurrency: "unbounded",
+  }).pipe(
+    Effect.flatMap(([firstExit, secondExit]) => {
+      if (Exit.isFailure(firstExit)) {
+        return Effect.failCause(
+          Exit.isFailure(secondExit)
+            ? Cause.parallel(firstExit.cause, secondExit.cause)
+            : firstExit.cause,
+        );
+      }
+      if (Exit.isFailure(secondExit)) {
+        return Effect.failCause(secondExit.cause);
+      }
+      return Effect.void;
+    }),
+  );
+
+const contributeSaga = (
+  saga: string,
+  prompt: string,
+  outcome: DeliveryOutcome,
+  repository: HostedGitHubRepository,
+  compressSaga: SagaCompressor,
+) =>
+  repository
+    .contributeSaga({
+      outcome,
+      saga: {
+        derive: (canon) => compressSaga(saga, canon, prompt),
+        path: sagaPath(saga),
+      },
+    })
+    .pipe(Effect.asVoid);
+
+const finishDelivery = (
+  config: AppConfig,
+  outcome: DeliveryOutcome,
+  repository: HostedGitHubRepository,
+  compressSaga: SagaCompressor,
+  slack: SlackSender,
+) => {
+  const notification = deliverHostedCompletion(config, repository, slack);
+  return config.writeSaga == null
+    ? notification
+    : runIndependently(
+        contributeSaga(
+          config.writeSaga,
+          config.memePrompt,
+          outcome,
+          repository,
+          compressSaga,
+        ),
+        notification,
+      );
+};
+
+const persistGenerationFailure = (
+  config: AppConfig,
+  error: GenerationError,
+  repository: HostedGitHubRepository,
+  slack: SlackSender,
+) =>
+  Effect.gen(function* () {
+    const outcome = failedOutcome(error);
+    yield* repository.complete({ outcome });
+    yield* deliverHostedCompletion(config, repository, slack);
+    return "processed" as const;
+  });
+
+const runGeneratedDelivery = (
+  config: AppConfig,
+  repository: HostedGitHubRepository,
+  compressSaga: SagaCompressor,
+  slack: SlackSender,
+) =>
   Effect.gen(function* () {
     const providers = yield* ProvidersServiceTag;
-    const notifier = yield* NotifierServiceTag;
-
-    if (config.writeSaga != null && config.readSaga == null) {
-      const outcome = {
-        contribution: config.memePrompt,
-        kind: "saga-updated" as const,
-        saga: config.writeSaga,
-        updated: true,
-      };
-      yield* coordinator.setOutcome(outcome);
-      const updated = yield* coordinator.saga.contribute(
-        config.writeSaga,
-        config.memePrompt,
-      );
-      yield* notifier.notifySagaUpdate({
-        contribution: config.memePrompt,
-        saga: config.writeSaga,
-        updated,
-      });
-      return "processed" as const;
-    }
-
     const canon =
       config.readSaga == null
         ? null
-        : yield* coordinator.saga.read(config.readSaga);
+        : yield* repository.readText(sagaPath(config.readSaga));
     const prompt = buildMemePrompt(
       config.memePrompt,
       sagaContext(config.readSaga, canon),
     );
-    const prepared = yield* coordinator.memePublisher.prepare(
-      config.issueNumber,
+
+    return yield* providers.generateWithFallback(prompt, config.requester).pipe(
+      Effect.matchEffect({
+        onFailure: (error) =>
+          persistGenerationFailure(config, error, repository, slack),
+        onSuccess: (result) =>
+          Effect.gen(function* () {
+            const outcome = generatedOutcome(
+              repository.memeId,
+              config.memePrompt,
+              result,
+            );
+            yield* repository.complete({
+              files: [
+                {
+                  content: result.buffer,
+                  path: `memes/${repository.memeId}.jpg`,
+                },
+              ],
+              outcome,
+              sagaPending: config.writeSaga != null,
+            });
+            yield* finishDelivery(
+              config,
+              outcome,
+              repository,
+              compressSaga,
+              slack,
+            );
+            return "processed" as const;
+          }),
+      }),
     );
-    const result = yield* providers.generateWithFallback(
-      prompt,
-      config.requester,
+  });
+
+const runWriteOnlyDelivery = (
+  config: AppConfig & { readonly writeSaga: string },
+  repository: HostedGitHubRepository,
+  compressSaga: SagaCompressor,
+  slack: SlackSender,
+) =>
+  Effect.gen(function* () {
+    const outcome = {
+      contribution: config.memePrompt,
+      kind: "saga-updated" as const,
+      saga: config.writeSaga,
+      updated: true,
+    };
+    yield* contributeSaga(
+      config.writeSaga,
+      config.memePrompt,
+      outcome,
+      repository,
+      compressSaga,
     );
-    yield* coordinator.setOutcome(
-      generatedOutcome(prepared.memeId, config.memePrompt, result),
-    );
-    yield* prepared.publish(result.buffer);
-    const notification = notifier.notifySuccess({
-      history: result.history,
-      memeId: prepared.memeId,
-      metadata: result.metadata,
-      prompt: config.memePrompt,
-    });
-    if (config.writeSaga != null) {
-      yield* Effect.all(
-        [
-          coordinator.saga
-            .contribute(config.writeSaga, config.memePrompt)
-            .pipe(Effect.asVoid),
-          notification,
-        ],
-        { concurrency: "unbounded" },
-      );
-    } else {
-      yield* notification;
-    }
+    yield* deliverHostedCompletion(config, repository, slack);
     return "processed" as const;
-  }).pipe(
-    Effect.catchTag("ModerationFailedError", (error) => {
-      const outcome = {
-        closeNotPlanned: true,
-        history: error.history,
-        kind: "failure" as const,
-        message: error.message,
-      };
-      return coordinator
-        .recordFailure(outcome)
-        .pipe(
-          Effect.zipRight(coordinator.setOutcome(outcome)),
-          Effect.zipRight(
-            NotifierServiceTag.pipe(
-              Effect.flatMap((notifier) =>
-                notifier.notifyFailure(error.message, true, error.history),
-              ),
-            ),
-          ),
-          Effect.as("processed" as const),
-        );
-    }),
-  );
+  });
 
 export interface HostedTaskDependencies {
   readonly compressSaga: SagaCompressor;
@@ -245,44 +227,40 @@ export interface HostedTaskDependencies {
   readonly slack: SlackSender;
 }
 
+export type HostedTaskError = HostedGitHubError | NotificationError;
 export type HostedTaskResult = "processed" | "resumed";
 
 export const runHostedTask = (
   task: MemeRequestTask,
   config: AppConfig,
   { compressSaga, repository, slack }: HostedTaskDependencies,
-) =>
+): Effect.Effect<HostedTaskResult, HostedTaskError, ProvidersServiceTag> =>
   Effect.gen(function* () {
     const state = yield* repository.getDelivery();
-    const coordinator = makeCoordinator(config, repository, compressSaga);
     if (state?.status === "completed") {
-      yield* coordinator.setOutcome(state.outcome);
-      const notification = deliverHostedCompletion(config, repository, slack);
       if (state.saga === "pending" && config.writeSaga != null) {
-        yield* Effect.all(
-          [
-            coordinator.saga
-              .contribute(config.writeSaga, config.memePrompt)
-              .pipe(Effect.asVoid),
-            notification,
-          ],
-          { concurrency: "unbounded" },
+        yield* finishDelivery(
+          config,
+          state.outcome,
+          repository,
+          compressSaga,
+          slack,
         );
       } else {
-        yield* notification;
+        yield* deliverHostedCompletion(config, repository, slack);
       }
       return "resumed" as const;
     }
 
-    const requestLayer = Layer.mergeAll(
-      makeMemePublisherLayer(coordinator.memePublisher),
-      makeSagaLayer(coordinator.saga),
-      makeHostedNotifierLayer(config, repository, slack),
-    );
     yield* Effect.log(
       `Processing queued issue #${task.issueNumber} from ${task.repo}`,
     );
-    return yield* runNewDelivery(config, coordinator).pipe(
-      Effect.provide(requestLayer),
-    );
+    return config.writeSaga != null && config.readSaga == null
+      ? yield* runWriteOnlyDelivery(
+          { ...config, writeSaga: config.writeSaga },
+          repository,
+          compressSaga,
+          slack,
+        )
+      : yield* runGeneratedDelivery(config, repository, compressSaga, slack);
   });

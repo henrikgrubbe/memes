@@ -126,6 +126,18 @@ describe("handleGitHubWebhook", () => {
     expect(failureOfType(exit, WebhookRequestError).status).toBe(400);
   });
 
+  it("rejects webhook data that violates the shared queue task contract", async () => {
+    const invalidRepository = JSON.stringify({
+      action: "opened",
+      issue: { number: 42, body: issueBody, labels: [] },
+      repository: { full_name: "not-a-repository" },
+    });
+    const { exit, tasks } = await run(invalidRepository);
+
+    expect(failureOfType(exit, WebhookRequestError).status).toBe(400);
+    expect(tasks).toEqual([]);
+  });
+
   it("admits only explicitly labelled issues in canary mode", async () => {
     const canaryBody = JSON.stringify({
       action: "opened",

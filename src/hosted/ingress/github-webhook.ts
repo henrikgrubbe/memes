@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Context, Data, Effect, Layer, Schema } from "effect";
-import { type MemeRequestTask } from "../task.js";
+import { MemeRequestTask } from "../task.js";
 
 const SUPPORTED_ACTIONS = new Set(["opened", "reopened"]);
 
@@ -148,13 +148,23 @@ export const handleGitHubWebhook = (
       return yield* invalid(400, "Issue body is required");
     }
 
-    const queue = yield* WebhookQueueTag;
-    yield* queue.enqueue({
+    const task = yield* Schema.decodeUnknown(MemeRequestTask)({
       deliveryId: request.deliveryId,
-      issueNumber: String(payload.issue.number),
       issueBody: payload.issue.body,
+      issueNumber: String(payload.issue.number),
       repo: payload.repository.full_name,
-    });
+    }).pipe(
+      Effect.mapError(
+        () =>
+          new WebhookRequestError({
+            status: 400,
+            detail: "Issue webhook does not produce a valid meme task",
+          }),
+      ),
+    );
+
+    const queue = yield* WebhookQueueTag;
+    yield* queue.enqueue(task);
 
     return { status: 202, disposition: "queued" };
   });

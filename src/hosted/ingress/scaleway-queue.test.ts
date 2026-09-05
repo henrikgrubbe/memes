@@ -1,9 +1,10 @@
-import { Effect } from "effect";
+import type { SendMessageCommandInput } from "@aws-sdk/client-sqs";
+import { Effect, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { WebhookQueueError, WebhookQueueTag } from "./github-webhook.js";
 import { makeScalewayQueue, makeScalewayQueueLayer } from "./scaleway-queue.js";
 import { failureOfType } from "../../shared/test-support.js";
-import type { MemeRequestTask } from "../task.js";
+import { MemeRequestTask } from "../task.js";
 
 const config = {
   queueUrl: "https://sqs.mnq.fr-par.scaleway.com/project-id/meme-requests.fifo",
@@ -17,7 +18,7 @@ const task: MemeRequestTask = {
 
 describe("makeScalewayQueue", () => {
   it("publishes a deduplicated task to the configured queue", async () => {
-    const requests: Array<unknown> = [];
+    const requests: Array<SendMessageCommandInput> = [];
     const queue = makeScalewayQueue(
       {
         send: (command) => {
@@ -32,12 +33,17 @@ describe("makeScalewayQueue", () => {
 
     expect(requests).toEqual([
       {
-        MessageBody: JSON.stringify(task),
+        MessageBody: expect.any(String),
         MessageDeduplicationId: task.deliveryId,
         MessageGroupId: "meme-requests",
         QueueUrl: config.queueUrl,
       },
     ]);
+    expect(
+      Schema.decodeUnknownSync(Schema.parseJson(MemeRequestTask))(
+        requests[0]?.MessageBody,
+      ),
+    ).toEqual(task);
   });
 
   it("surfaces message publication failures", async () => {

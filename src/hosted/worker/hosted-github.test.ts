@@ -1,4 +1,4 @@
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   type GitHubApi,
@@ -173,6 +173,72 @@ describe("hosted GitHub persistence", () => {
     });
   });
 
+  it("retries completion from a fresh head after a ref conflict", async () => {
+    let headReads = 0;
+    let patchAttempts = 0;
+    const api = makeApi((request) => {
+      if (
+        request.method === "GET" &&
+        request.path.includes("/git/ref/heads/")
+      ) {
+        headReads += 1;
+        return Effect.succeed({ object: { sha: `head-${headReads}` } });
+      }
+      if (request.method === "GET" && request.path.includes("/contents/")) {
+        return Effect.fail(notFound(request.path));
+      }
+      if (request.method === "GET" && request.path.includes("/git/commits/")) {
+        return Effect.succeed({
+          sha: `head-${headReads}`,
+          tree: { sha: `tree-${headReads}` },
+        });
+      }
+      if (request.method === "POST" && request.path.endsWith("/git/blobs")) {
+        return Effect.succeed({ sha: `blob-${headReads}` });
+      }
+      if (request.method === "POST" && request.path.endsWith("/git/trees")) {
+        return Effect.succeed({ sha: `tree-new-${headReads}` });
+      }
+      if (request.method === "POST" && request.path.endsWith("/git/commits")) {
+        return Effect.succeed({ sha: `commit-${headReads}` });
+      }
+      if (request.method === "PATCH" && request.path.includes("/git/refs/")) {
+        patchAttempts += 1;
+        return patchAttempts === 1
+          ? Effect.fail(
+              new HostedGitHubError({
+                detail: "ref conflict",
+                operation: "update ref",
+                status: 422,
+              }),
+            )
+          : Effect.succeed({});
+      }
+      return Effect.fail(notFound(request.path));
+    });
+    const repository = makeHostedGitHubRepository({
+      api,
+      branch: "main",
+      task,
+    });
+
+    const completed = await Effect.runPromise(
+      repository.complete({
+        files: [
+          {
+            content: Buffer.from("image"),
+            path: `memes/${repository.memeId}.jpg`,
+          },
+        ],
+        outcome: { ...outcome, memeId: repository.memeId },
+      }),
+    );
+
+    expect(completed.status).toBe("completed");
+    expect(headReads).toBe(2);
+    expect(patchAttempts).toBe(2);
+  });
+
   it("re-reads and re-derives saga content after a ref conflict", async () => {
     let headReads = 0;
     let patchAttempts = 0;
@@ -264,39 +330,13 @@ describe("hosted GitHub persistence", () => {
     expect(patchAttempts).toBe(2);
   });
 
-  it("decodes legacy Slack state and does not duplicate a completion comment", async () => {
-    const encode = Schema.encodeSync(Schema.parseJson(Schema.Unknown));
-    const completed = {
-      deliveryId: task.deliveryId,
-      issueNumber: task.issueNumber,
-      memeId: "meme-id",
-      outcome,
-      repo: task.repo,
-      slack: "claimed",
-      status: "completed",
-      version: 1,
-    };
+  it("does not duplicate a completion comment", async () => {
     let comments: ReadonlyArray<{
       readonly body: string;
       readonly id: number;
     }> = [];
     let posts = 0;
     const api = makeApi((request) => {
-      if (
-        request.method === "GET" &&
-        request.path.includes("/git/ref/heads/")
-      ) {
-        return Effect.succeed({ object: { sha: "head" } });
-      }
-      if (
-        request.method === "GET" &&
-        request.path.includes("/contents/.github")
-      ) {
-        return Effect.succeed({
-          content: Buffer.from(encode(completed)).toString("base64"),
-          encoding: "base64",
-        });
-      }
       if (
         request.method === "GET" &&
         request.path.includes("/issues/42/comments")
@@ -320,9 +360,6 @@ describe("hosted GitHub persistence", () => {
       task,
     });
 
-    expect(await Effect.runPromise(repository.getDelivery())).toMatchObject({
-      slack: "claimed",
-    });
     await Effect.runPromise(repository.commentOnce("Done"));
     await Effect.runPromise(repository.commentOnce("Done"));
 
