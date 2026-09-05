@@ -61,6 +61,7 @@ type StoredOutcome = Exclude<
 >;
 
 interface Harness {
+  readonly comments: () => ReadonlyArray<string>;
   readonly currentOutcome: () => StoredOutcome | null;
   readonly events: () => ReadonlyArray<string>;
   readonly repository: HostedGitHubRepository;
@@ -72,6 +73,7 @@ const makeHarness = (
   initialOutcome: StoredOutcome | null = null,
   initialSagaFolded = false,
 ): Harness => {
+  let comments: ReadonlyArray<string> = [];
   let events: ReadonlyArray<string> = [];
   let outcome = initialOutcome;
   let sagaFolded = initialSagaFolded;
@@ -84,8 +86,9 @@ const makeHarness = (
       Effect.sync(() => {
         record("github:close");
       }),
-    commentOnce: () =>
+    commentOnce: (body) =>
       Effect.sync(() => {
+        comments = [...comments, body];
         record("github:comment");
       }),
     foldSaga: (plan) =>
@@ -134,6 +137,7 @@ const makeHarness = (
   };
 
   return {
+    comments: () => comments,
     currentOutcome: () => outcome,
     events: () => events,
     repository,
@@ -264,6 +268,14 @@ describe("hosted worker orchestration", () => {
       "github:saga:context/story.md:Existing canon\n- A functional meme",
     );
     expect(harness.events()).toContain("slack:post");
+    expect(harness.comments()).toHaveLength(1);
+    expect(harness.comments()[0]).toContain(
+      "**Requested prompt:** `A functional meme`",
+    );
+    expect(harness.comments()[0]).toContain(
+      "<summary><strong>Full generation prompt</strong></summary>",
+    );
+    expect(harness.comments()[0]).toContain("Existing canon");
   });
 
   it("processes and resumes a write-only Saga without storage or providers", async () => {

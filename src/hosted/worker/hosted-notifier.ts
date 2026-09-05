@@ -79,11 +79,12 @@ const completionPlan = (
         close: true,
         comment: formatSuccessComment({
           channel: config.channel,
+          generationPrompt: outcome.generationPrompt,
           history: outcome.history,
           imageUrl: outcome.imageUrl,
           metadata: outcome.metadata,
-          prompt: outcome.prompt,
           provider: outcome.provider,
+          requestedPrompt: outcome.prompt,
           requester: config.requester,
           slackLink: config.slackLink,
         }),

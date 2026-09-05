@@ -7,6 +7,7 @@ export interface SuccessDeliveryOutcome {
   readonly kind: "success";
   readonly memeId: string;
   readonly metadata?: GenerationMetadata;
+  readonly generationPrompt?: string;
   readonly prompt: string;
   readonly provider: string;
 }

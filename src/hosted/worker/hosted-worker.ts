@@ -43,14 +43,16 @@ const sagaContext = (
 
 const generatedOutcome = (
   memeId: string,
-  prompt: string,
+  requestedPrompt: string,
+  generationPrompt: string,
   result: GenerationResult,
 ): Omit<SuccessDeliveryOutcome, "imageUrl"> => ({
+  generationPrompt,
   history: result.history,
   kind: "success",
   memeId,
   metadata: result.metadata,
-  prompt,
+  prompt: requestedPrompt,
   provider: providerFrom(result),
 });
 
@@ -193,6 +195,7 @@ const runGeneratedDelivery = (
               outcome: generatedOutcome(
                 repository.memeId,
                 config.memePrompt,
+                prompt,
                 result,
               ),
             });

@@ -19,8 +19,8 @@ describe("formatSuccessComment", () => {
         "https://github.com/henrikgrubbe/memes/blob/main/memes/meme-123.jpg",
       imageUrl:
         "https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg",
-      prompt: "make a meme",
       provider: "xAI",
+      requestedPrompt: "make a meme",
       requester: "U123",
       slackLink: "https://slack.example/message",
     });
@@ -50,8 +50,8 @@ describe("formatSuccessComment", () => {
         usage: { inputTokens: 12, outputTokens: 34, totalTokens: 46 },
         costCents: 0.108,
       },
-      prompt: "make a meme",
       provider: "OpenAI",
+      requestedPrompt: "make a meme",
       requester: "U123",
       slackLink: "https://slack.example/message",
     });
@@ -71,14 +71,42 @@ describe("formatSuccessComment", () => {
       history: [{ provider: "xAI", status: "success" }],
       imageUrl:
         "https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-456.jpg",
-      prompt: "make a meme",
       provider: "xAI",
+      requestedPrompt: "make a meme",
       requester: "U456",
       slackLink: "https://slack.example/message",
     });
 
     expect(comment).not.toContain("**Estimated cost:**");
     expect(comment).not.toContain("**Usage:**");
+  });
+
+  it("shows the exact Saga-enriched generation prompt in collapsible details", () => {
+    const generationPrompt = [
+      "Background for continuity:",
+      "Henrik lives on a farm.",
+      "",
+      "Current request - depict this now:",
+      "Henrik checks the meme machine.",
+    ].join("\n");
+    const comment = formatSuccessComment({
+      channel: "#memes",
+      generationPrompt,
+      history: [{ provider: "OpenAI", status: "success" }],
+      imageUrl: "https://images.example/memes/meme-123.jpg",
+      provider: "OpenAI",
+      requestedPrompt: "Henrik checks the meme machine.",
+      requester: "U123",
+      slackLink: "https://slack.example/message",
+    });
+
+    expect(comment).toContain(
+      "**Requested prompt:** `Henrik checks the meme machine.`",
+    );
+    expect(comment).toContain(
+      "<summary><strong>Full generation prompt</strong></summary>",
+    );
+    expect(comment).toContain(generationPrompt);
   });
 });
 
