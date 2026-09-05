@@ -37,11 +37,6 @@ const makeRepository = (
   record: (event: string) => void,
 ): HostedGitHubRepository => ({
   branch: "main",
-  claimSlack: () =>
-    Effect.sync(() => {
-      record("claim");
-      return true;
-    }),
   closeIssue: (reason) =>
     Effect.sync(() => {
       record(`close:${reason ?? "completed"}`);
@@ -51,10 +46,10 @@ const makeRepository = (
       record(`comment:${body}`);
     }),
   complete: () => Effect.succeed(completed(outcome)),
+  contributeSaga: () => Effect.succeed(true),
   getDelivery: () => Effect.succeed(completed(outcome)),
   memeId: "meme-1",
   readText: () => Effect.succeed(null),
-  reserve: () => Effect.succeed(completed(outcome)),
 });
 
 describe("hosted notifier", () => {

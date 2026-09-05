@@ -134,7 +134,7 @@ describe("hosted GitHub persistence", () => {
     }
   });
 
-  it("commits image, re-derived saga, and delivery marker in one tree", async () => {
+  it("commits the image with a pending Saga marker", async () => {
     let treeBody: unknown;
     const api = makeApi(
       gitDataHandler((request) => {
@@ -158,19 +158,16 @@ describe("hosted GitHub persistence", () => {
           },
         ],
         outcome: { ...outcome, memeId: repository.memeId },
-        saga: {
-          derive: (canon) => Effect.succeed(`${canon}\n- New event`),
-          path: "context/story.md",
-        },
+        sagaPending: true,
       }),
     );
 
     expect(completed.status).toBe("completed");
+    expect(completed.saga).toBe("pending");
     expect(treeBody).toMatchObject({
       base_tree: "tree-1",
       tree: [
         { path: `memes/${repository.memeId}.jpg` },
-        { path: "context/story.md" },
         { path: expect.stringContaining(".github/meme-worker/deliveries/") },
       ],
     });
@@ -182,6 +179,16 @@ describe("hosted GitHub persistence", () => {
     let blob = 0;
     const canons: ReadonlyArray<string> = [];
     let observedCanons = canons;
+    const pending = {
+      deliveryId: task.deliveryId,
+      issueNumber: task.issueNumber,
+      memeId: "meme-id",
+      outcome,
+      repo: task.repo,
+      saga: "pending",
+      status: "completed",
+      version: 1,
+    };
     const api = makeApi((request) => {
       if (
         request.method === "GET" &&
@@ -198,7 +205,10 @@ describe("hosted GitHub persistence", () => {
             encoding: "base64",
           });
         }
-        return Effect.fail(notFound(request.path));
+        return Effect.succeed({
+          content: Buffer.from(JSON.stringify(pending)).toString("base64"),
+          encoding: "base64",
+        });
       }
       if (request.method === "GET" && request.path.includes("/git/commits/")) {
         return Effect.succeed({
@@ -237,7 +247,7 @@ describe("hosted GitHub persistence", () => {
     });
 
     await Effect.runPromise(
-      repository.complete({
+      repository.contributeSaga({
         outcome: { ...outcome, memeId: repository.memeId },
         saga: {
           derive: (canon) =>
@@ -254,7 +264,7 @@ describe("hosted GitHub persistence", () => {
     expect(patchAttempts).toBe(2);
   });
 
-  it("does not duplicate a completion comment or a claimed Slack send", async () => {
+  it("decodes legacy Slack state and does not duplicate a completion comment", async () => {
     const encode = Schema.encodeSync(Schema.parseJson(Schema.Unknown));
     const completed = {
       deliveryId: task.deliveryId,
@@ -310,7 +320,9 @@ describe("hosted GitHub persistence", () => {
       task,
     });
 
-    expect(await Effect.runPromise(repository.claimSlack())).toBe(false);
+    expect(await Effect.runPromise(repository.getDelivery())).toMatchObject({
+      slack: "claimed",
+    });
     await Effect.runPromise(repository.commentOnce("Done"));
     await Effect.runPromise(repository.commentOnce("Done"));
 

@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import type { AppConfig } from "./config.js";
 import type {
@@ -43,15 +43,6 @@ const makeHarness = (initialState: DeliveryState | null = null): Harness => {
   };
   const repository: HostedGitHubRepository = {
     branch: "main",
-    claimSlack: () =>
-      Effect.sync(() => {
-        if (state?.status !== "completed" || state.slack === "claimed") {
-          return false;
-        }
-        state = { ...state, slack: "claimed" };
-        record("github:claim-slack");
-        return true;
-      }),
     closeIssue: () =>
       Effect.sync(() => {
         record("github:close");
@@ -61,11 +52,9 @@ const makeHarness = (initialState: DeliveryState | null = null): Harness => {
         record("github:comment");
       }),
     complete: (plan) =>
-      Effect.gen(function* () {
-        const saga =
-          plan.saga == null ? null : yield* plan.saga.derive("Existing canon");
+      Effect.sync(() => {
         record(
-          `github:complete:${plan.files?.map(({ path }) => path).join(",") ?? ""}:${plan.saga?.path ?? ""}:${saga ?? ""}`,
+          `github:complete:${plan.files?.map(({ path }) => path).join(",") ?? ""}:${plan.sagaPending ? "saga-pending" : ""}`,
         );
         const completed: CompletedDeliveryState = {
           deliveryId: task.deliveryId,
@@ -73,33 +62,35 @@ const makeHarness = (initialState: DeliveryState | null = null): Harness => {
           memeId: "meme-1",
           outcome: plan.outcome,
           repo: task.repo,
-          slack: "pending",
+          ...(plan.sagaPending ? { saga: "pending" as const } : {}),
           status: "completed",
           version: 1,
         };
         state = completed;
         return completed;
       }),
-    getDelivery: () => Effect.succeed(state),
-    memeId: "meme-1",
-    readText: () => Effect.succeed("Existing canon"),
-    reserve: () =>
-      Effect.sync(() => {
-        if (state != null) {
-          return state;
+    contributeSaga: (plan) =>
+      Effect.gen(function* () {
+        if (state?.status === "completed" && state.saga !== "pending") {
+          return false;
         }
-        const reserved: DeliveryState = {
+        const saga = yield* plan.saga.derive("Existing canon");
+        record(`github:saga:${plan.saga.path}:${saga}`);
+        state = {
           deliveryId: task.deliveryId,
           issueNumber: task.issueNumber,
           memeId: "meme-1",
+          outcome: plan.outcome,
           repo: task.repo,
-          status: "reserved",
+          saga: "completed",
+          status: "completed",
           version: 1,
         };
-        state = reserved;
-        record("github:reserve");
-        return reserved;
+        return true;
       }),
+    getDelivery: () => Effect.succeed(state),
+    memeId: "meme-1",
+    readText: () => Effect.succeed("Existing canon"),
   };
   const slack: SlackSender = {
     post: () =>
@@ -112,9 +103,10 @@ const makeHarness = (initialState: DeliveryState | null = null): Harness => {
 };
 
 describe("hosted worker orchestration", () => {
-  it("atomically persists image and saga before completion notification", async () => {
+  it("publishes the image before notifying while the saga updates concurrently", async () => {
     const harness = makeHarness();
     let providerPrompt = "";
+    const slackPosted = await Effect.runPromise(Deferred.make<void>());
     const providers = makeProvidersLayer({
       OpenAI: (prompt) =>
         Effect.sync(() => {
@@ -129,21 +121,28 @@ describe("hosted worker orchestration", () => {
     const result = await Effect.runPromise(
       runHostedTask(task, config, {
         compressSaga: (_saga, canon, prompt) =>
-          Effect.succeed(`${canon}\n- ${prompt}`),
+          Deferred.await(slackPosted).pipe(Effect.as(`${canon}\n- ${prompt}`)),
         repository: harness.repository,
-        slack: harness.slack,
+        slack: {
+          post: (payload) =>
+            harness.slack
+              .post(payload)
+              .pipe(
+                Effect.zipRight(Deferred.succeed(slackPosted, undefined)),
+                Effect.asVoid,
+              ),
+        },
       }).pipe(Effect.provide(providers)),
     );
 
     expect(result).toBe("processed");
     expect(providerPrompt).toContain("Existing canon");
     expect(harness.events()).toEqual([
-      "github:reserve",
-      "github:complete:memes/meme-1.jpg:context/story.md:Existing canon\n- A functional meme",
-      "github:claim-slack",
+      "github:complete:memes/meme-1.jpg:saga-pending",
       "slack:post",
       "github:comment",
       "github:close",
+      "github:saga:context/story.md:Existing canon\n- A functional meme",
     ]);
   });
 

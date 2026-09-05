@@ -79,33 +79,32 @@ Successful and resumed deliveries receive `200`. The CLI and GitHub Actions
 layers are unchanged and retain their filesystem, `git`, `gh`, and `curl`
 behavior.
 
-### Atomic persistence and idempotency
+### Persistence and idempotency
 
 The durable identity is the repository, issue number, and GitHub delivery ID.
 The worker derives a stable meme UUID and marker path from that identity.
 
-1. Before calling an image provider, reserve the delivery by committing
-   `.github/meme-worker/deliveries/<sha256>.json`.
-2. Read saga canon from the current target-branch head.
-3. Create blobs for the image, optional updated saga, and completed marker.
-4. Create one tree and one commit, then update the branch ref with
-   `force: false`.
-5. If the ref moved, re-read the marker and saga, re-derive the saga update, and
-   retry. If another attempt completed the marker, use its result.
-6. On redelivery, a completed marker skips provider generation, image commit,
-   and saga application and resumes only incomplete notification work.
+1. Before calling an image provider, check
+   `.github/meme-worker/deliveries/<sha256>.json` for an existing result.
+2. Read the saga canon, generate the image, then atomically commit the image and
+   completed marker. Saga-backed deliveries mark the Saga update as pending.
+3. Notify Slack while compressing and committing the Saga update in parallel.
+   The Saga content and its completed marker state share a second atomic commit.
+4. If the branch ref moves, re-read the marker and Saga, re-derive the update,
+   and retry without force-pushing.
+5. On redelivery, a completed marker skips provider generation and image
+   publication. A pending Saga update is resumed alongside notification.
 
-The image, saga, and completion marker are therefore atomic, and duplicate
-successful deliveries do not generate another commit or apply a saga twice.
-There are two unavoidable crash windows:
+Most deliveries create one commit; Saga-backed deliveries create two. There
+are two accepted crash windows:
 
 - A crash after a provider accepts the request but before GitHub records the
   completed result can cause another billed provider call. Neither the current
   providers nor Scaleway supply an end-to-end idempotency key.
-- Slack incoming webhooks have no idempotency key or returned message ID. The
-  worker claims the Slack send in the GitHub marker before posting, yielding
-  at-most-once completion delivery. A crash after the claim and before Slack
-  accepts the request can omit the Slack message, but will not duplicate it.
+- Slack incoming webhooks have no idempotency key or returned message ID. A
+  retry after Slack accepts a request but before all processing completes can
+  post the notification twice. Legacy markers with a claimed Slack send remain
+  compatible and are not reposted.
 
 Issue completion comments include a hidden delivery marker. Retries find and
 reuse that comment before closing the issue.
@@ -119,9 +118,9 @@ The ingress requires:
 | `GITHUB_WEBHOOK_SECRET` | Shared secret used to verify GitHub signatures                   |
 | `SQS_ACCESS_KEY`        | Queue credential with publish permission                         |
 | `SQS_SECRET_KEY`        | Secret for the queue credential                                  |
-| `SQS_ENDPOINT`          | Regional endpoint, such as `https://sqs.mnq.fr-par.scaleway.com` |
+| `SQS_ENDPOINT`          | Regional endpoint, such as `https://sqs.mnq.nl-ams.scaleway.com` |
 | `SQS_QUEUE_URL`         | Full URL of the FIFO request queue                               |
-| `SQS_REGION`            | Queue region, such as `fr-par`                                   |
+| `SQS_REGION`            | Queue region, such as `nl-ams`                                   |
 | `PORT`                  | HTTP port; defaults to `8080`                                    |
 | `HOSTED_INGRESS_MODE`   | `off`, exclusive `canary`, or `live`; defaults to `off`          |
 | `HOSTED_CANARY_LABEL`   | Label admitted in canary mode; defaults to `hosted-canary`       |
@@ -132,18 +131,18 @@ has only the permissions it needs.
 
 The worker requires:
 
-| Variable                  | Purpose                                                    |
-| ------------------------- | ---------------------------------------------------------- |
-| `GITHUB_FINE_GRAINED_PAT` | Repository-scoped token for hosted persistence             |
-| `SLACK_WEBHOOK_URL`       | Existing Slack Workflow incoming webhook                   |
-| `OPENAI_API_KEY`          | Primary image generation and optional saga compression     |
-| `XAI_API_KEY`             | Optional moderation fallback provider                      |
-| `GITHUB_TARGET_BRANCH`    | Branch receiving output commits; defaults to `main`        |
-| `GITHUB_API_URL`          | GitHub REST base URL; defaults to `https://api.github.com` |
-| `PORT`                    | Worker HTTP port; defaults to `8080`                       |
-| `GITHUB_REPOSITORY`       | Only repository the worker is allowed to mutate            |
-| `WORKER_MODE`             | `diagnostic` or `live`; defaults to `diagnostic`            |
-| `WORKER_DIAGNOSTIC_RESPONSE` | `success` (200) or `retry` (503) for trigger validation  |
+| Variable                     | Purpose                                                    |
+| ---------------------------- | ---------------------------------------------------------- |
+| `GITHUB_FINE_GRAINED_PAT`    | Repository-scoped token for hosted persistence             |
+| `SLACK_WEBHOOK_URL`          | Existing Slack Workflow incoming webhook                   |
+| `OPENAI_API_KEY`             | Primary image generation and optional saga compression     |
+| `XAI_API_KEY`                | Optional moderation fallback provider                      |
+| `GITHUB_TARGET_BRANCH`       | Branch receiving output commits; defaults to `main`        |
+| `GITHUB_API_URL`             | GitHub REST base URL; defaults to `https://api.github.com` |
+| `PORT`                       | Worker HTTP port; defaults to `8080`                       |
+| `GITHUB_REPOSITORY`          | Only repository the worker is allowed to mutate            |
+| `WORKER_MODE`                | `diagnostic` or `live`; defaults to `diagnostic`           |
+| `WORKER_DIAGNOSTIC_RESPONSE` | `success` (200) or `retry` (503) for trigger validation    |
 
 For the first deployment, use a short-lived fine-grained PAT restricted to this
 repository with **Contents: read and write** and **Issues: read and write**.
@@ -182,22 +181,23 @@ before the Actions cutover.
 ## OpenTofu resources and defaults
 
 `infra/scaleway` uses `scaleway/scaleway ~> 2.82.0`, OpenTofu-compatible HCL,
-and `fr-par`. It creates:
+and defaults to `nl-ams` (`fr-par` is also supported). It creates:
 
-- one private Container Registry namespace and one Serverless Containers
-  namespace;
+- one public Container Registry namespace and one Serverless Containers
+  namespace; public images are free up to Scaleway's documented 75 GB allowance
+  and contain no runtime secrets;
 - Scaleway SQS activation plus separate manage-only, publish-only,
   receive-only, and operations credentials;
-- `memes-requests.fifo` and `memes-requests-dlq.fifo` in `fr-par`, with explicit
-  deduplication IDs, one-day retention, 900-second visibility, long polling,
+- `memes-requests.fifo` and `memes-requests-dlq.fifo` in the selected region, with explicit
+  deduplication IDs, one-day retention, 240-second visibility, long polling,
   and redrive after four receives;
 - public ingress with zero minimum and two maximum instances, 30-second timeout,
   encrypted secrets, and `/health` liveness;
 - a worker with zero minimum and one maximum instance, concurrency scaling
-  threshold one, 840-second timeout, encrypted secrets, and `/health` liveness;
+  threshold one, 180-second timeout, encrypted secrets, and `/health` liveness;
 - an optional SQS trigger using receive-only credentials and `POST /queue`.
 
-The 840-second worker timeout is below the 900-second visibility timeout.
+The 180-second worker timeout is below the 240-second visibility timeout.
 Retention is at least one day so an outage is not silently converted into data
 loss. FIFO permits one in-flight message per queue, so raising worker scale
 before measuring throughput does not improve this design.
@@ -256,14 +256,14 @@ procedure below.
 
 ## Exclusive canary and cutover state machine
 
-| State | GitHub variable | Ingress | Worker | Trigger | Authority |
-| --- | --- | --- | --- | --- | --- |
-| Default | absent or `actions` | `off` | `diagnostic` | absent | Actions |
-| Diagnostic canary | Actions | `canary` | `diagnostic` | enabled | Actions, except labelled canary |
-| Live canary | Actions | `canary` | `live` | enabled | Actions, except labelled canary |
-| Buffering cutover | `hosted` | `live` | `diagnostic` | absent | Queue buffers |
-| Hosted live | `hosted` | `live` | `live` | enabled | Hosted worker |
-| Rolled back | `actions` | `off` | `diagnostic` | absent | Actions |
+| State             | GitHub variable     | Ingress  | Worker       | Trigger | Authority                       |
+| ----------------- | ------------------- | -------- | ------------ | ------- | ------------------------------- |
+| Default           | absent or `actions` | `off`    | `diagnostic` | absent  | Actions                         |
+| Diagnostic canary | Actions             | `canary` | `diagnostic` | enabled | Actions, except labelled canary |
+| Live canary       | Actions             | `canary` | `live`       | enabled | Actions, except labelled canary |
+| Buffering cutover | `hosted`            | `live`   | `diagnostic` | absent  | Queue buffers                   |
+| Hosted live       | `hosted`            | `live`   | `live`       | enabled | Hosted worker                   |
+| Rolled back       | `actions`           | `off`    | `diagnostic` | absent  | Actions                         |
 
 The workflow skips an issue only when `MEME_PROCESSING_BACKEND=hosted` or the
 issue already has the `hosted-canary` label in its `opened`/`reopened` event.
@@ -311,7 +311,7 @@ processing, record evidence for all of the following:
 6. A new exclusive live canary produces exactly one provider request, output
    commit, issue completion, and Slack completion.
 7. Registry, Queues, and Serverless Containers all create successfully in
-   `fr-par`; Scaleway's current product-availability table is client-rendered
+   the selected region; Scaleway's current product-availability table is client-rendered
    and was not statically verifiable.
 
 The full envelope, acknowledgement/deletion timing, retry delay, visibility
@@ -349,7 +349,7 @@ current shell:
 cd infra/scaleway
 export AWS_ACCESS_KEY_ID="$(tofu output -raw operations_sqs_access_key)"
 export AWS_SECRET_ACCESS_KEY="$(tofu output -raw operations_sqs_secret_key)"
-export AWS_DEFAULT_REGION=fr-par
+export AWS_DEFAULT_REGION=nl-ams
 endpoint="$(tofu output -raw sqs_endpoint)"
 dlq="$(tofu output -raw dead_letter_queue_url)"
 request_queue="$(tofu output -raw request_queue_url)"
