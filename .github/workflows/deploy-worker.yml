@@ -10,14 +10,11 @@ on:
       - "!src/**/*.test.ts"
       - "!src/**/*test-support.ts"
       - "infra/scaleway/images/worker.Dockerfile"
-      - "infra/scaleway/deploy/**"
       - "package.json"
       - "package-lock.json"
       - "tsconfig.json"
       - "tsconfig.worker.json"
       - ".dockerignore"
-      - ".github/workflows/deploy-worker.yml"
-      - ".github/workflows/deploy-runtime.yml"
   workflow_dispatch:
 
 permissions:
