@@ -7,7 +7,10 @@ import {
 } from "@effect/platform";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Config, Context, Effect, Layer } from "effect";
-import { handleGitHubWebhook } from "./github-webhook.js";
+import {
+  handleGitHubWebhook,
+  type HostedIngressMode,
+} from "./github-webhook.js";
 import { ScalewayQueueLive } from "./scaleway-queue.js";
 
 class WebhookSecret extends Context.Tag("WebhookSecret")<
@@ -17,7 +20,7 @@ class WebhookSecret extends Context.Tag("WebhookSecret")<
 
 class WebhookMode extends Context.Tag("WebhookMode")<
   WebhookMode,
-  "canary" | "live" | "off"
+  HostedIngressMode
 >() {}
 
 const WebhookSecretLive = Layer.effect(

@@ -4,6 +4,8 @@ import { MemeRequestTask } from "../task.js";
 
 const SUPPORTED_ACTIONS = new Set(["opened", "reopened"]);
 
+export type HostedIngressMode = "canary" | "live" | "off";
+
 export class WebhookRequestError extends Data.TaggedError(
   "WebhookRequestError",
 )<{
@@ -98,7 +100,7 @@ export function verifyGitHubSignature(
 
 export const handleGitHubWebhook = (
   secret: string,
-  mode: "canary" | "live" | "off",
+  mode: HostedIngressMode,
   request: GitHubWebhookRequest,
 ): Effect.Effect<
   GitHubWebhookResult,

@@ -96,6 +96,12 @@ variable "github_repository" {
   default     = "henrikgrubbe/memes"
 }
 
+variable "github_target_branch" {
+  description = "Branch that receives hosted worker Saga commits."
+  type        = string
+  default     = "main"
+}
+
 variable "hosted_ingress_mode" {
   description = "Ingress routing: off, exclusive labelled canary, or live."
   type        = string
@@ -126,6 +132,17 @@ variable "worker_diagnostic_response" {
   validation {
     condition     = contains(["success", "retry"], var.worker_diagnostic_response)
     error_message = "worker_diagnostic_response must be success or retry."
+  }
+}
+
+variable "worker_privacy" {
+  description = "Start private; use public temporarily only if live canary disproves trigger compatibility."
+  type        = string
+  default     = "private"
+
+  validation {
+    condition     = contains(["private", "public"], var.worker_privacy)
+    error_message = "worker_privacy must be private or public."
   }
 }
 

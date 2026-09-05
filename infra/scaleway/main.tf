@@ -282,7 +282,7 @@ resource "scaleway_container" "worker" {
   registry_sha256    = var.image_tag
   port               = 8080
   protocol           = "http1"
-  privacy            = "private"
+  privacy            = var.worker_privacy
   min_scale          = 0
   max_scale          = 1
   cpu_limit          = 1120
@@ -291,10 +291,13 @@ resource "scaleway_container" "worker" {
   tags               = local.common_tags
 
   environment_variables = {
+    GITHUB_API_URL                 = "https://api.github.com"
     GITHUB_REPOSITORY              = var.github_repository
+    GITHUB_TARGET_BRANCH           = var.github_target_branch
     OBJECT_STORAGE_BUCKET          = scaleway_object_bucket.images.name
     OBJECT_STORAGE_ENDPOINT        = local.object_storage_endpoint
     OBJECT_STORAGE_PUBLIC_BASE_URL = local.object_storage_public_url
+    OBJECT_STORAGE_REGION          = local.object_storage_region
     WORKER_DIAGNOSTIC_RESPONSE     = var.worker_diagnostic_response
     WORKER_MODE                    = var.worker_mode
   }

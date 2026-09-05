@@ -171,21 +171,24 @@ has only the permissions it needs.
 
 The worker requires:
 
-| Variable                         | Purpose                                                 |
-| -------------------------------- | ------------------------------------------------------- |
-| `GITHUB_FINE_GRAINED_PAT`        | Repository-scoped token for issues and Saga commits     |
-| `SLACK_WEBHOOK_URL`              | Existing Slack Workflow incoming webhook                |
-| `OPENAI_API_KEY`                 | Primary image generation and optional Saga compression  |
-| `XAI_API_KEY`                    | Optional moderation fallback provider                   |
-| `OBJECT_STORAGE_ENDPOINT`        | Regional S3 endpoint, `https://s3.nl-ams.scw.cloud`     |
-| `OBJECT_STORAGE_BUCKET`          | Bucket holding hosted images and terminal outcomes      |
-| `OBJECT_STORAGE_PUBLIC_BASE_URL` | Permanent public bucket URL used in notifications       |
-| `OBJECT_STORAGE_ACCESS_KEY`      | Dedicated worker IAM application access key             |
-| `OBJECT_STORAGE_SECRET_KEY`      | Dedicated worker IAM application secret key             |
-| `PORT`                           | Worker HTTP port; defaults to `8080`                    |
-| `GITHUB_REPOSITORY`              | Only repository the worker is allowed to mutate         |
-| `WORKER_MODE`                    | `diagnostic` or `live`; defaults to `diagnostic`        |
-| `WORKER_DIAGNOSTIC_RESPONSE`     | `success` (200) or `retry` (503) for trigger validation |
+| Variable                         | Purpose                                                    |
+| -------------------------------- | ---------------------------------------------------------- |
+| `GITHUB_FINE_GRAINED_PAT`        | Repository-scoped token for issues and Saga commits        |
+| `SLACK_WEBHOOK_URL`              | Existing Slack Workflow incoming webhook                   |
+| `OPENAI_API_KEY`                 | Primary image generation and optional Saga compression     |
+| `XAI_API_KEY`                    | Optional moderation fallback provider                      |
+| `GITHUB_TARGET_BRANCH`           | Branch receiving Saga commits; defaults to `main`          |
+| `GITHUB_API_URL`                 | GitHub REST base URL; defaults to `https://api.github.com` |
+| `OBJECT_STORAGE_ENDPOINT`        | Regional S3 endpoint, `https://s3.nl-ams.scw.cloud`        |
+| `OBJECT_STORAGE_REGION`          | Object Storage signing region, `nl-ams`                    |
+| `OBJECT_STORAGE_BUCKET`          | Bucket holding hosted images and terminal outcomes         |
+| `OBJECT_STORAGE_PUBLIC_BASE_URL` | Permanent public bucket URL used in notifications          |
+| `OBJECT_STORAGE_ACCESS_KEY`      | Dedicated worker IAM application access key                |
+| `OBJECT_STORAGE_SECRET_KEY`      | Dedicated worker IAM application secret key                |
+| `PORT`                           | Worker HTTP port; defaults to `8080`                       |
+| `GITHUB_REPOSITORY`              | Only repository the worker is allowed to mutate            |
+| `WORKER_MODE`                    | `diagnostic` or `live`; defaults to `diagnostic`           |
+| `WORKER_DIAGNOSTIC_RESPONSE`     | `success` (200) or `retry` (503) for trigger validation    |
 
 OpenTofu also requires
 `object_storage_provisioning_principal = "user_id:<uuid>"` or
@@ -433,7 +436,10 @@ processing, record evidence for all of the following:
 
 The full envelope, acknowledgement/deletion timing, retry delay, visibility
 extension behavior, DLQ interaction, and private-container trigger
-compatibility are not documented guarantees. If private invocation fails, stop.
+compatibility are not documented guarantees. If private invocation fails,
+stop. A temporary public diagnostic worker can isolate privacy as the cause,
+but public live processing needs a separate authenticated design and is not an
+automatic fallback.
 
 ## Monitoring and operations
 
