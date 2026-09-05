@@ -26,7 +26,8 @@ updating the canon.
 ### Storage
 
 Each saga is a plain-markdown file `context/<saga>.md` holding the current
-**canon** (an evolving summary). It is committed alongside the meme image.
+**canon** (an evolving summary). Hosted processing commits it after image
+publication while notification proceeds in parallel.
 
 ### Compression
 
@@ -37,11 +38,12 @@ from the canon. The result stays under `MAX_CANON_CHARS` (3000) so a canon plus
 the prompt always fits the image prompt cap (`MAX_PROMPT_CHARS`, 4000). If the
 model is unavailable the write falls back to a raw capped append, so a meme is
 never lost. Concurrent writes to the same saga serialize via `git pull
---rebase` + re-derive (see `scripts/saga.ts`).
+--rebase` + re-derive (see `src/shared/saga.ts` and `src/cli/saga.ts`).
 
-Relevant code: `scripts/saga.ts` (service, compression, prompt assembly),
-`scripts/saga-directives.ts` (`parseSagaDirectives`), `scripts/config.ts`
-(configuration wiring), `scripts/generate-meme.ts` (pipeline wiring).
+Relevant code: `src/shared/saga.ts` (interface, compression, prompt assembly),
+`src/cli/saga.ts` (filesystem/git adapter), `src/shared/saga-directives.ts`
+(`parseSagaDirectives`), `src/shared/config.ts` (configuration wiring), and
+`src/cli/generate-meme.ts` (pipeline wiring).
 
 ## Hosted processing
 
@@ -50,23 +52,25 @@ signed GitHub issue webhook reaches a small HTTP service, which durably
 enqueues the request before returning. A queue-triggered worker performs image
 generation, GitHub writes, Saga updates, and Slack notification.
 
-The ingress is implemented in `scripts/webhook-server.ts`.
-`scripts/github-webhook.ts` owns signature validation and event decoding, while
-`scripts/scaleway-queue.ts` publishes work to Scaleway Queues.
-`scripts/worker-server.ts` exposes the native queue-trigger endpoint and
-`scripts/hosted-github.ts` persists hosted results through the GitHub REST API.
+The ingress module lives in `src/hosted/ingress`; its GitHub webhook adapter
+owns signature validation and event decoding, while its Scaleway queue adapter
+publishes work to Scaleway Queues. The worker module lives in
+`src/hosted/worker`; its server exposes the native queue-trigger endpoint and
+its GitHub adapter persists hosted results through the GitHub REST API.
 The worker creates request-scoped `AppConfig`, while its hosted adapters satisfy
 the same `MemePublisherService`, `SagaService`, and `NotifierService` interfaces
 used by the CLI pipeline. The CLI and GitHub Actions layers retain their
 filesystem, git, GitHub CLI, and curl behavior.
 
-Each delivery reserves a deterministic GitHub marker before provider work. The
-generated image, optional re-derived saga, and completed marker land in one Git
-Data API commit using a non-forced fast-forward with conflict retry. Completed
-markers suppress repeated generation and saga application. Slack completion is
-claimed in GitHub before posting because incoming webhooks have no idempotency
-key; this prevents duplicates but admits a documented missed-notification crash
-window. Deployment is defined in `infra/scaleway` with a two-phase registry/image flow.
+Each delivery checks a deterministic GitHub marker before provider work. The
+generated image and completed marker land in one Git Data API commit using a
+non-forced fast-forward with conflict retry. Slack notification and an optional
+Saga update then run in parallel; the Saga and its marker transition share a
+second commit. Completed markers suppress repeated generation and Saga
+application. Slack retries can duplicate a notification in a narrow failure
+window. Deployment is defined in `infra/scaleway`: OpenTofu owns infrastructure,
+while GitHub Actions builds immutable runtime images and records deployments
+through the protected `production` Environment.
 Its safe defaults are ingress off, worker diagnostic, queue trigger absent, and
 GitHub Actions authoritative. The workflow remains in place permanently and is
 selected unless repository variable `MEME_PROCESSING_BACKEND` is exactly

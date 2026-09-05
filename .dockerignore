@@ -3,6 +3,7 @@
 .idea
 .scratch
 .env*
+**/*.test.ts
 context
 coverage
 docs

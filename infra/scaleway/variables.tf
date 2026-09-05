@@ -52,7 +52,7 @@ variable "worker_trigger_enabled" {
 }
 
 variable "image_tag" {
-  description = "Immutable tag pushed for both webhook and worker images."
+  description = "Immutable bootstrap tag used when the containers are first created."
   type        = string
   default     = "not-pushed"
 

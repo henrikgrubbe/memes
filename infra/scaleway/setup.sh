@@ -365,7 +365,7 @@ write_env TF_VAR_image_tag "$TF_VAR_image_tag"
 export_tofu_env
 
 stage "Phase one: registry and queues" 8
-say "This phase creates the private registry, FIFO request queue, FIFO DLQ, and scoped SQS credentials."
+say "This phase creates the public registry, FIFO request queue, FIFO DLQ, and scoped SQS credentials."
 say "It does not create containers, a queue trigger, a GitHub webhook, or change GitHub Actions."
 export TF_VAR_deploy_containers=false
 export TF_VAR_worker_trigger_enabled=false
@@ -390,14 +390,14 @@ REGISTRY_ENDPOINT=$(tofu -chdir="$INFRA_DIR" output -raw registry_endpoint)
 REGISTRY_HOST=${REGISTRY_ENDPOINT%%/*}
 INGRESS_IMAGE="${REGISTRY_ENDPOINT}/webhook:${TF_VAR_image_tag}"
 WORKER_IMAGE="${REGISTRY_ENDPOINT}/worker:${TF_VAR_image_tag}"
-say "$CONTAINER_CLI will build both repository Dockerfiles for linux/amd64 and push tag $TF_VAR_image_tag."
+say "$CONTAINER_CLI will build both runtime images for linux/amd64 and push tag $TF_VAR_image_tag."
 if ! confirm "Authenticate $CONTAINER_CLI and push both images to $REGISTRY_ENDPOINT?"; then
   warn "Image push cancelled."
   exit 1
 fi
 printf '%s' "$SCW_SECRET_KEY" | "$CONTAINER_CLI" login "$REGISTRY_HOST" --username nologin --password-stdin
-"$CONTAINER_CLI" build --platform linux/amd64 --file "$ROOT_DIR/Dockerfile.webhook" --tag "$INGRESS_IMAGE" "$ROOT_DIR"
-"$CONTAINER_CLI" build --platform linux/amd64 --file "$ROOT_DIR/Dockerfile.worker" --tag "$WORKER_IMAGE" "$ROOT_DIR"
+"$CONTAINER_CLI" build --platform linux/amd64 --file "$INFRA_DIR/images/ingress.Dockerfile" --tag "$INGRESS_IMAGE" "$ROOT_DIR"
+"$CONTAINER_CLI" build --platform linux/amd64 --file "$INFRA_DIR/images/worker.Dockerfile" --tag "$WORKER_IMAGE" "$ROOT_DIR"
 "$CONTAINER_CLI" push "$INGRESS_IMAGE"
 "$CONTAINER_CLI" push "$WORKER_IMAGE"
 

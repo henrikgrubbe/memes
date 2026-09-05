@@ -1,0 +1,32 @@
+name: Deploy ingress
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/hosted/ingress/**"
+      - "src/hosted/task.ts"
+      - "!src/**/*.test.ts"
+      - "infra/scaleway/images/ingress.Dockerfile"
+      - "infra/scaleway/deploy/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "tsconfig.ingress.json"
+      - ".dockerignore"
+      - ".github/workflows/deploy-ingress.yml"
+      - ".github/workflows/deploy-runtime.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-runtime.yml
+    with:
+      dockerfile: infra/scaleway/images/ingress.Dockerfile
+      image_name: webhook
+      runtime: ingress
+    secrets: inherit

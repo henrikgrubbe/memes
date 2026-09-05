@@ -156,6 +156,8 @@ resource "scaleway_container" "ingress" {
   }
 
   lifecycle {
+    ignore_changes = [image, registry_sha256]
+
     precondition {
       condition     = var.github_webhook_secret != null
       error_message = "github_webhook_secret is required when deploy_containers=true."
@@ -212,6 +214,8 @@ resource "scaleway_container" "worker" {
   }
 
   lifecycle {
+    ignore_changes = [image, registry_sha256]
+
     precondition {
       condition = alltrue([
         var.github_fine_grained_pat != null,

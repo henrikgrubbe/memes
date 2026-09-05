@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/hosted/task.ts", "src/hosted/ingress/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}
