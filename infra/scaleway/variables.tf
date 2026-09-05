@@ -113,17 +113,6 @@ variable "hosted_ingress_mode" {
   }
 }
 
-variable "hosted_canary_label" {
-  description = "Reserved issue label routed exclusively to hosted processing in canary mode."
-  type        = string
-  default     = "hosted-canary"
-
-  validation {
-    condition     = var.hosted_canary_label == "hosted-canary"
-    error_message = "hosted_canary_label must match the workflow's reserved hosted-canary label."
-  }
-}
-
 variable "worker_mode" {
   description = "Worker behavior: diagnostic has no side effects; live processes tasks."
   type        = string

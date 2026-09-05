@@ -48,7 +48,7 @@ const loadAppConfig = Effect.gen(function* () {
 
 export const AppConfigLayer = Layer.effect(AppConfigService, loadAppConfig);
 
-export interface RequestAppConfigInput {
+interface RequestAppConfigInput {
   readonly issueBody: string;
   readonly issueNumber: string;
   readonly repo: string;
@@ -77,10 +77,6 @@ export const makeRequestAppConfig = ({
       } satisfies AppConfig;
     }),
   );
-
-export const makeAppConfigLayer = (
-  config: AppConfig,
-): Layer.Layer<AppConfigService> => Layer.succeed(AppConfigService, config);
 
 export const parseIssueBody = (body: string) =>
   Schema.decodeUnknown(IssueFields)(tokenizeIssueBody(body));

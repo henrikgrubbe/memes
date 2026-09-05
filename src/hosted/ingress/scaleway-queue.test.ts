@@ -1,8 +1,8 @@
 import type { SendMessageCommandInput } from "@aws-sdk/client-sqs";
 import { Effect, Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { WebhookQueueError, WebhookQueueTag } from "./github-webhook.js";
-import { makeScalewayQueue, makeScalewayQueueLayer } from "./scaleway-queue.js";
+import { WebhookQueueError } from "./github-webhook.js";
+import { makeScalewayQueue } from "./scaleway-queue.js";
 import { failureOfType } from "../../shared/test-support.js";
 import { MemeRequestTask } from "../task.js";
 
@@ -58,21 +58,5 @@ describe("makeScalewayQueue", () => {
     expect(failureOfType(exit, WebhookQueueError).message).toContain(
       "unavailable",
     );
-  });
-
-  it("constructs a queue layer from Scaleway credentials", async () => {
-    const layer = makeScalewayQueueLayer({
-      accessKey: "access-key",
-      endpoint: "https://sqs.mnq.fr-par.scaleway.com",
-      queueUrl: config.queueUrl,
-      region: "fr-par",
-      secretKey: "secret-key",
-    });
-
-    const queue = await Effect.runPromise(
-      WebhookQueueTag.pipe(Effect.provide(layer)),
-    );
-
-    expect(queue.enqueue).toBeTypeOf("function");
   });
 });

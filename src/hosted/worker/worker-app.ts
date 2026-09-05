@@ -43,21 +43,18 @@ interface WorkerRuntimeConfig {
   readonly targetBranch: string;
 }
 
-export type WorkerProcessingError =
-  ConfigError | HostedTaskError | WorkerMessageError;
-
 interface WorkerProcessor {
   readonly process: (
     task: MemeRequestTask,
-  ) => Effect.Effect<HostedTaskResult, WorkerProcessingError>;
+  ) => Effect.Effect<
+    HostedTaskResult,
+    ConfigError | HostedTaskError | WorkerMessageError
+  >;
 }
 
-export type WorkerMode = "diagnostic" | "live";
-export type WorkerDiagnosticResponse = "retry" | "success";
-
-export interface WorkerRequestPolicy {
-  readonly diagnosticResponse: WorkerDiagnosticResponse;
-  readonly mode: WorkerMode;
+interface WorkerRequestPolicy {
+  readonly diagnosticResponse: "retry" | "success";
+  readonly mode: "diagnostic" | "live";
 }
 
 export class WorkerProcessorTag extends Context.Tag("WorkerProcessor")<
@@ -181,7 +178,7 @@ const WorkerProcessorLive = Layer.effect(
   }),
 );
 
-export interface WorkerHttpResult {
+interface WorkerHttpResult {
   readonly body: Readonly<Record<string, string>>;
   readonly status: 200 | 503;
 }
@@ -259,7 +256,6 @@ const workerRequest = HttpServerRequest.HttpServerRequest.pipe(
 
 const router = HttpRouter.empty.pipe(
   HttpRouter.get("/health", HttpServerResponse.unsafeJson({ status: "ok" })),
-  HttpRouter.post("/", workerRequest),
   HttpRouter.post("/queue", workerRequest),
 );
 

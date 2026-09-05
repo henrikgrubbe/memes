@@ -2,8 +2,6 @@ import { Effect, Exit, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import { type AppConfig, AppConfigService } from "../shared/config.js";
 import { MemePublishError } from "../shared/errors.js";
-import { makeMemePublisherLayer } from "../shared/meme-publisher.js";
-import { NotifierServiceTag } from "../shared/notifier.js";
 import {
   providerErrorProvider,
   successfulProvider,
@@ -11,6 +9,8 @@ import {
 import { makeProvidersLayer, type ProviderFn } from "../shared/providers.js";
 import { makeSagaLayer } from "../shared/saga.js";
 import { program } from "./generate-meme.js";
+import { makeMemePublisherLayer } from "./meme-publisher.js";
+import { NotifierServiceTag } from "./notifier.js";
 
 const baseConfig: AppConfig = {
   issueNumber: "42",

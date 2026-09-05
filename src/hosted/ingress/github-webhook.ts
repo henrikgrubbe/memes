@@ -6,11 +6,6 @@ const SUPPORTED_ACTIONS = new Set(["opened", "reopened"]);
 
 export type HostedIngressMode = "canary" | "live" | "off";
 
-export interface HostedIngressRouting {
-  readonly canaryLabel: string;
-  readonly mode: HostedIngressMode;
-}
-
 export class WebhookRequestError extends Data.TaggedError(
   "WebhookRequestError",
 )<{
@@ -45,14 +40,14 @@ export const makeWebhookQueueLayer = (
   queue: WebhookQueue,
 ): Layer.Layer<WebhookQueueTag> => Layer.succeed(WebhookQueueTag, queue);
 
-export interface GitHubWebhookRequest {
+interface GitHubWebhookRequest {
   readonly body: string;
   readonly deliveryId: string | undefined;
   readonly event: string | undefined;
   readonly signature: string | undefined;
 }
 
-export interface GitHubWebhookResult {
+interface GitHubWebhookResult {
   readonly status: 202;
   readonly disposition: "ignored" | "queued";
 }
@@ -73,6 +68,7 @@ const IssueWebhook = Schema.Struct({
   }),
 });
 
+const CANARY_LABEL = "hosted-canary";
 const decodeIssueWebhook = Schema.decodeUnknown(Schema.parseJson(IssueWebhook));
 
 const invalid = (
@@ -104,7 +100,7 @@ export function verifyGitHubSignature(
 
 export const handleGitHubWebhook = (
   secret: string,
-  routing: HostedIngressRouting,
+  mode: HostedIngressMode,
   request: GitHubWebhookRequest,
 ): Effect.Effect<
   GitHubWebhookResult,
@@ -138,9 +134,9 @@ export const handleGitHubWebhook = (
       return { status: 202, disposition: "ignored" };
     }
     if (
-      routing.mode === "off" ||
-      (routing.mode === "canary" &&
-        !payload.issue.labels.some(({ name }) => name === routing.canaryLabel))
+      mode === "off" ||
+      (mode === "canary" &&
+        !payload.issue.labels.some(({ name }) => name === CANARY_LABEL))
     ) {
       return { status: 202, disposition: "ignored" };
     }

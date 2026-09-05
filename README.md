@@ -6,14 +6,14 @@ active backend.
 
 ## Repository layout
 
-| Path                  | Responsibility                                      |
-| --------------------- | --------------------------------------------------- |
-| `src/shared`          | Generation, Saga, formatting, and shared interfaces |
-| `src/cli`             | GitHub Actions and local command adapters           |
-| `src/hosted/ingress`  | Signed GitHub webhook and FIFO queue publishing     |
-| `src/hosted/worker`   | Queue processing and hosted GitHub/Slack adapters   |
-| `infra/scaleway`      | Infrastructure, runtime images, and deployment      |
-| `context` and `memes` | Generated Saga canon and meme output                |
+| Path                  | Responsibility                                    |
+| --------------------- | ------------------------------------------------- |
+| `src/shared`          | Generation, Saga, and notification formatting     |
+| `src/cli`             | GitHub Actions and local command adapters         |
+| `src/hosted/ingress`  | Signed GitHub webhook and FIFO queue publishing   |
+| `src/hosted/worker`   | Queue processing and hosted GitHub/Slack adapters |
+| `infra/scaleway`      | Infrastructure, runtime images, and deployment    |
+| `context` and `memes` | Generated Saga canon and meme output              |
 
 The Scaleway-hosted webhook and queue worker are documented in
 [docs/hosting-webhook.md](docs/hosting-webhook.md). Initial infrastructure setup

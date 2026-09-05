@@ -9,7 +9,7 @@ import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Config, Context, Effect, Layer } from "effect";
 import {
   handleGitHubWebhook,
-  type HostedIngressRouting,
+  type HostedIngressMode,
 } from "./github-webhook.js";
 import { ScalewayQueueLive } from "./scaleway-queue.js";
 
@@ -18,9 +18,9 @@ class WebhookSecret extends Context.Tag("WebhookSecret")<
   string
 >() {}
 
-class WebhookRouting extends Context.Tag("WebhookRouting")<
-  WebhookRouting,
-  HostedIngressRouting
+class WebhookMode extends Context.Tag("WebhookMode")<
+  WebhookMode,
+  HostedIngressMode
 >() {}
 
 const WebhookSecretLive = Layer.effect(
@@ -28,26 +28,21 @@ const WebhookSecretLive = Layer.effect(
   Config.string("GITHUB_WEBHOOK_SECRET"),
 );
 
-const WebhookRoutingLive = Layer.effect(
-  WebhookRouting,
-  Config.all({
-    canaryLabel: Config.string("HOSTED_CANARY_LABEL").pipe(
-      Config.withDefault("hosted-canary"),
-    ),
-    mode: Config.literal(
-      "off",
-      "canary",
-      "live",
-    )("HOSTED_INGRESS_MODE").pipe(Config.withDefault("off")),
-  }),
+const WebhookModeLive = Layer.effect(
+  WebhookMode,
+  Config.literal(
+    "off",
+    "canary",
+    "live",
+  )("HOSTED_INGRESS_MODE").pipe(Config.withDefault("off")),
 );
 
 const githubWebhook = Effect.gen(function* () {
   const request = yield* HttpServerRequest.HttpServerRequest;
   const body = yield* request.text;
   const secret = yield* WebhookSecret;
-  const routing = yield* WebhookRouting;
-  const result = yield* handleGitHubWebhook(secret, routing, {
+  const mode = yield* WebhookMode;
+  const result = yield* handleGitHubWebhook(secret, mode, {
     body,
     deliveryId: request.headers["x-github-delivery"],
     event: request.headers["x-github-event"],
@@ -88,7 +83,7 @@ const ServerLive = NodeHttpServer.layerConfig(() => createServer(), {
 const ApiLive = router.pipe(
   HttpServer.serve(),
   Layer.provide(
-    Layer.mergeAll(ScalewayQueueLive, WebhookSecretLive, WebhookRoutingLive),
+    Layer.mergeAll(ScalewayQueueLive, WebhookSecretLive, WebhookModeLive),
   ),
   Layer.provide(ServerLive),
 );

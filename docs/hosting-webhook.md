@@ -74,10 +74,10 @@ The repository contains the public ingress slice:
 The repository also contains the queue worker slice:
 
 - `src/hosted/worker/worker-app.ts` owns the tested HTTP handler and runtime
-  composition for `POST /`, `POST /queue`, and `GET /health`;
+  composition for `POST /queue` and `GET /health`;
   `worker-server.ts` is only the executable entry point.
-- `src/hosted/worker/worker-transport.ts` tolerates either a direct JSON task or
-  an event object whose `body` is the task object or its serialized JSON.
+- `src/hosted/worker/worker-transport.ts` validates the trigger envelope and
+  its serialized task in `body`.
 - `src/hosted/worker/worker-app.ts` creates request-scoped configuration, while
   `src/hosted/worker/hosted-worker.ts` directly orchestrates the hosted
   Object Storage, GitHub, and Slack adapters around shared provider, prompt, and
@@ -144,74 +144,11 @@ crash windows:
 Issue completion comments include a hidden delivery marker. Retries find and
 update or reuse that comment before idempotently closing the issue.
 
-### Forward-only image cutover
+### Image storage
 
-The migration does not move or rewrite historical `memes/*.jpg` files. Their
-existing GitHub raw URLs remain permanent. Every newly hosted delivery after
-cutover uses Object Storage; no image or general delivery-state JSON is
-committed to GitHub. Existing repository history and historical delivery
-commits remain untouched.
-
-> [!IMPORTANT]
-> Do not merge the Object Storage migration before pre-provisioning its
-> resources and all six required `OBJECT_STORAGE_*` worker variables from the
-> migration branch. Merging changes under `src/hosted/worker/**` automatically
-> deploys the new worker image. The worker deployment verifies the selected
-> image but has no HTTP health gate, so missing runtime configuration will not
-> trigger a functional rollback.
-
-Use this order for an existing hosted deployment:
-
-1. Check out the migration branch while GitHub Actions remains authoritative.
-2. Load the existing `.env.scaleway`, set
-   `TF_VAR_object_storage_provisioning_principal` to the `user_id:<uuid>` or
-   `application_id:<uuid>` that owns `SCW_ACCESS_KEY`, preserve the currently
-   applied ingress, worker, and trigger modes, and run OpenTofu from this branch.
-3. Review and apply a plan that creates the bucket, private ACL, bucket policy,
-   IAM application/policy, and API key and updates the existing worker
-   container with all six `OBJECT_STORAGE_*` values. Keep
-   `deploy_containers=true`. The worker resource's lifecycle rule ignores
-   `image` and `registry_sha256`, so this apply must leave the old worker image
-   running.
-4. Verify the worker image reference is unchanged, the existing worker remains
-   healthy, and the new bucket/policy/application outputs exist. Do not merge
-   if the current worker regresses.
-5. Merge the migration. Only now may `deploy-worker.yml` replace the old image
-   with the Object Storage-aware image.
-6. Confirm the worker deployment completes, verify worker health/logs, and run
-   the exclusive live canary before transferring processing authority.
-
-When the setup wizard detects existing containers, its durable-services stage
-uses a one-time targeted plan for only the new bucket, bucket policy, IAM
-application/policy, rotating clock, and API key so `deploy_containers=false`
-cannot remove the running services. It derives the provisioning principal from
-the active Scaleway API key when possible and otherwise asks for it. Continue to
-the inert-container apply to wire the six worker values while retaining the old
-image, then stop before live-canary stages until the migration has merged and
-the worker deployment has completed.
-
-#### Recovering a partially applied Object Storage migration
-
-If the bucket policy already exists without the provisioning-principal
-statement, normal refresh can fail with `403` while reading the bucket ACL. Do
-not remove partially created resources from state or recreate the bucket.
-
-1. Identify the bearer of the active deployment key with
-   `scw iam api-key get "$SCW_ACCESS_KEY" with-policies=false -o json`, and set
-   `TF_VAR_object_storage_provisioning_principal` from its `user_id` or
-   `application_id`.
-2. Run the setup wizard from the migration branch. When it finds
-   `scaleway_object_bucket_policy.images` in state, approve its targeted
-   `-refresh=false` policy-repair plan. This avoids the blocked ACL refresh and
-   adds the provisioning principal before the provider reads the ACL again.
-3. If that policy update is denied, an Organization Owner must replace or
-   remove the bucket policy first; owners retain policy-management rights even
-   when they are not listed in the policy.
-4. After repair, approve the targeted durable-services plan. It reuses the
-   existing bucket, ACL, IAM application, and IAM policy, then creates only the
-   rotating clock/API key still absent from state.
-5. Continue to the inert-container apply so the existing worker receives the
-   Object Storage environment and secrets without changing its image.
+Historical `memes/*.jpg` files and their GitHub raw URLs remain untouched. New
+hosted deliveries use Object Storage and do not commit images or general
+delivery-state JSON to GitHub.
 
 ## Configuration
 
@@ -227,7 +164,6 @@ The ingress requires:
 | `SQS_REGION`            | Queue region, such as `nl-ams`                                   |
 | `PORT`                  | HTTP port; defaults to `8080`                                    |
 | `HOSTED_INGRESS_MODE`   | `off`, exclusive `canary`, or `live`; defaults to `off`          |
-| `HOSTED_CANARY_LABEL`   | Label admitted in canary mode; defaults to `hosted-canary`       |
 
 Store the webhook and queue secrets as encrypted container secrets. Use
 separate credentials for the ingress publisher and the worker trigger so each
@@ -235,24 +171,24 @@ has only the permissions it needs.
 
 The worker requires:
 
-| Variable                     | Purpose                                                    |
-| ---------------------------- | ---------------------------------------------------------- |
-| `GITHUB_FINE_GRAINED_PAT`          | Repository-scoped token for issues and Saga commits       |
-| `SLACK_WEBHOOK_URL`                | Existing Slack Workflow incoming webhook                  |
-| `OPENAI_API_KEY`                   | Primary image generation and optional Saga compression    |
-| `XAI_API_KEY`                      | Optional moderation fallback provider                     |
-| `GITHUB_TARGET_BRANCH`             | Branch receiving Saga commits; defaults to `main`         |
-| `GITHUB_API_URL`                   | GitHub REST base URL; defaults to `https://api.github.com` |
-| `OBJECT_STORAGE_ENDPOINT`          | Regional S3 endpoint, `https://s3.nl-ams.scw.cloud`        |
-| `OBJECT_STORAGE_REGION`            | Object Storage signing region, `nl-ams`                    |
-| `OBJECT_STORAGE_BUCKET`            | Bucket holding hosted images and terminal outcomes        |
-| `OBJECT_STORAGE_PUBLIC_BASE_URL`   | Permanent public bucket URL used in notifications          |
-| `OBJECT_STORAGE_ACCESS_KEY`        | Dedicated worker IAM application access key               |
-| `OBJECT_STORAGE_SECRET_KEY`        | Dedicated worker IAM application secret key               |
-| `PORT`                             | Worker HTTP port; defaults to `8080`                       |
-| `GITHUB_REPOSITORY`                | Only repository the worker is allowed to mutate            |
-| `WORKER_MODE`                      | `diagnostic` or `live`; defaults to `diagnostic`           |
-| `WORKER_DIAGNOSTIC_RESPONSE`       | `success` (200) or `retry` (503) for trigger validation    |
+| Variable                         | Purpose                                                    |
+| -------------------------------- | ---------------------------------------------------------- |
+| `GITHUB_FINE_GRAINED_PAT`        | Repository-scoped token for issues and Saga commits        |
+| `SLACK_WEBHOOK_URL`              | Existing Slack Workflow incoming webhook                   |
+| `OPENAI_API_KEY`                 | Primary image generation and optional Saga compression     |
+| `XAI_API_KEY`                    | Optional moderation fallback provider                      |
+| `GITHUB_TARGET_BRANCH`           | Branch receiving Saga commits; defaults to `main`          |
+| `GITHUB_API_URL`                 | GitHub REST base URL; defaults to `https://api.github.com` |
+| `OBJECT_STORAGE_ENDPOINT`        | Regional S3 endpoint, `https://s3.nl-ams.scw.cloud`        |
+| `OBJECT_STORAGE_REGION`          | Object Storage signing region, `nl-ams`                    |
+| `OBJECT_STORAGE_BUCKET`          | Bucket holding hosted images and terminal outcomes         |
+| `OBJECT_STORAGE_PUBLIC_BASE_URL` | Permanent public bucket URL used in notifications          |
+| `OBJECT_STORAGE_ACCESS_KEY`      | Dedicated worker IAM application access key                |
+| `OBJECT_STORAGE_SECRET_KEY`      | Dedicated worker IAM application secret key                |
+| `PORT`                           | Worker HTTP port; defaults to `8080`                       |
+| `GITHUB_REPOSITORY`              | Only repository the worker is allowed to mutate            |
+| `WORKER_MODE`                    | `diagnostic` or `live`; defaults to `diagnostic`           |
+| `WORKER_DIAGNOSTIC_RESPONSE`     | `success` (200) or `retry` (503) for trigger validation    |
 
 OpenTofu also requires
 `object_storage_provisioning_principal = "user_id:<uuid>"` or

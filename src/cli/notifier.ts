@@ -1,6 +1,7 @@
-import { Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 import * as Schema from "effect/Schema";
 import { AppConfigService, type AppConfig } from "../shared/config.js";
+import type { HistoryEntry } from "../shared/history.js";
 import {
   formatFailureComment,
   formatSagaUpdateComment,
@@ -9,11 +10,32 @@ import {
   formatSlackSuccessPayload,
   formatSuccessComment,
 } from "../shared/notification-format.js";
-import {
-  type NotifierService,
-  NotifierServiceTag,
-} from "../shared/notifier.js";
+import type { GenerationMetadata } from "../shared/providers.js";
 import { type Shell, ShellTag } from "./shell.js";
+
+interface NotifierService {
+  readonly notifySuccess: (params: {
+    readonly memeId: string;
+    readonly history: ReadonlyArray<HistoryEntry>;
+    readonly prompt: string;
+    readonly metadata?: GenerationMetadata;
+  }) => Effect.Effect<void>;
+  readonly notifySagaUpdate: (params: {
+    readonly saga: string;
+    readonly contribution: string;
+    readonly updated: boolean;
+  }) => Effect.Effect<void>;
+  readonly notifyFailure: (
+    message: string,
+    closeNotPlanned?: boolean,
+    history?: ReadonlyArray<HistoryEntry>,
+  ) => Effect.Effect<void>;
+}
+
+export class NotifierServiceTag extends Context.Tag("NotifierService")<
+  NotifierServiceTag,
+  NotifierService
+>() {}
 
 const SlackPayloadSchema = Schema.Struct({
   status: Schema.Literal(

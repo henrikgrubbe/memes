@@ -32,11 +32,6 @@ export class GitServiceTag extends Context.Tag("GitService")<
 export const makeGitLayer = (impl: GitService): Layer.Layer<GitServiceTag> =>
   Layer.succeed(GitServiceTag, impl);
 
-/** No-op git layer for tests that don't care about git operations. */
-export const GitNoOpLayer: Layer.Layer<GitServiceTag> = makeGitLayer({
-  commitToMain: () => Effect.void,
-});
-
 const MAX_PUSH_RETRIES = 5;
 
 class PushAttemptError {

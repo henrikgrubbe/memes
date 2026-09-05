@@ -6,10 +6,10 @@ export const MAX_PROMPT_CHARS = 4000;
 // Target ceiling for a saga's canon so it always leaves room for the prompt.
 export const MAX_CANON_CHARS = 3000;
 // Cheap text model used to fold each new meme into a saga's canon.
-export const COMPRESSION_MODEL = "gpt-4o-mini";
+const COMPRESSION_MODEL = "gpt-4o-mini";
 // Upper bound on compression output, so a runaway response can't balloon the
 // canon. ~4 chars/token, with headroom above MAX_CANON_CHARS.
-export const MAX_CANON_TOKENS = 900;
+const MAX_CANON_TOKENS = 900;
 // Directory (repo-relative) holding one markdown file per saga.
 export const CONTEXT_DIR = "context";
 
@@ -205,12 +205,6 @@ export class SagaServiceTag extends Context.Tag("SagaService")<
 /** Build a Layer from a pre-constructed implementation (bypasses git/OpenAI). */
 export const makeSagaLayer = (impl: SagaService): Layer.Layer<SagaServiceTag> =>
   Layer.succeed(SagaServiceTag, impl);
-
-/** No-op layer for tests/deployments that don't exercise sagas. */
-export const SagaNoOpLayer: Layer.Layer<SagaServiceTag> = makeSagaLayer({
-  read: () => Effect.succeed(null),
-  contribute: () => Effect.succeed(true),
-});
 
 class CompressionError extends Data.TaggedError("CompressionError")<{
   readonly detail: string;

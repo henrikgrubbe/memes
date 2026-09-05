@@ -1,9 +1,3 @@
-export interface SagaDirectives {
-  readonly readSaga: string | null;
-  readonly writeSaga: string | null;
-  readonly prompt: string;
-}
-
 // Matches inline saga directives like "read:heist", "write:my-saga_2" or the
 // combined "saga:heist" (read + write the same saga). The name is restricted to
 // a filename-safe slug; a space after the colon (e.g. "read: the news") does
@@ -21,7 +15,7 @@ const hasWrite = (kind: string): boolean => kind === "write" || kind === "saga";
  * names are lower-cased. If stripping would empty the prompt, the original is
  * kept.
  */
-export function parseSagaDirectives(message: string): SagaDirectives {
+export function parseSagaDirectives(message: string) {
   const sagas = Array.from(message.matchAll(SAGA_DIRECTIVE)).reduce<{
     readonly readSaga: string | null;
     readonly writeSaga: string | null;

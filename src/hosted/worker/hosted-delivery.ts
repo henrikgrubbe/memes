@@ -12,7 +12,7 @@ export interface SuccessDeliveryOutcome {
   readonly provider: string;
 }
 
-export interface SagaDeliveryOutcome {
+interface SagaDeliveryOutcome {
   readonly contribution: string;
   readonly kind: "saga-updated";
   readonly saga: string;

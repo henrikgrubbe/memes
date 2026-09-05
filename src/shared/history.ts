@@ -1,8 +1,6 @@
-export type HistoryStatus = "success" | "rate-limited" | "failed";
-
 export interface HistoryEntry {
   readonly provider: string;
-  readonly status: HistoryStatus;
+  readonly status: "success" | "rate-limited" | "failed";
   readonly message?: string;
 }
 

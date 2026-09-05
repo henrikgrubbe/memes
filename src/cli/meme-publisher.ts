@@ -1,11 +1,29 @@
 import { FileSystem, Path } from "@effect/platform";
-import { Effect, Layer } from "effect";
-import { GitServiceTag } from "./git.js";
+import { Context, Effect, Layer } from "effect";
 import { MemePublishError } from "../shared/errors.js";
-import {
-  type MemePublisherService,
-  MemePublisherServiceTag,
-} from "../shared/meme-publisher.js";
+import { GitServiceTag } from "./git.js";
+
+interface PreparedMeme {
+  readonly memeId: string;
+  readonly publish: (
+    image: Uint8Array,
+  ) => Effect.Effect<void, MemePublishError>;
+}
+
+interface MemePublisherService {
+  readonly prepare: (
+    issueNumber: string,
+  ) => Effect.Effect<PreparedMeme, MemePublishError>;
+}
+
+export class MemePublisherServiceTag extends Context.Tag(
+  "MemePublisherService",
+)<MemePublisherServiceTag, MemePublisherService>() {}
+
+export const makeMemePublisherLayer = (
+  impl: MemePublisherService,
+): Layer.Layer<MemePublisherServiceTag> =>
+  Layer.succeed(MemePublisherServiceTag, impl);
 
 export const MemePublisherLayer: Layer.Layer<
   MemePublisherServiceTag,

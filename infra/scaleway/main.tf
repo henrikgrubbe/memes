@@ -241,7 +241,6 @@ resource "scaleway_container" "ingress" {
   tags               = local.common_tags
 
   environment_variables = {
-    HOSTED_CANARY_LABEL = var.hosted_canary_label
     HOSTED_INGRESS_MODE = var.hosted_ingress_mode
     SQS_ENDPOINT        = scaleway_mnq_sqs.main.endpoint
     SQS_QUEUE_URL       = scaleway_mnq_sqs_queue.requests.url
