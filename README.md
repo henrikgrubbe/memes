@@ -19,3 +19,8 @@ Provisioning, deployment, and operations are documented in
 
 After setup, merges to `main` deploy only affected hosted runtimes through the
 GitHub `production` Environment.
+
+## Sponsorship
+
+[Sponsor this project](https://github.com/sponsors/henrikgrubbe) to help cover
+Scaleway hosting, Object Storage, and AI image-generation provider costs.
