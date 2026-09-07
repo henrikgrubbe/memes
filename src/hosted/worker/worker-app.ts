@@ -7,7 +7,7 @@ import {
 } from "@effect/platform";
 import { NodeHttpServer } from "@effect/platform-node";
 import { Config, Context, Effect, Layer, Option } from "effect";
-import { ProvidersLayer } from "../../shared/providers.js";
+import { ProvidersLayer, ProvidersServiceTag } from "../../shared/providers.js";
 import { makeSagaCompressor } from "../../shared/saga.js";
 import { makeGitHubApi, makeHostedGitHubRepository } from "./hosted-github.js";
 import { makeSlackSender } from "./hosted-notifier.js";
@@ -15,13 +15,10 @@ import {
   makeHostedObjectStorage,
   makeS3ObjectStorageApi,
 } from "./hosted-object-storage.js";
-import { runHostedTask } from "./hosted-worker.js";
 import {
-  handleWorkerRequest,
-  makeWorkerTaskConfig,
-  type WorkerProcessor,
-  WorkerProcessorTag,
-} from "./worker-handler.js";
+  makeQueuedDeliveryHandler,
+  type QueuedDeliveryHandler,
+} from "./hosted-worker.js";
 
 interface WorkerRuntimeConfig {
   readonly githubApiUrl: string;
@@ -71,8 +68,12 @@ const WorkerConfigLive = Layer.effect(
   ),
 );
 
-const WorkerProcessorLive = Layer.effect(
-  WorkerProcessorTag,
+const QueuedDeliveryHandlerTag = Context.GenericTag<QueuedDeliveryHandler>(
+  "QueuedDeliveryHandler",
+);
+
+const QueuedDeliveryLive = Layer.effect(
+  QueuedDeliveryHandlerTag,
   Effect.gen(function* () {
     const runtime = yield* WorkerRuntimeConfigTag;
     const api = makeGitHubApi({
@@ -90,40 +91,36 @@ const WorkerProcessorLive = Layer.effect(
     });
     const compressSaga = makeSagaCompressor(runtime.openAiApiKey);
 
-    return {
-      process: (task) =>
-        makeWorkerTaskConfig(task, {
-          allowedRepository: runtime.githubRepository,
-          slackWebhookUrl: runtime.slackWebhookUrl,
-        }).pipe(
-          Effect.flatMap((config) => {
-            const repository = makeHostedGitHubRepository({
-              api,
-              branch: runtime.targetBranch,
-              task,
-            });
-            return runHostedTask(task, config, {
-              compressSaga,
-              repository,
-              slack,
-              storage: makeHostedObjectStorage({
-                api: storageApi,
-                bucket: runtime.objectStorageBucket,
-                deliveryId: task.deliveryId,
-                memeId: repository.memeId,
-                publicBaseUrl: runtime.objectStoragePublicBaseUrl,
-              }),
-            });
-          }),
-          Effect.provide(ProvidersLayer),
-        ),
-    } satisfies WorkerProcessor;
+    return makeQueuedDeliveryHandler({
+      allowedRepository: runtime.githubRepository,
+      compressSaga,
+      providers: ProvidersServiceTag.pipe(Effect.provide(ProvidersLayer)),
+      repositoryFor: (task) =>
+        makeHostedGitHubRepository({
+          api,
+          branch: runtime.targetBranch,
+          task,
+        }),
+      slack,
+      storageFor: (task, memeId) =>
+        makeHostedObjectStorage({
+          api: storageApi,
+          bucket: runtime.objectStorageBucket,
+          deliveryId: task.deliveryId,
+          memeId,
+          publicBaseUrl: runtime.objectStoragePublicBaseUrl,
+        }),
+    });
   }),
 );
 
 const workerRequest = HttpServerRequest.HttpServerRequest.pipe(
   Effect.flatMap((request) => request.text),
-  Effect.flatMap(handleWorkerRequest),
+  Effect.flatMap((requestBody) =>
+    QueuedDeliveryHandlerTag.pipe(
+      Effect.flatMap((handler) => handler.handle(requestBody)),
+    ),
+  ),
   Effect.map((result) =>
     HttpServerResponse.unsafeJson(result.body, { status: result.status }),
   ),
@@ -138,10 +135,10 @@ const ServerLive = NodeHttpServer.layerConfig(() => createServer(), {
   port: Config.integer("PORT").pipe(Config.withDefault(8080)),
 });
 
-const ProcessorLive = WorkerProcessorLive.pipe(Layer.provide(WorkerConfigLive));
+const HandlerLive = QueuedDeliveryLive.pipe(Layer.provide(WorkerConfigLive));
 
 export const WorkerApiLive = router.pipe(
   HttpServer.serve(),
-  Layer.provide(ProcessorLive),
+  Layer.provide(HandlerLive),
   Layer.provide(ServerLive),
 );

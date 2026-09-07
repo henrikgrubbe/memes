@@ -1,19 +1,140 @@
 import { Effect, Schema } from "effect";
 import type { AppConfig } from "../../shared/config.js";
 import { NotificationError } from "../../shared/errors.js";
-import {
-  formatFailureComment,
-  formatSagaUpdateComment,
-  formatSlackFailurePayload,
-  formatSlackSagaUpdatePayload,
-  formatSlackSuccessPayload,
-  formatSuccessComment,
-} from "../../shared/notification-format.js";
+import type { HistoryEntry } from "../../shared/history.js";
+import type { GenerationMetadata } from "../../shared/providers.js";
 import type { DeliveryOutcome } from "./hosted-delivery.js";
 import type {
   HostedGitHubError,
   HostedGitHubRepository,
 } from "./hosted-github.js";
+
+interface SuccessCommentParams {
+  readonly channel: string;
+  readonly generationPrompt?: string;
+  readonly history: ReadonlyArray<HistoryEntry>;
+  readonly imageUrl: string;
+  readonly metadata?: GenerationMetadata;
+  readonly provider: string;
+  readonly requestedPrompt: string;
+  readonly requester: string;
+  readonly slackLink: string;
+}
+
+const formatCostCents = (metadata?: GenerationMetadata): string | null => {
+  const costCents = metadata?.costCents;
+  return costCents == null ? null : `${costCents.toFixed(3)}¢`;
+};
+
+const inlineCode = (value: string): string =>
+  value.includes("`") ? `\`\`${value}\`\`` : `\`${value}\``;
+
+const fencedCode = (value: string): ReadonlyArray<string> => {
+  const longestBacktickRun = Math.max(
+    0,
+    ...Array.from(value.matchAll(/`+/g), ([run]) => run.length),
+  );
+  const fence = "`".repeat(Math.max(3, longestBacktickRun + 1));
+  return [`${fence}text`, value, fence];
+};
+
+const sagaFields = (readSaga?: string, writeSaga?: string) => ({
+  ...(readSaga == null ? {} : { read_saga: readSaga }),
+  ...(writeSaga == null ? {} : { write_saga: writeSaga }),
+});
+
+const renderProviderAttempts = (
+  history: ReadonlyArray<HistoryEntry>,
+): ReadonlyArray<string> =>
+  history.map(({ provider, status, message }) => {
+    switch (status) {
+      case "success":
+        return `- ${provider} ✅`;
+      case "rate-limited":
+        return `- ${provider} ⏳ rate limited`;
+      case "failed":
+        return `- ${provider} ❌ (${message})`;
+    }
+  });
+
+const successComment = ({
+  channel,
+  generationPrompt,
+  history,
+  imageUrl,
+  metadata,
+  provider,
+  requestedPrompt,
+  requester,
+  slackLink,
+}: SuccessCommentParams): string => {
+  const fullPromptDetails =
+    generationPrompt == null || generationPrompt === requestedPrompt
+      ? []
+      : [
+          ``,
+          `<details>`,
+          `<summary><strong>Full generation prompt</strong></summary>`,
+          ``,
+          ...fencedCode(generationPrompt),
+          `</details>`,
+        ];
+  const revisedPrompt = metadata?.revisedPrompt;
+  const usageSummary =
+    metadata?.usage == null
+      ? null
+      : `${metadata.usage.inputTokens} input, ${metadata.usage.outputTokens} output, ${metadata.usage.totalTokens} total tokens`;
+  const costCents = formatCostCents(metadata);
+
+  return [
+    `🎉 [Meme generated](${imageUrl}) _(${provider})_`,
+    ``,
+    `![Generated meme](${imageUrl})`,
+    ``,
+    `**Requested by:** ${requester} in ${channel} - [View in Slack](${slackLink})`,
+    `**Requested prompt:** ${inlineCode(requestedPrompt)}`,
+    ...fullPromptDetails,
+    ...(revisedPrompt == null
+      ? []
+      : [`**Revised prompt:** ${inlineCode(revisedPrompt)}`]),
+    ...(usageSummary == null ? [] : [`**Usage:** ${usageSummary}`]),
+    ...(costCents == null ? [] : [`**Estimated cost:** ${costCents}`]),
+    ``,
+    `**Provider attempts:**`,
+    ...renderProviderAttempts(history),
+  ].join("\n");
+};
+
+const failureComment = (
+  message: string,
+  history?: ReadonlyArray<HistoryEntry>,
+): string => {
+  const attempts =
+    history != null && history.length > 0
+      ? [``, `**Provider attempts:**`, ...renderProviderAttempts(history)]
+      : [];
+  return [
+    `❌ Meme generation failed.`,
+    ``,
+    "```",
+    message,
+    "```",
+    ...attempts,
+  ].join("\n");
+};
+
+const sagaUpdateComment = ({
+  contribution,
+  saga,
+  updated,
+}: Extract<DeliveryOutcome, { readonly kind: "saga-updated" }>): string => {
+  const status = updated
+    ? `✅ Saga \`${saga}\` updated.`
+    : `❌ Saga \`${saga}\` could not be updated. The issue remains open.`;
+  return [status, ``, `**Contribution:** ${inlineCode(contribution)}`].join(
+    "\n",
+  );
+};
 
 export interface SlackSender {
   readonly post: (payload: unknown) => Effect.Effect<void, NotificationError>;
@@ -74,10 +195,11 @@ const completionPlan = (
   outcome: DeliveryOutcome,
 ): CompletionPlan => {
   switch (outcome.kind) {
-    case "success":
+    case "success": {
+      const costCents = formatCostCents(outcome.metadata);
       return {
         close: true,
-        comment: formatSuccessComment({
+        comment: successComment({
           channel: config.channel,
           generationPrompt: outcome.generationPrompt,
           history: outcome.history,
@@ -88,30 +210,39 @@ const completionPlan = (
           requester: config.requester,
           slackLink: config.slackLink,
         }),
-        slackPayload: formatSlackSuccessPayload({
-          channel: config.channel,
-          contentUrl: outcome.imageUrl,
-          metadata: outcome.metadata,
-          provider: outcome.provider,
-          readSaga: config.readSaga ?? undefined,
-          requester: config.requester,
+        slackPayload: {
+          status: "success",
+          content_url: outcome.imageUrl,
           title: config.memePrompt,
-          writeSaga: config.writeSaga ?? undefined,
-        }),
+          requester: config.requester,
+          channel: config.channel,
+          error: "",
+          provider: outcome.provider,
+          ...(costCents == null ? {} : { cost_cents: costCents }),
+          ...sagaFields(
+            config.readSaga ?? undefined,
+            config.writeSaga ?? undefined,
+          ),
+        },
       };
+    }
     case "saga-updated":
       return {
         close: outcome.updated,
-        comment: formatSagaUpdateComment(outcome),
-        slackPayload: formatSlackSagaUpdatePayload({
-          branch,
-          channel: config.channel,
-          contribution: outcome.contribution,
-          repo: config.repo,
+        comment: sagaUpdateComment(outcome),
+        slackPayload: {
+          status: outcome.updated ? "saga-updated" : "saga-update-failed",
+          content_url: outcome.updated
+            ? `https://github.com/${config.repo}/blob/${branch}/context/${outcome.saga}.md`
+            : "",
+          title: `Saga "${outcome.saga}": ${outcome.contribution}`,
           requester: config.requester,
-          saga: outcome.saga,
-          updated: outcome.updated,
-        }),
+          channel: config.channel,
+          error: outcome.updated
+            ? ""
+            : `Saga "${outcome.saga}" could not be updated.`,
+          write_saga: outcome.saga,
+        },
       };
     case "failure":
       return {
@@ -119,15 +250,19 @@ const completionPlan = (
         ...(outcome.closeNotPlanned
           ? { closeReason: "not_planned" as const }
           : {}),
-        comment: formatFailureComment(outcome.message, outcome.history),
-        slackPayload: formatSlackFailurePayload({
+        comment: failureComment(outcome.message, outcome.history),
+        slackPayload: {
+          status: "failure",
+          content_url: "",
+          title: config.memePrompt,
+          requester: config.requester,
           channel: config.channel,
           error: outcome.message,
-          readSaga: config.readSaga ?? undefined,
-          requester: config.requester,
-          title: config.memePrompt,
-          writeSaga: config.writeSaga ?? undefined,
-        }),
+          ...sagaFields(
+            config.readSaga ?? undefined,
+            config.writeSaga ?? undefined,
+          ),
+        },
       };
   }
 };

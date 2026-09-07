@@ -4,7 +4,6 @@ import { parseSagaDirectives } from "./saga-directives.js";
 export interface AppConfig {
   readonly issueNumber: string;
   readonly repo: string;
-  readonly slackWebhookUrl: string;
   readonly requester: string;
   readonly memePrompt: string;
   readonly channel: string;
@@ -17,14 +16,12 @@ interface RequestAppConfigInput {
   readonly issueBody: string;
   readonly issueNumber: string;
   readonly repo: string;
-  readonly slackWebhookUrl: string;
 }
 
 export const makeRequestAppConfig = ({
   issueBody,
   issueNumber,
   repo,
-  slackWebhookUrl,
 }: RequestAppConfigInput) =>
   parseIssueBody(issueBody).pipe(
     Effect.map((fields) => {
@@ -32,7 +29,6 @@ export const makeRequestAppConfig = ({
       return {
         issueNumber,
         repo,
-        slackWebhookUrl,
         requester: fields.sender,
         memePrompt: directives.prompt,
         channel: fields.channel,

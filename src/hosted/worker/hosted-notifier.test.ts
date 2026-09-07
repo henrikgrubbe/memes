@@ -13,14 +13,14 @@ const config: AppConfig = {
   repo: "owner/repo",
   requester: "U123",
   slackLink: "https://example.test/thread",
-  slackWebhookUrl: "https://example.test/hook",
   writeSaga: "story",
 };
 
 const makeRepository = (
   record: (event: string) => void,
+  branch = "main",
 ): HostedGitHubRepository => ({
-  branch: "main",
+  branch,
   closeIssue: (reason) =>
     Effect.sync(() => {
       record(`close:${reason ?? "completed"}`);
@@ -33,6 +33,30 @@ const makeRepository = (
   memeId: "meme-1",
   readText: () => Effect.succeed(null),
 });
+
+const captureCompletion = (
+  outcome: DeliveryOutcome,
+  requestConfig: AppConfig = config,
+  branch = "main",
+) => {
+  let events: ReadonlyArray<string> = [];
+  let payloads: ReadonlyArray<unknown> = [];
+  return Effect.runPromise(
+    deliverHostedCompletion(
+      requestConfig,
+      outcome,
+      makeRepository((event) => {
+        events = [...events, event];
+      }, branch),
+      {
+        post: (payload) =>
+          Effect.sync(() => {
+            payloads = [...payloads, payload];
+          }),
+      },
+    ),
+  ).then(() => ({ events, payloads }));
+};
 
 describe("hosted notifier", () => {
   it("posts Slack payloads without curl", async () => {
@@ -68,8 +92,6 @@ describe("hosted notifier", () => {
   });
 
   it("uses the permanent Object Storage URL without claiming a GitHub commit", async () => {
-    let events: ReadonlyArray<string> = [];
-    let payloads: ReadonlyArray<unknown> = [];
     const outcome: DeliveryOutcome = {
       history: [{ provider: "OpenAI", status: "success" }],
       imageUrl: "https://images.example/memes/meme-1.jpg",
@@ -79,28 +101,82 @@ describe("hosted notifier", () => {
       provider: "OpenAI",
     };
 
-    await Effect.runPromise(
-      deliverHostedCompletion(
-        config,
-        outcome,
-        makeRepository((event) => {
-          events = [...events, event];
-        }),
-        {
-          post: (payload) =>
-            Effect.sync(() => {
-              payloads = [...payloads, payload];
-            }),
-        },
-      ),
-    );
+    const { events, payloads } = await captureCompletion(outcome);
 
-    expect(payloads).toMatchObject([
-      { content_url: outcome.imageUrl, status: "success" },
+    expect(payloads).toEqual([
+      {
+        status: "success",
+        content_url: outcome.imageUrl,
+        title: "Prompt",
+        requester: "U123",
+        channel: "C123",
+        error: "",
+        provider: "OpenAI",
+        write_saga: "story",
+      },
     ]);
     expect(events.join("\n")).toContain(outcome.imageUrl);
     expect(events.join("\n")).not.toContain("committed");
+    expect(events.join("\n")).not.toContain("**Estimated cost:**");
+    expect(events.join("\n")).not.toContain("**Usage:**");
     expect(events.at(-1)).toBe("close:completed");
+  });
+
+  it("renders generation details, attempts, usage, cost, and Saga fields", async () => {
+    const generationPrompt = [
+      "Background for continuity:",
+      "Henrik lives on a farm.",
+      "",
+      "Current request - depict this now:",
+      "Henrik checks the `meme` machine.",
+    ].join("\n");
+    const outcome: DeliveryOutcome = {
+      generationPrompt,
+      history: [
+        { provider: "xAI", status: "rate-limited" },
+        { provider: "OpenAI", status: "success" },
+      ],
+      imageUrl: "https://images.example/memes/meme-1.jpg",
+      kind: "success",
+      memeId: "meme-1",
+      metadata: {
+        revisedPrompt: "A revised `prompt`",
+        usage: { inputTokens: 12, outputTokens: 34, totalTokens: 46 },
+        costCents: 0.108,
+      },
+      prompt: "Henrik checks the `meme` machine.",
+      provider: "OpenAI",
+    };
+
+    const { events, payloads } = await captureCompletion(outcome, {
+      ...config,
+      readSaga: "original",
+      writeSaga: "sequel",
+    });
+    const comments = events.filter((event) => event.startsWith("comment:"));
+
+    expect(comments).toHaveLength(1);
+    expect(comments[0]).toContain(
+      "<summary><strong>Full generation prompt</strong></summary>",
+    );
+    expect(comments[0]).toContain(generationPrompt);
+    expect(comments[0]).toContain(
+      "**Requested prompt:** ``Henrik checks the `meme` machine.``",
+    );
+    expect(comments[0]).toContain("**Revised prompt:** ``A revised `prompt```");
+    expect(comments[0]).toContain(
+      "**Usage:** 12 input, 34 output, 46 total tokens",
+    );
+    expect(comments[0]).toContain("**Estimated cost:** 0.108¢");
+    expect(comments[0]).toContain("- xAI ⏳ rate limited");
+    expect(payloads).toEqual([
+      expect.objectContaining({
+        cost_cents: "0.108¢",
+        read_saga: "original",
+        status: "success",
+        write_saga: "sequel",
+      }),
+    ]);
   });
 
   it("uses the Saga status contract and closes a successful Saga issue", async () => {
@@ -135,25 +211,111 @@ describe("hosted notifier", () => {
     expect(events.at(-1)).toBe("close:completed");
   });
 
+  it("keeps a failed Saga update open and links successful updates to the configured branch", async () => {
+    const failed: DeliveryOutcome = {
+      contribution: "The cats cancel the robbery.",
+      kind: "saga-updated",
+      saga: "heist",
+      updated: false,
+    };
+    const succeeded = { ...failed, updated: true } as const;
+
+    const failedCapture = await captureCompletion(failed);
+    const succeededCapture = await captureCompletion(
+      succeeded,
+      config,
+      "sagas",
+    );
+
+    expect(failedCapture.events.join("\n")).toContain(
+      "The issue remains open.",
+    );
+    expect(
+      failedCapture.events.some((event) => event.startsWith("close:")),
+    ).toBe(false);
+    expect(failedCapture.payloads).toEqual([
+      expect.objectContaining({
+        content_url: "",
+        status: "saga-update-failed",
+      }),
+    ]);
+    expect(succeededCapture.payloads).toEqual([
+      expect.objectContaining({
+        content_url:
+          "https://github.com/owner/repo/blob/sagas/context/heist.md",
+        status: "saga-updated",
+      }),
+    ]);
+  });
+
   it("uses the failure contract and not-planned close reason", async () => {
-    let events: ReadonlyArray<string> = [];
     const outcome: DeliveryOutcome = {
       closeNotPlanned: true,
       kind: "failure",
       message: "Blocked",
     };
 
-    await Effect.runPromise(
-      deliverHostedCompletion(
-        config,
-        outcome,
-        makeRepository((event) => {
-          events = [...events, event];
-        }),
-        { post: () => Effect.void },
-      ),
-    );
+    const { events, payloads } = await captureCompletion(outcome);
 
+    expect(payloads).toEqual([
+      {
+        status: "failure",
+        content_url: "",
+        title: "Prompt",
+        requester: "U123",
+        channel: "C123",
+        error: "Blocked",
+        write_saga: "story",
+      },
+    ]);
+    expect(events.join("\n")).not.toContain("**Provider attempts:**");
     expect(events).toContain("close:not_planned");
+  });
+
+  it("does not render provider attempts for an empty history", async () => {
+    const outcome: DeliveryOutcome = {
+      closeNotPlanned: false,
+      history: [],
+      kind: "failure",
+      message: "Generation failed",
+    };
+
+    const { events } = await captureCompletion(outcome);
+
+    expect(events.join("\n")).not.toContain("**Provider attempts:**");
+    expect(events.some((event) => event.startsWith("close:"))).toBe(false);
+  });
+
+  it("renders failure attempts and Saga fields without closing retryable failures", async () => {
+    const outcome: DeliveryOutcome = {
+      closeNotPlanned: false,
+      history: [
+        {
+          provider: "OpenAI",
+          status: "failed",
+          message: "blocked by moderation",
+        },
+      ],
+      kind: "failure",
+      message: "Generation failed",
+    };
+
+    const { events, payloads } = await captureCompletion(outcome, {
+      ...config,
+      readSaga: "original",
+      writeSaga: "sequel",
+    });
+
+    expect(events.join("\n")).toContain("**Provider attempts:**");
+    expect(events.join("\n")).toContain("- OpenAI ❌ (blocked by moderation)");
+    expect(events.some((event) => event.startsWith("close:"))).toBe(false);
+    expect(payloads).toEqual([
+      expect.objectContaining({
+        error: "Generation failed",
+        read_saga: "original",
+        status: "failure",
+        write_saga: "sequel",
+      }),
+    ]);
   });
 });

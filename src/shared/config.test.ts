@@ -155,7 +155,6 @@ describe("request-scoped AppConfig", () => {
         issueBody,
         issueNumber: "823",
         repo: "henrikgrubbe/memes",
-        slackWebhookUrl: "https://slack.com/webhook",
       }),
     );
 
