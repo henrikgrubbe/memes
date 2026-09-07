@@ -44,7 +44,8 @@ The worker:
 - validates the queue envelope and target repository;
 - parses the Slack fields and Saga directives from the issue body;
 - generates an image or performs a write-only Saga update;
-- publishes images under `memes/<memeId>.jpg` in Object Storage;
+- publishes images under `memes/<memeId>.jpg` using the Standard One Zone
+  (`ONEZONE_IA`) Object Storage class;
 - updates GitHub and Slack;
 - returns `503` for retryable infrastructure and delivery failures;
 - acknowledges malformed messages and terminal generation failures with `200`.
@@ -61,7 +62,7 @@ identity. The worker derives a stable meme UUID from that identity.
 - An existing image object is the success receipt.
 - Images use conditional writes, so concurrent attempts converge on one object.
 - Terminal generation failures use a private conditional
-  `terminal-outcomes/<memeId>.json` receipt.
+  `terminal-outcomes/<memeId>.json` receipt in the same One Zone class.
 - Saga writes atomically commit `context/<saga>.md` and a minimal receipt under
   `.github/meme-worker/saga-folds/`.
 - Issue completion comments carry a hidden delivery marker.

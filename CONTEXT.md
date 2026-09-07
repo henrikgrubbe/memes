@@ -62,13 +62,15 @@ owns issue comments/closure and Saga commits. The worker creates request-scoped
 prompt, and Saga helpers.
 
 Hosted images use deterministic `memes/<memeId>.jpg` keys in a Scaleway Object
-Storage bucket. `HeadObject` is the publication gate; a missing object is
-generated and written with `If-None-Match: *`, and `412` means another worker
-won. The image carries bounded provider/cost/usage metadata so retries can form
-a correct degraded notification without another provider call. Terminal
-generation failures have no image receipt, so a private conditional
-`terminal-outcomes/<memeId>.json` record prevents repeated provider calls during
-notification retries. Successful images never get a sidecar.
+Storage bucket using the Standard One Zone (`ONEZONE_IA`) class. `HeadObject` is
+the publication gate; a missing object is generated and written with
+`If-None-Match: *`, and `412` means another worker won. The image carries
+bounded provider/cost/usage metadata so retries can form a correct degraded
+notification without another provider call. Terminal generation failures have
+no image receipt, so a private conditional
+`terminal-outcomes/<memeId>.json` record in the same storage class prevents
+repeated provider calls during notification retries. Successful images never
+get a sidecar.
 
 Slack notification and an optional Saga update run independently in parallel:
 a failure in either branch does not interrupt the other, but still makes the
