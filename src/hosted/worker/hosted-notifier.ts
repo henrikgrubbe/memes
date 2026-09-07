@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Clock, Effect, Schema } from "effect";
 import type { AppConfig } from "../../shared/config.js";
 import { NotificationError } from "../../shared/errors.js";
 import type { HistoryEntry } from "../../shared/history.js";
@@ -11,6 +11,7 @@ import type {
 
 interface SuccessCommentParams {
   readonly channel: string;
+  readonly elapsed: Elapsed | null;
   readonly generationPrompt?: string;
   readonly history: ReadonlyArray<HistoryEntry>;
   readonly imageUrl: string;
@@ -20,6 +21,58 @@ interface SuccessCommentParams {
   readonly requester: string;
   readonly slackLink: string;
 }
+
+// How long the request took end to end, from the moment ingress accepted the
+// webhook to the moment the worker reports completion. Measured against the
+// task's own `requestedAt` stamp, so it survives queue wait and retries.
+interface Elapsed {
+  readonly seconds: number;
+  readonly text: string;
+}
+
+const formatElapsed = (totalSeconds: number): string => {
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) {
+    return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes === 0
+    ? `${hours}h`
+    : `${hours}h ${remainingMinutes}m`;
+};
+
+// Defensive: `requestedAt` crosses a queue boundary and is optional on the wire,
+// so an absent, unparseable, or clock-skewed value simply omits the timing
+// rather than rendering nonsense like "-3s".
+const elapsedSince = (
+  requestedAt: string | null,
+  nowMillis: number,
+): Elapsed | null => {
+  if (requestedAt == null) {
+    return null;
+  }
+  const startedAt = Date.parse(requestedAt);
+  if (Number.isNaN(startedAt)) {
+    return null;
+  }
+  const elapsedMillis = nowMillis - startedAt;
+  if (elapsedMillis < 0) {
+    return null;
+  }
+  const seconds = Math.round(elapsedMillis / 1000);
+  return { seconds, text: formatElapsed(seconds) };
+};
+
+const elapsedCommentLines = (elapsed: Elapsed | null): ReadonlyArray<string> =>
+  elapsed == null ? [] : [`**Took:** ${elapsed.text}`];
+
+const elapsedSlackFields = (elapsed: Elapsed | null) =>
+  elapsed == null ? {} : { duration_seconds: elapsed.seconds };
 
 const formatCostCents = (metadata?: GenerationMetadata): string | null => {
   const costCents = metadata?.costCents;
@@ -59,6 +112,7 @@ const renderProviderAttempts = (
 
 const successComment = ({
   channel,
+  elapsed,
   generationPrompt,
   history,
   imageUrl,
@@ -99,6 +153,7 @@ const successComment = ({
       : [`**Revised prompt:** ${inlineCode(revisedPrompt)}`]),
     ...(usageSummary == null ? [] : [`**Usage:** ${usageSummary}`]),
     ...(costCents == null ? [] : [`**Estimated cost:** ${costCents}`]),
+    ...elapsedCommentLines(elapsed),
     ``,
     `**Provider attempts:**`,
     ...renderProviderAttempts(history),
@@ -107,12 +162,14 @@ const successComment = ({
 
 const failureComment = (
   message: string,
+  elapsed: Elapsed | null,
   history?: ReadonlyArray<HistoryEntry>,
 ): string => {
   const attempts =
     history != null && history.length > 0
       ? [``, `**Provider attempts:**`, ...renderProviderAttempts(history)]
       : [];
+  const timing = elapsed == null ? [] : [``, ...elapsedCommentLines(elapsed)];
   return [
     `❌ Meme generation failed.`,
     ``,
@@ -120,6 +177,7 @@ const failureComment = (
     message,
     "```",
     ...attempts,
+    ...timing,
   ].join("\n");
 };
 
@@ -193,6 +251,7 @@ const completionPlan = (
   config: AppConfig,
   branch: string,
   outcome: DeliveryOutcome,
+  elapsed: Elapsed | null,
 ): CompletionPlan => {
   switch (outcome.kind) {
     case "success": {
@@ -201,6 +260,7 @@ const completionPlan = (
         close: true,
         comment: successComment({
           channel: config.channel,
+          elapsed,
           generationPrompt: outcome.generationPrompt,
           history: outcome.history,
           imageUrl: outcome.imageUrl,
@@ -219,6 +279,7 @@ const completionPlan = (
           error: "",
           provider: outcome.provider,
           ...(costCents == null ? {} : { cost_cents: costCents }),
+          ...elapsedSlackFields(elapsed),
           ...sagaFields(
             config.readSaga ?? undefined,
             config.writeSaga ?? undefined,
@@ -242,6 +303,7 @@ const completionPlan = (
             ? ""
             : `Saga "${outcome.saga}" could not be updated.`,
           write_saga: outcome.saga,
+          ...elapsedSlackFields(elapsed),
         },
       };
     case "failure":
@@ -250,7 +312,7 @@ const completionPlan = (
         ...(outcome.closeNotPlanned
           ? { closeReason: "not_planned" as const }
           : {}),
-        comment: failureComment(outcome.message, outcome.history),
+        comment: failureComment(outcome.message, elapsed, outcome.history),
         slackPayload: {
           status: "failure",
           content_url: "",
@@ -258,6 +320,7 @@ const completionPlan = (
           requester: config.requester,
           channel: config.channel,
           error: outcome.message,
+          ...elapsedSlackFields(elapsed),
           ...sagaFields(
             config.readSaga ?? undefined,
             config.writeSaga ?? undefined,
@@ -274,7 +337,9 @@ export const deliverHostedCompletion = (
   slack: SlackSender,
 ): Effect.Effect<void, HostedGitHubError | NotificationError> =>
   Effect.gen(function* () {
-    const plan = completionPlan(config, repository.branch, outcome);
+    const now = yield* Clock.currentTimeMillis;
+    const elapsed = elapsedSince(config.requestedAt, now);
+    const plan = completionPlan(config, repository.branch, outcome, elapsed);
     yield* slack.post(plan.slackPayload);
     yield* repository.commentOnce(plan.comment);
     if (plan.close) {

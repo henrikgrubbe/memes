@@ -62,6 +62,16 @@ owns issue comments/closure and Saga commits. The worker creates request-scoped
 admission, image generation, Saga updates, completion, and retry disposition.
 Its completion module owns both GitHub comments and Slack payloads.
 
+The ingress stamps each task with a `requestedAt` timestamp at enqueue time,
+and the completion module reports the elapsed time to completion as a
+`**Took:**` line on the issue comment and a `duration_seconds` Slack field.
+Enqueue time is used rather than `issue.created_at` because a reopened issue
+keeps its original creation time, which would report a wildly inflated
+duration. `requestedAt` is optional on the wire: ingress and worker deploy
+independently, so a required field would let a new worker reject tasks
+published by an older ingress. Absent, unparseable, or clock-skewed stamps omit
+the timing rather than rendering a nonsense duration.
+
 Hosted images use deterministic `memes/<memeId>.jpg` keys in a Scaleway Object
 Storage bucket using the Standard One Zone (`ONEZONE_IA`) class. `HeadObject` is
 the delivery receipt gate; a missing receipt allows generation and is written with

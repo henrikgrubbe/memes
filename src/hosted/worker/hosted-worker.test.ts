@@ -200,6 +200,31 @@ describe("hosted queued delivery", () => {
     expect(result.body).toEqual({ disposition: "processed" });
   });
 
+  it("processes a task published by an older ingress that omits requestedAt", async () => {
+    // requestedAt is optional on the wire on purpose: ingress and worker deploy
+    // independently, so a task published before the worker rolls out (or by an
+    // ingress rolled back) must still be accepted. Making it required would
+    // recreate the #975/#976 outage.
+    const harness = makeHarness();
+    const handler = makeQueuedDeliveryHandler(
+      handlerDependencies(
+        harness,
+        successProviders(() => undefined),
+      ),
+    );
+
+    const { requestedAt: _omitted, ...withoutRequestedAt } = taskFor(
+      "A functional meme",
+    ) as Record<string, unknown>;
+    const result = await Effect.runPromise(
+      handler.handle(JSON.stringify(withoutRequestedAt)),
+    );
+
+    expect(withoutRequestedAt).not.toHaveProperty("requestedAt");
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({ disposition: "processed" });
+  });
+
   it("publishes a first no-Saga success before notifying", async () => {
     const harness = makeHarness();
     let providerPrompt = "";

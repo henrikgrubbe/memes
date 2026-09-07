@@ -1,4 +1,6 @@
-import { Effect, Exit } from "effect";
+import { Duration, Effect, Exit } from "effect";
+import * as TestClock from "effect/TestClock";
+import * as TestContext from "effect/TestContext";
 import { describe, expect, it } from "vitest";
 import type { AppConfig } from "../../shared/config.js";
 import type { DeliveryOutcome } from "./hosted-delivery.js";
@@ -14,6 +16,7 @@ const config: AppConfig = {
   requester: "U123",
   slackLink: "https://example.test/thread",
   writeSaga: "story",
+  requestedAt: null,
 };
 
 const makeRepository = (
@@ -317,5 +320,110 @@ describe("hosted notifier", () => {
         write_saga: "sequel",
       }),
     ]);
+  });
+});
+
+describe("hosted notifier elapsed time", () => {
+  const successOutcome: DeliveryOutcome = {
+    history: [{ provider: "OpenAI", status: "success" }],
+    imageUrl: "https://images.example/memes/meme-1.jpg",
+    kind: "success",
+    memeId: "meme-1",
+    prompt: "Prompt",
+    provider: "OpenAI",
+  };
+
+  // TestClock starts at epoch 0, so a task stamped at epoch 0 plus a fixed
+  // advance gives an exact, non-flaky elapsed time.
+  const captureAfter = (
+    advanceMillis: number,
+    outcome: DeliveryOutcome,
+    requestedAt: string | null,
+  ) => {
+    let events: ReadonlyArray<string> = [];
+    let payloads: ReadonlyArray<unknown> = [];
+    const test = Effect.gen(function* () {
+      yield* TestClock.adjust(Duration.millis(advanceMillis));
+      yield* deliverHostedCompletion(
+        { ...config, requestedAt },
+        outcome,
+        makeRepository((event) => {
+          events = [...events, event];
+        }),
+        {
+          post: (payload) =>
+            Effect.sync(() => {
+              payloads = [...payloads, payload];
+            }),
+        },
+      );
+    });
+    return Effect.runPromise(
+      test.pipe(Effect.provide(TestContext.TestContext)),
+    ).then(() => ({ events, payloads }));
+  };
+
+  const epoch = "1970-01-01T00:00:00.000Z";
+
+  it("reports elapsed time in the issue comment and the Slack payload", async () => {
+    const { events, payloads } = await captureAfter(
+      90_000,
+      successOutcome,
+      epoch,
+    );
+
+    expect(events.join("\n")).toContain("**Took:** 1m 30s");
+    expect(payloads).toEqual([
+      expect.objectContaining({ duration_seconds: 90 }),
+    ]);
+  });
+
+  it("formats sub-minute, multi-minute, and multi-hour durations", async () => {
+    const seconds = await captureAfter(42_000, successOutcome, epoch);
+    expect(seconds.events.join("\n")).toContain("**Took:** 42s");
+
+    const hours = await captureAfter(7_500_000, successOutcome, epoch);
+    expect(hours.events.join("\n")).toContain("**Took:** 2h 5m");
+  });
+
+  it("reports elapsed time on failures too", async () => {
+    const { events, payloads } = await captureAfter(
+      30_000,
+      { closeNotPlanned: false, kind: "failure", message: "Generation failed" },
+      epoch,
+    );
+
+    expect(events.join("\n")).toContain("**Took:** 30s");
+    expect(payloads).toEqual([
+      expect.objectContaining({ duration_seconds: 30 }),
+    ]);
+  });
+
+  it("omits timing when the task carries no requestedAt stamp", async () => {
+    const { events, payloads } = await captureAfter(
+      90_000,
+      successOutcome,
+      null,
+    );
+
+    expect(events.join("\n")).not.toContain("**Took:**");
+    expect(payloads[0]).not.toHaveProperty("duration_seconds");
+  });
+
+  it("omits timing rather than rendering a negative or nonsense duration", async () => {
+    const unparseable = await captureAfter(
+      90_000,
+      successOutcome,
+      "not-a-timestamp",
+    );
+    expect(unparseable.events.join("\n")).not.toContain("**Took:**");
+
+    const skewed = await captureAfter(
+      0,
+      successOutcome,
+      "1970-01-01T00:01:00.000Z",
+    );
+    expect(skewed.events.join("\n")).not.toContain("**Took:**");
+    expect(skewed.payloads[0]).not.toHaveProperty("duration_seconds");
   });
 });

@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { Effect, Exit } from "effect";
+import { DateTime, Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   handleGitHubWebhook,
@@ -83,8 +83,26 @@ describe("handleGitHubWebhook", () => {
         issueNumber: "42",
         issueBody,
         repo: "owner/repo",
+        requestedAt: expect.any(String),
       },
     ]);
+  });
+
+  it("stamps requestedAt at enqueue time rather than reusing issue.created_at", async () => {
+    // issue.created_at is the *original* creation time, so a reopened issue
+    // would report a wildly inflated duration. The stamp must be "now".
+    const before = DateTime.toEpochMillis(DateTime.unsafeNow());
+    const { tasks } = await run();
+    const after = DateTime.toEpochMillis(DateTime.unsafeNow());
+
+    const requestedAt = tasks[0]?.requestedAt;
+    expect(requestedAt).toBeDefined();
+    const stamped = DateTime.toEpochMillis(
+      DateTime.unsafeMake(String(requestedAt)),
+    );
+    expect(stamped).toBeGreaterThanOrEqual(before - 1000);
+    expect(stamped).toBeLessThanOrEqual(after + 1000);
+    expect(String(requestedAt)).not.toContain("2020");
   });
 
   it("rejects an invalid signature before queueing", async () => {

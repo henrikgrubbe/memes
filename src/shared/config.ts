@@ -10,18 +10,21 @@ export interface AppConfig {
   readonly slackLink: string;
   readonly readSaga: string | null;
   readonly writeSaga: string | null;
+  readonly requestedAt: string | null;
 }
 
 interface RequestAppConfigInput {
   readonly issueBody: string;
   readonly issueNumber: string;
   readonly repo: string;
+  readonly requestedAt?: string | undefined;
 }
 
 export const makeRequestAppConfig = ({
   issueBody,
   issueNumber,
   repo,
+  requestedAt,
 }: RequestAppConfigInput) =>
   parseIssueBody(issueBody).pipe(
     Effect.map((fields) => {
@@ -35,6 +38,7 @@ export const makeRequestAppConfig = ({
         slackLink: fields.link,
         readSaga: directives.readSaga,
         writeSaga: directives.writeSaga,
+        requestedAt: requestedAt ?? null,
       } satisfies AppConfig;
     }),
   );

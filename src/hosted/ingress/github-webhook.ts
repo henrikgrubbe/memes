@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { Context, Data, Effect, Layer, Schema } from "effect";
+import { Context, Data, DateTime, Effect, Layer, Schema } from "effect";
 import { MemeRequestTask } from "../task.js";
 
 const SUPPORTED_ACTIONS = new Set(["opened", "reopened"]);
@@ -128,11 +128,17 @@ export const handleGitHubWebhook = (
       return yield* invalid(400, "Issue body is required");
     }
 
+    // Stamped here rather than taken from issue.created_at: a "reopened" issue
+    // keeps its original creation time, which would report a wildly inflated
+    // duration. Enqueue time measures what the pipeline actually controls.
+    const requestedAt = yield* DateTime.now;
+
     const task = yield* Schema.decodeUnknown(MemeRequestTask)({
       deliveryId: request.deliveryId,
       issueBody: payload.issue.body,
       issueNumber: String(payload.issue.number),
       repo: payload.repository.full_name,
+      requestedAt: DateTime.formatIso(requestedAt),
     }).pipe(
       Effect.mapError(
         () =>
