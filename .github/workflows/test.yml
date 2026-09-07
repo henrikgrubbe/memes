@@ -169,7 +169,6 @@ jobs:
           if [[ "$runtime" == "ingress" ]]; then
             configuration=(
               --env GITHUB_WEBHOOK_SECRET=ci-dummy
-              --env HOSTED_INGRESS_MODE=off
               --env SQS_ACCESS_KEY=ci-dummy
               --env SQS_ENDPOINT=https://sqs.invalid
               --env SQS_QUEUE_URL=https://sqs.invalid/queue
@@ -188,7 +187,6 @@ jobs:
               --env OBJECT_STORAGE_REGION=nl-ams
               --env OBJECT_STORAGE_SECRET_KEY=ci-dummy
               --env SLACK_WEBHOOK_URL=https://example.invalid/webhook
-              --env WORKER_MODE=diagnostic
             )
           fi
 

@@ -1,28 +1,21 @@
 # memes
 
-Meme requests can run through the CLI/GitHub Actions path or the hosted
-Scaleway path. The `MEME_PROCESSING_BACKEND` repository variable selects the
-active backend.
+Meme requests are processed by a Scaleway-hosted webhook, FIFO queue, and
+worker.
 
 ## Repository layout
 
-| Path                  | Responsibility                                    |
-| --------------------- | ------------------------------------------------- |
-| `src/shared`          | Generation, Saga, and notification formatting     |
-| `src/cli`             | GitHub Actions and local command adapters         |
-| `src/hosted/ingress`  | Signed GitHub webhook and FIFO queue publishing   |
-| `src/hosted/worker`   | Queue processing and hosted GitHub/Slack adapters |
-| `infra/scaleway`      | Infrastructure, runtime images, and deployment    |
-| `context` and `memes` | Generated Saga canon and meme output              |
+| Path                 | Responsibility                                      |
+| -------------------- | --------------------------------------------------- |
+| `src/shared`         | Generation, Saga, formatting, and shared interfaces |
+| `src/hosted/ingress` | Signed GitHub webhook and FIFO queue publishing     |
+| `src/hosted/worker`  | Queue processing and hosted GitHub/Slack adapters   |
+| `infra/scaleway`     | Infrastructure, runtime images, and deployment      |
+| `context`            | Generated Saga canon                                |
+| `memes`              | Historical images from the retired Actions backend  |
 
-The Scaleway-hosted webhook and queue worker are documented in
-[docs/hosting-webhook.md](docs/hosting-webhook.md). Initial infrastructure setup
-uses:
-
-```bash
-./infra/scaleway/setup.sh
-```
+Provisioning, deployment, and operations are documented in
+[docs/hosting-webhook.md](docs/hosting-webhook.md).
 
 After setup, merges to `main` deploy only affected hosted runtimes through the
-GitHub `production` Environment. Infrastructure remains inert by default and
-does not disable the Actions fallback.
+GitHub `production` Environment.

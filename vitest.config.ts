@@ -11,6 +11,7 @@ export default defineConfig({
         "src/**/*.test.ts",
         "src/**/*test-support.ts",
         "src/hosted/ingress/webhook-server.ts",
+        "src/hosted/worker/worker-app.ts",
         "src/hosted/worker/worker-server.ts",
       ],
       thresholds: {

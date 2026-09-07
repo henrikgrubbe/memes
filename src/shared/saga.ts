@@ -1,15 +1,15 @@
 import OpenAI from "openai";
-import { Context, Data, Effect, Layer } from "effect";
+import { Data, Effect } from "effect";
 
 // Hard cap on the image-generation prompt (matches the provider limit).
 export const MAX_PROMPT_CHARS = 4000;
 // Target ceiling for a saga's canon so it always leaves room for the prompt.
 export const MAX_CANON_CHARS = 3000;
 // Cheap text model used to fold each new meme into a saga's canon.
-const COMPRESSION_MODEL = "gpt-4o-mini";
+export const COMPRESSION_MODEL = "gpt-4o-mini";
 // Upper bound on compression output, so a runaway response can't balloon the
 // canon. ~4 chars/token, with headroom above MAX_CANON_CHARS.
-const MAX_CANON_TOKENS = 900;
+export const MAX_CANON_TOKENS = 900;
 // Directory (repo-relative) holding one markdown file per saga.
 export const CONTEXT_DIR = "context";
 
@@ -187,24 +187,6 @@ export function foldCanon<E>(
     ),
   );
 }
-
-// Deep interface: callers read a saga's canon or contribute new information;
-// compression, file I/O, git commit/push and contention handling live behind
-// the seam. Both methods are total; contribute reports whether the update landed.
-
-export interface SagaService {
-  readonly read: (saga: string) => Effect.Effect<string | null>;
-  readonly contribute: (saga: string, prompt: string) => Effect.Effect<boolean>;
-}
-
-export class SagaServiceTag extends Context.Tag("SagaService")<
-  SagaServiceTag,
-  SagaService
->() {}
-
-/** Build a Layer from a pre-constructed implementation (bypasses git/OpenAI). */
-export const makeSagaLayer = (impl: SagaService): Layer.Layer<SagaServiceTag> =>
-  Layer.succeed(SagaServiceTag, impl);
 
 class CompressionError extends Data.TaggedError("CompressionError")<{
   readonly detail: string;

@@ -5,6 +5,7 @@ import {
   handleGitHubWebhook,
   makeWebhookQueueLayer,
   verifyGitHubSignature,
+  WebhookQueueError,
   WebhookRequestError,
 } from "./github-webhook.js";
 import { failureOfType } from "../../shared/test-support.js";
@@ -40,7 +41,7 @@ const run = (
         tasks.push(task);
       }),
   });
-  const effect = handleGitHubWebhook(secret, "live", {
+  const effect = handleGitHubWebhook(secret, {
     body,
     deliveryId: options.deliveryId ?? "delivery-1",
     event: options.event ?? "issues",
@@ -134,51 +135,33 @@ describe("handleGitHubWebhook", () => {
     expect(tasks).toEqual([]);
   });
 
-  it("admits only explicitly labelled issues in canary mode", async () => {
-    const canaryBody = JSON.stringify({
-      action: "opened",
-      issue: {
-        number: 42,
-        body: issueBody,
-        labels: [{ name: "hosted-canary" }],
-      },
-      repository: { full_name: "owner/repo" },
-    });
-    const tasks: Array<MemeRequestTask> = [];
-    const layer = makeWebhookQueueLayer({
-      enqueue: (task) =>
-        Effect.sync(() => {
-          tasks.push(task);
-        }),
-    });
-    const request = {
-      deliveryId: "delivery-1",
-      event: "issues",
-    };
-    const ignored = await Effect.runPromise(
-      handleGitHubWebhook(secret, "canary", {
-        ...request,
-        body: payload,
-        signature: signature(payload),
-      }).pipe(Effect.provide(layer)),
-    );
-    const queued = await Effect.runPromise(
-      handleGitHubWebhook(secret, "canary", {
-        ...request,
-        body: canaryBody,
-        signature: signature(canaryBody),
-      }).pipe(Effect.provide(layer)),
-    );
+  it("rejects malformed issue payloads", async () => {
+    const { exit, tasks } = await run("{");
 
-    expect(ignored.disposition).toBe("ignored");
-    expect(queued.disposition).toBe("queued");
-    expect(tasks).toHaveLength(1);
+    expect(failureOfType(exit, WebhookRequestError).message).toBe(
+      "Invalid issue webhook payload",
+    );
+    expect(tasks).toEqual([]);
   });
 
-  it("ignores all issues when hosted ingress is off", async () => {
-    const tasks: Array<MemeRequestTask> = [];
-    const result = await Effect.runPromise(
-      handleGitHubWebhook(secret, "off", {
+  it("rejects issues without a body", async () => {
+    const missingBody = JSON.stringify({
+      action: "opened",
+      issue: { number: 42, body: null },
+      repository: { full_name: "owner/repo" },
+    });
+    const { exit, tasks } = await run(missingBody);
+
+    expect(failureOfType(exit, WebhookRequestError).message).toBe(
+      "Issue body is required",
+    );
+    expect(tasks).toEqual([]);
+  });
+
+  it("surfaces queue failures", async () => {
+    const queueError = new WebhookQueueError({ detail: "queue unavailable" });
+    const exit = await Effect.runPromise(
+      handleGitHubWebhook(secret, {
         body: payload,
         deliveryId: "delivery-1",
         event: "issues",
@@ -186,16 +169,15 @@ describe("handleGitHubWebhook", () => {
       }).pipe(
         Effect.provide(
           makeWebhookQueueLayer({
-            enqueue: (task) =>
-              Effect.sync(() => {
-                tasks.push(task);
-              }),
+            enqueue: () => Effect.fail(queueError),
           }),
         ),
+        Effect.exit,
       ),
     );
 
-    expect(result.disposition).toBe("ignored");
-    expect(tasks).toEqual([]);
+    expect(failureOfType(exit, WebhookQueueError).message).toBe(
+      "queue unavailable",
+    );
   });
 });

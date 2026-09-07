@@ -1,5 +1,4 @@
-import * as ConfigError from "effect/ConfigError";
-import { Config, Context, Effect, Layer, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { parseSagaDirectives } from "./saga-directives.js";
 
 export interface AppConfig {
@@ -13,40 +12,6 @@ export interface AppConfig {
   readonly readSaga: string | null;
   readonly writeSaga: string | null;
 }
-
-export class AppConfigService extends Context.Tag("AppConfigService")<
-  AppConfigService,
-  AppConfig
->() {}
-
-const loadAppConfig = Effect.gen(function* () {
-  const env = yield* Config.all({
-    repo: Config.string("REPO"),
-    slackWebhookUrl: Config.string("SLACK_WEBHOOK_URL"),
-    issueNumber: Config.string("ISSUE_NUMBER"),
-    issueBody: Config.string("ISSUE_BODY"),
-  });
-  const fields = yield* parseIssueBody(env.issueBody).pipe(
-    Effect.mapError((error) =>
-      ConfigError.InvalidData(["ISSUE_BODY"], error.message),
-    ),
-  );
-  const directives = parseSagaDirectives(fields.message);
-
-  return {
-    issueNumber: env.issueNumber,
-    repo: env.repo,
-    slackWebhookUrl: env.slackWebhookUrl,
-    requester: fields.sender,
-    memePrompt: directives.prompt,
-    channel: fields.channel,
-    slackLink: fields.link,
-    readSaga: directives.readSaga,
-    writeSaga: directives.writeSaga,
-  } satisfies AppConfig;
-});
-
-export const AppConfigLayer = Layer.effect(AppConfigService, loadAppConfig);
 
 interface RequestAppConfigInput {
   readonly issueBody: string;

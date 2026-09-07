@@ -12,8 +12,4 @@ object_storage_provisioning_principal = "user_id:00000000-0000-0000-0000-0000000
 # Optional override. The default includes the project ID and is globally unique.
 # object_storage_bucket_name = "memes-example-images"
 
-# Safe deployment defaults:
-deploy_containers      = false
-worker_trigger_enabled = false
-hosted_ingress_mode    = "off"
-worker_mode            = "diagnostic"
+# The request queue retains messages for 24 hours by default.

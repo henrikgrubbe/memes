@@ -1,12 +1,6 @@
-import { ConfigProvider, Effect, Exit } from "effect";
+import { Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";
-import {
-  AppConfigLayer,
-  AppConfigService,
-  IssueFields,
-  makeRequestAppConfig,
-  parseIssueBody,
-} from "./config.js";
+import { IssueFields, makeRequestAppConfig, parseIssueBody } from "./config.js";
 import { failureOrThrow } from "./test-support.js";
 
 const run = (body: string) =>
@@ -151,51 +145,26 @@ describe("parseIssueBody", () => {
   });
 });
 
-describe("AppConfigLayer", () => {
-  it("parses saga directives from the issue message", async () => {
+describe("request-scoped AppConfig", () => {
+  it("builds config from a queued task without changing process environment", async () => {
     const issueBody =
-      "sender: hhb\nmessage: read:origin make a sequel write:next\nchannel: #memes\nlink: https://slack.com/x";
-    const provider = ConfigProvider.fromMap(
-      new Map([
-        ["REPO", "henrikgrubbe/memes"],
-        ["SLACK_WEBHOOK_URL", "https://slack.com/webhook"],
-        ["ISSUE_NUMBER", "823"],
-        ["ISSUE_BODY", issueBody],
-      ]),
-    );
+      "sender: hhb\nmessage: saga:origin make a sequel\nchannel: #memes\nlink: https://slack.com/x";
+
     const config = await Effect.runPromise(
-      AppConfigService.pipe(
-        Effect.provide(AppConfigLayer),
-        Effect.withConfigProvider(provider),
-      ),
+      makeRequestAppConfig({
+        issueBody,
+        issueNumber: "823",
+        repo: "henrikgrubbe/memes",
+        slackWebhookUrl: "https://slack.com/webhook",
+      }),
     );
 
-    expect(config.memePrompt).toBe("make a sequel");
-    expect(config.readSaga).toBe("origin");
-    expect(config.writeSaga).toBe("next");
-  });
-
-  describe("request-scoped AppConfig", () => {
-    it("builds config from a queued task without changing process environment", async () => {
-      const issueBody =
-        "sender: hhb\nmessage: saga:origin make a sequel\nchannel: #memes\nlink: https://slack.com/x";
-
-      const config = await Effect.runPromise(
-        makeRequestAppConfig({
-          issueBody,
-          issueNumber: "823",
-          repo: "henrikgrubbe/memes",
-          slackWebhookUrl: "https://slack.com/webhook",
-        }),
-      );
-
-      expect(config).toMatchObject({
-        issueNumber: "823",
-        memePrompt: "make a sequel",
-        readSaga: "origin",
-        repo: "henrikgrubbe/memes",
-        writeSaga: "origin",
-      });
+    expect(config).toMatchObject({
+      issueNumber: "823",
+      memePrompt: "make a sequel",
+      readSaga: "origin",
+      repo: "henrikgrubbe/memes",
+      writeSaga: "origin",
     });
   });
 });

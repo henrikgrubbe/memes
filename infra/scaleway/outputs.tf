@@ -78,36 +78,26 @@ output "operations_sqs_secret_key" {
 }
 
 output "ingress_endpoint" {
-  description = "Public ingress endpoint, after phase two."
-  value       = var.deploy_containers ? scaleway_container.ingress[0].public_endpoint : null
+  description = "Public ingress endpoint."
+  value       = scaleway_container.ingress.public_endpoint
 }
 
 output "worker_endpoint" {
-  description = "Worker endpoint for health and trigger diagnostics."
-  value       = var.deploy_containers ? scaleway_container.worker[0].public_endpoint : null
+  description = "Private worker endpoint."
+  value       = scaleway_container.worker.public_endpoint
 }
 
 output "ingress_container_id" {
   description = "Ingress container ID used by application deployment automation."
-  value       = var.deploy_containers ? split("/", scaleway_container.ingress[0].id)[1] : null
+  value       = split("/", scaleway_container.ingress.id)[1]
 }
 
 output "worker_container_id" {
   description = "Worker container ID used by application deployment automation."
-  value       = var.deploy_containers ? split("/", scaleway_container.worker[0].id)[1] : null
+  value       = split("/", scaleway_container.worker.id)[1]
 }
 
 output "worker_trigger_id" {
-  description = "Queue trigger ID when explicitly enabled."
-  value       = var.worker_trigger_enabled ? scaleway_container_trigger.worker[0].id : null
-}
-
-output "safe_cutover_state" {
-  description = "Current routing state visible after every apply."
-  value = {
-    actions_backend_managed_by_opentofu = false
-    ingress_mode                        = var.hosted_ingress_mode
-    worker_mode                         = var.worker_mode
-    worker_trigger_enabled              = var.worker_trigger_enabled
-  }
+  description = "Queue trigger ID."
+  value       = scaleway_container_trigger.worker.id
 }
