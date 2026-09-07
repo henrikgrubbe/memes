@@ -38,7 +38,7 @@ const taskFor = (
 });
 
 const requestFor = (task: Readonly<Record<string, unknown>>): string =>
-  encode({ body: encode(task) });
+  encode(task);
 
 const storedSuccess: DeliveryOutcome = {
   history: [{ provider: "OpenAI", status: "success" }],
@@ -179,6 +179,27 @@ const handlerDependencies = (
 });
 
 describe("hosted queued delivery", () => {
+  it("accepts the raw SQS message body Scaleway's queue trigger actually posts, with no wrapping envelope", async () => {
+    // Regression for the #975/#976 incident: Scaleway's queue trigger invokes
+    // the container with the queue message content as the literal HTTP
+    // request body, not wrapped in a `{ body: ... }` envelope. A prior
+    // "simplification" assumed such a wrapper existed, silently rejecting
+    // every real delivery.
+    const harness = makeHarness();
+    const handler = makeQueuedDeliveryHandler(
+      handlerDependencies(
+        harness,
+        successProviders(() => undefined),
+      ),
+    );
+
+    const requestBody = JSON.stringify(taskFor("A functional meme"));
+    const result = await Effect.runPromise(handler.handle(requestBody));
+
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({ disposition: "processed" });
+  });
+
   it("publishes a first no-Saga success before notifying", async () => {
     const harness = makeHarness();
     let providerPrompt = "";
@@ -407,7 +428,7 @@ describe("hosted queued delivery", () => {
     expect(harness.events()).toContain("github:close");
   });
 
-  it("rejects malformed envelopes, invalid task identities, repositories, and issue bodies", async () => {
+  it("rejects malformed payloads, invalid task identities, repositories, and issue bodies", async () => {
     const harness = makeHarness();
     const handler = makeQueuedDeliveryHandler(handlerDependencies(harness));
     const invalidRequests = [
