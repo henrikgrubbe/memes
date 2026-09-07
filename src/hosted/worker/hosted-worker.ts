@@ -313,11 +313,8 @@ interface QueuedDeliveryDependencies {
 
 type QueuedDeliveryError = ConfigError | HostedTaskError | WorkerMessageError;
 
-const QueueEnvelope = Schema.Struct({
-  body: Schema.String,
-});
-
-const decodeEnvelope = Schema.decodeUnknown(Schema.parseJson(QueueEnvelope));
+// Scaleway's SQS-triggered container invocation posts the raw queue message
+// body directly as the HTTP request body — there is no wrapping envelope.
 const decodeEmbeddedTask = Schema.decodeUnknown(
   Schema.parseJson(MemeRequestTaskSchema),
 );
@@ -330,12 +327,7 @@ const invalidMessage = () =>
 const decodeQueuedTask = (
   requestBody: string,
 ): Effect.Effect<MemeRequestTask, WorkerMessageError> =>
-  decodeEnvelope(requestBody).pipe(
-    Effect.mapError(invalidMessage),
-    Effect.flatMap((envelope) =>
-      decodeEmbeddedTask(envelope.body).pipe(Effect.mapError(invalidMessage)),
-    ),
-  );
+  decodeEmbeddedTask(requestBody).pipe(Effect.mapError(invalidMessage));
 
 const rejectMessage = (
   error: WorkerMessageError,
