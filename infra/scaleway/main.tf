@@ -367,4 +367,10 @@ resource "scaleway_container_trigger" "worker" {
     project_id = var.project_id
     region     = var.region
   }
+
+  lifecycle {
+    # The provider requires these when creating the trigger but omits them when
+    # reading it back, which otherwise causes perpetual replacement plans.
+    ignore_changes = [sqs[0].project_id, sqs[0].region]
+  }
 }
