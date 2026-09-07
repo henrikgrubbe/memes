@@ -37,13 +37,13 @@ contribution can add, correct, replace, resolve, invalidate, or remove facts
 from the canon. The result stays under `MAX_CANON_CHARS` (3000) so a canon plus
 the prompt always fits the image prompt cap (`MAX_PROMPT_CHARS`, 4000). If the
 model is unavailable the write falls back to a raw capped append, so a meme is
-never lost. Concurrent writes to the same saga serialize via `git pull
---rebase` + re-derive (see `src/shared/saga.ts` and `src/cli/saga.ts`).
+never lost. Concurrent writes to the same saga serialize through GitHub
+ref-conflict retries and re-derivation.
 
 Relevant code: `src/shared/saga.ts` (interface, compression, prompt assembly),
-`src/cli/saga.ts` (filesystem/git adapter), `src/shared/saga-directives.ts`
-(`parseSagaDirectives`), `src/shared/config.ts` (configuration wiring), and
-`src/cli/generate-meme.ts` (pipeline wiring).
+`src/shared/saga-directives.ts` (`parseSagaDirectives`),
+`src/shared/config.ts` (request configuration), and
+`src/hosted/worker/hosted-worker.ts` (pipeline wiring).
 
 ## Hosted processing
 
@@ -59,8 +59,7 @@ publishes work to Scaleway Queues. The worker module lives in
 its Object Storage adapter publishes new hosted JPEGs, while its GitHub adapter
 owns issue comments/closure and Saga commits. The worker creates request-scoped
 `AppConfig` and directly orchestrates these adapters around the shared provider,
-prompt, and Saga helpers. The CLI and GitHub Actions layers retain their
-filesystem, git, GitHub CLI, curl, and GitHub-hosted image behavior.
+prompt, and Saga helpers.
 
 Hosted images use deterministic `memes/<memeId>.jpg` keys in a Scaleway Object
 Storage bucket. `HeadObject` is the publication gate; a missing object is
@@ -84,17 +83,10 @@ persistence, and Slack I/O failures remain retryable. Deployment is defined in
 `infra/scaleway`: OpenTofu owns infrastructure, while GitHub Actions builds
 immutable runtime images and records deployments through the protected
 `production` Environment.
-Its safe defaults are ingress off, worker diagnostic, queue trigger absent, and
-GitHub Actions authoritative. The workflow remains in place permanently and is
-selected unless repository variable `MEME_PROCESSING_BACKEND` is exactly
-`hosted`. Issues created with the `hosted-canary` label are excluded from
-Actions and are the only deliveries admitted by canary ingress, preventing one
-request from running in both backends.
 
-Cutover pauses upstream intake, detaches the trigger, changes Actions authority,
-opens live ingress so the queue can buffer, then activates the live worker at
-maximum scale one. Rollback reverses those gates and assigns each buffered
-delivery to exactly one backend. Scaleway's full trigger envelope,
-acknowledgement timing, retry delay, DLQ interaction, and private-container
-compatibility remain live-canary facts rather than assumed guarantees.
+The hosted route is the only request processor: every valid opened or reopened
+issue is queued and every valid queued task is processed. Maintenance pauses
+the upstream Slack intake rather than switching runtime modes or backends. The
+request queue retains messages for 24 hours.
+
 See `docs/hosting-webhook.md`.

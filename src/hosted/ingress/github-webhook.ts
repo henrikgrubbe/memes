@@ -4,8 +4,6 @@ import { MemeRequestTask } from "../task.js";
 
 const SUPPORTED_ACTIONS = new Set(["opened", "reopened"]);
 
-export type HostedIngressMode = "canary" | "live" | "off";
-
 export class WebhookRequestError extends Data.TaggedError(
   "WebhookRequestError",
 )<{
@@ -57,18 +55,12 @@ const IssueWebhook = Schema.Struct({
   issue: Schema.Struct({
     number: Schema.Number,
     body: Schema.NullOr(Schema.String),
-    labels: Schema.Array(
-      Schema.Struct({
-        name: Schema.String,
-      }),
-    ),
   }),
   repository: Schema.Struct({
     full_name: Schema.NonEmptyTrimmedString,
   }),
 });
 
-const CANARY_LABEL = "hosted-canary";
 const decodeIssueWebhook = Schema.decodeUnknown(Schema.parseJson(IssueWebhook));
 
 const invalid = (
@@ -100,7 +92,6 @@ export function verifyGitHubSignature(
 
 export const handleGitHubWebhook = (
   secret: string,
-  mode: HostedIngressMode,
   request: GitHubWebhookRequest,
 ): Effect.Effect<
   GitHubWebhookResult,
@@ -131,13 +122,6 @@ export const handleGitHubWebhook = (
     );
 
     if (!SUPPORTED_ACTIONS.has(payload.action)) {
-      return { status: 202, disposition: "ignored" };
-    }
-    if (
-      mode === "off" ||
-      (mode === "canary" &&
-        !payload.issue.labels.some(({ name }) => name === CANARY_LABEL))
-    ) {
       return { status: 202, disposition: "ignored" };
     }
     if (payload.issue.body == null || payload.issue.body.trim() === "") {

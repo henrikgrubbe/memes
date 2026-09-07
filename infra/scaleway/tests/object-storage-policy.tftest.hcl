@@ -1,4 +1,10 @@
 mock_provider "scaleway" {
+  mock_resource "scaleway_container" {
+    defaults = {
+      id = "nl-ams/33333333-3333-3333-3333-333333333333"
+    }
+  }
+
   mock_resource "scaleway_iam_application" {
     defaults = {
       id = "11111111-1111-1111-1111-111111111111"
@@ -16,8 +22,12 @@ mock_provider "time" {
 }
 
 variables {
+  github_fine_grained_pat               = "github_pat_test"
+  github_webhook_secret                 = "test-secret"
   object_storage_provisioning_principal = "user_id:22222222-2222-2222-2222-222222222222"
+  openai_api_key                        = "test-key"
   project_id                            = "00000000-0000-0000-0000-000000000000"
+  slack_webhook_url                     = "https://example.invalid/webhook"
 }
 
 run "rejects_invalid_provisioning_principal" {

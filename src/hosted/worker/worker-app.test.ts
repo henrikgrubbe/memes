@@ -1,7 +1,12 @@
 import { Effect, Layer, Schema } from "effect";
 import { describe, expect, it } from "vitest";
+import { failureOfType } from "../../shared/test-support.js";
 import { HostedGitHubError } from "./hosted-github.js";
-import { handleWorkerRequest, WorkerProcessorTag } from "./worker-app.js";
+import {
+  handleWorkerRequest,
+  makeWorkerTaskConfig,
+  WorkerProcessorTag,
+} from "./worker-handler.js";
 import { WorkerMessageError } from "./worker-transport.js";
 
 const encode = Schema.encodeSync(Schema.parseJson(Schema.Unknown));
@@ -15,6 +20,13 @@ const validRequest = encode({
     repo: "owner/repo",
   }),
 });
+const validTask = {
+  deliveryId: "delivery-1",
+  issueBody:
+    "sender: U1\nmessage: Test\nchannel: C1\nlink: https://example.test",
+  issueNumber: "42",
+  repo: "owner/repo",
+} as const;
 
 describe("worker HTTP handling", () => {
   it("acknowledges permanently malformed messages without retrying", async () => {
@@ -28,10 +40,7 @@ describe("worker HTTP handling", () => {
     });
 
     const result = await Effect.runPromise(
-      handleWorkerRequest("{", {
-        diagnosticResponse: "success",
-        mode: "live",
-      }).pipe(Effect.provide(processor)),
+      handleWorkerRequest("{").pipe(Effect.provide(processor)),
     );
 
     expect(result.status).toBe(200);
@@ -51,15 +60,45 @@ describe("worker HTTP handling", () => {
     });
 
     const result = await Effect.runPromise(
-      handleWorkerRequest(validRequest, {
-        diagnosticResponse: "success",
-        mode: "live",
-      }).pipe(Effect.provide(processor)),
+      handleWorkerRequest(validRequest).pipe(Effect.provide(processor)),
     );
 
     expect(result).toEqual({
       body: { disposition: "retry" },
       status: 503,
+    });
+  });
+
+  describe("worker task configuration", () => {
+    const config = {
+      allowedRepository: "owner/repo",
+      slackWebhookUrl: "https://example.test/webhook",
+    };
+
+    it("rejects tasks for another repository", async () => {
+      const exit = await Effect.runPromise(
+        makeWorkerTaskConfig(
+          { ...validTask, repo: "another/repository" },
+          config,
+        ).pipe(Effect.exit),
+      );
+
+      expect(failureOfType(exit, WorkerMessageError).message).toBe(
+        "Queued task repository is not allowed",
+      );
+    });
+
+    it("rejects invalid Slack issue bodies", async () => {
+      const exit = await Effect.runPromise(
+        makeWorkerTaskConfig(
+          { ...validTask, issueBody: "invalid" },
+          config,
+        ).pipe(Effect.exit),
+      );
+
+      expect(failureOfType(exit, WorkerMessageError).message).toBe(
+        "Queued issue body is invalid",
+      );
     });
   });
 
@@ -74,10 +113,7 @@ describe("worker HTTP handling", () => {
     });
 
     const result = await Effect.runPromise(
-      handleWorkerRequest(validRequest, {
-        diagnosticResponse: "success",
-        mode: "live",
-      }).pipe(Effect.provide(processor)),
+      handleWorkerRequest(validRequest).pipe(Effect.provide(processor)),
     );
 
     expect(result).toEqual({
@@ -89,44 +125,17 @@ describe("worker HTTP handling", () => {
     });
   });
 
-  it("acknowledges diagnostics without invoking the processor", async () => {
-    let calls = 0;
+  it("returns a retryable status when the processor defects", async () => {
     const processor = Layer.succeed(WorkerProcessorTag, {
-      process: () =>
-        Effect.sync(() => {
-          calls += 1;
-          return "processed" as const;
-        }),
+      process: () => Effect.die("unexpected defect"),
     });
 
     const result = await Effect.runPromise(
-      handleWorkerRequest(validRequest, {
-        diagnosticResponse: "success",
-        mode: "diagnostic",
-      }).pipe(Effect.provide(processor)),
+      handleWorkerRequest(validRequest).pipe(Effect.provide(processor)),
     );
 
     expect(result).toEqual({
-      body: { disposition: "diagnostic-acknowledged" },
-      status: 200,
-    });
-    expect(calls).toBe(0);
-  });
-
-  it("can request a diagnostic redelivery without side effects", async () => {
-    const processor = Layer.succeed(WorkerProcessorTag, {
-      process: () => Effect.die("processor must not run"),
-    });
-
-    const result = await Effect.runPromise(
-      handleWorkerRequest(validRequest, {
-        diagnosticResponse: "retry",
-        mode: "diagnostic",
-      }).pipe(Effect.provide(processor)),
-    );
-
-    expect(result).toEqual({
-      body: { disposition: "diagnostic-retry" },
+      body: { disposition: "retry" },
       status: 503,
     });
   });

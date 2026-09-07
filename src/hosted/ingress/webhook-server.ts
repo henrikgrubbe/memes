@@ -7,10 +7,7 @@ import {
 } from "@effect/platform";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Config, Context, Effect, Layer } from "effect";
-import {
-  handleGitHubWebhook,
-  type HostedIngressMode,
-} from "./github-webhook.js";
+import { handleGitHubWebhook } from "./github-webhook.js";
 import { ScalewayQueueLive } from "./scaleway-queue.js";
 
 class WebhookSecret extends Context.Tag("WebhookSecret")<
@@ -18,31 +15,16 @@ class WebhookSecret extends Context.Tag("WebhookSecret")<
   string
 >() {}
 
-class WebhookMode extends Context.Tag("WebhookMode")<
-  WebhookMode,
-  HostedIngressMode
->() {}
-
 const WebhookSecretLive = Layer.effect(
   WebhookSecret,
   Config.string("GITHUB_WEBHOOK_SECRET"),
-);
-
-const WebhookModeLive = Layer.effect(
-  WebhookMode,
-  Config.literal(
-    "off",
-    "canary",
-    "live",
-  )("HOSTED_INGRESS_MODE").pipe(Config.withDefault("off")),
 );
 
 const githubWebhook = Effect.gen(function* () {
   const request = yield* HttpServerRequest.HttpServerRequest;
   const body = yield* request.text;
   const secret = yield* WebhookSecret;
-  const mode = yield* WebhookMode;
-  const result = yield* handleGitHubWebhook(secret, mode, {
+  const result = yield* handleGitHubWebhook(secret, {
     body,
     deliveryId: request.headers["x-github-delivery"],
     event: request.headers["x-github-event"],
@@ -82,9 +64,7 @@ const ServerLive = NodeHttpServer.layerConfig(() => createServer(), {
 
 const ApiLive = router.pipe(
   HttpServer.serve(),
-  Layer.provide(
-    Layer.mergeAll(ScalewayQueueLive, WebhookSecretLive, WebhookModeLive),
-  ),
+  Layer.provide(Layer.mergeAll(ScalewayQueueLive, WebhookSecretLive)),
   Layer.provide(ServerLive),
 );
 

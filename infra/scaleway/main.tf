@@ -9,6 +9,21 @@ locals {
   worker_image  = "${scaleway_registry_namespace.main.endpoint}/worker:${var.image_tag}"
 }
 
+moved {
+  from = scaleway_container.ingress[0]
+  to   = scaleway_container.ingress
+}
+
+moved {
+  from = scaleway_container.worker[0]
+  to   = scaleway_container.worker
+}
+
+moved {
+  from = scaleway_container_trigger.worker[0]
+  to   = scaleway_container_trigger.worker
+}
+
 resource "scaleway_registry_namespace" "main" {
   name        = "${var.name_prefix}-containers"
   description = "Public images for hosted meme processing"
@@ -223,8 +238,6 @@ resource "scaleway_container_namespace" "main" {
 }
 
 resource "scaleway_container" "ingress" {
-  count = var.deploy_containers ? 1 : 0
-
   name               = "${var.name_prefix}-webhook"
   description        = "Signed GitHub webhook ingress"
   namespace_id       = scaleway_container_namespace.main.id
@@ -241,10 +254,9 @@ resource "scaleway_container" "ingress" {
   tags               = local.common_tags
 
   environment_variables = {
-    HOSTED_INGRESS_MODE = var.hosted_ingress_mode
-    SQS_ENDPOINT        = scaleway_mnq_sqs.main.endpoint
-    SQS_QUEUE_URL       = scaleway_mnq_sqs_queue.requests.url
-    SQS_REGION          = var.region
+    SQS_ENDPOINT  = scaleway_mnq_sqs.main.endpoint
+    SQS_QUEUE_URL = scaleway_mnq_sqs_queue.requests.url
+    SQS_REGION    = var.region
   }
 
   secret_environment_variables = {
@@ -267,14 +279,12 @@ resource "scaleway_container" "ingress" {
 
     precondition {
       condition     = var.github_webhook_secret != null
-      error_message = "github_webhook_secret is required when deploy_containers=true."
+      error_message = "github_webhook_secret is required."
     }
   }
 }
 
 resource "scaleway_container" "worker" {
-  count = var.deploy_containers ? 1 : 0
-
   name               = "${var.name_prefix}-worker"
   description        = "FIFO queue-triggered meme worker"
   namespace_id       = scaleway_container_namespace.main.id
@@ -282,7 +292,7 @@ resource "scaleway_container" "worker" {
   registry_sha256    = var.image_tag
   port               = 8080
   protocol           = "http1"
-  privacy            = var.worker_privacy
+  privacy            = "private"
   min_scale          = 0
   max_scale          = 1
   cpu_limit          = 1120
@@ -298,8 +308,6 @@ resource "scaleway_container" "worker" {
     OBJECT_STORAGE_ENDPOINT        = local.object_storage_endpoint
     OBJECT_STORAGE_PUBLIC_BASE_URL = local.object_storage_public_url
     OBJECT_STORAGE_REGION          = local.object_storage_region
-    WORKER_DIAGNOSTIC_RESPONSE     = var.worker_diagnostic_response
-    WORKER_MODE                    = var.worker_mode
   }
 
   secret_environment_variables = merge(
@@ -335,17 +343,15 @@ resource "scaleway_container" "worker" {
         var.openai_api_key != null,
         var.slack_webhook_url != null,
       ])
-      error_message = "GitHub, OpenAI, and Slack worker secrets are required when deploy_containers=true."
+      error_message = "GitHub, OpenAI, and Slack worker secrets are required."
     }
   }
 }
 
 resource "scaleway_container_trigger" "worker" {
-  count = var.deploy_containers && var.worker_trigger_enabled ? 1 : 0
-
   name         = "${var.name_prefix}-queue-worker"
   description  = "Deliver FIFO requests to the worker"
-  container_id = scaleway_container.worker[0].id
+  container_id = scaleway_container.worker.id
   region       = var.region
 
   destination_config {

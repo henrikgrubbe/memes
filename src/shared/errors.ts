@@ -32,22 +32,6 @@ export class RateLimitError extends Data.TaggedError("RateLimitError")<{
   }
 }
 
-export class PushFailedError extends Data.TaggedError("PushFailedError")<{
-  readonly attempts: number;
-}> {
-  public get message(): string {
-    return `Failed to push after ${this.attempts} attempts`;
-  }
-}
-
-export class MemePublishError extends Data.TaggedError("MemePublishError")<{
-  readonly detail: string;
-}> {
-  public get message(): string {
-    return this.detail;
-  }
-}
-
 export class NotificationError extends Data.TaggedError("NotificationError")<{
   readonly detail: string;
 }> {
