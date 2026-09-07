@@ -93,8 +93,16 @@ const success = {
 describe("hosted Object Storage", () => {
   it("publishes immutable JPEGs conditionally with compact retry metadata", async () => {
     const memory = makeMemoryApi();
+    const receipt = await Effect.runPromise(
+      makeStore(memory.api).receiptFor("A meme"),
+    );
+    expect(receipt.status).toBe("missing");
+    if (receipt.status === "recorded") {
+      throw new Error("Expected a missing receipt");
+    }
     const outcome = await Effect.runPromise(
-      makeStore(memory.api).publishImage({
+      receipt.record({
+        kind: "image",
         image: Buffer.from("jpeg"),
         outcome: success,
       }),
@@ -128,23 +136,35 @@ describe("hosted Object Storage", () => {
   it("reconstructs a degraded success from image metadata", async () => {
     const memory = makeMemoryApi();
     const store = makeStore(memory.api);
+    const missingReceipt = await Effect.runPromise(store.receiptFor("A meme"));
+    expect(missingReceipt.status).toBe("missing");
+    if (missingReceipt.status === "recorded") {
+      throw new Error("Expected a missing receipt");
+    }
     await Effect.runPromise(
-      store.publishImage({ image: Buffer.from("jpeg"), outcome: success }),
+      missingReceipt.record({
+        kind: "image",
+        image: Buffer.from("jpeg"),
+        outcome: success,
+      }),
     );
 
-    const outcome = await Effect.runPromise(store.getOutcome("Current prompt"));
+    const receipt = await Effect.runPromise(store.receiptFor("Current prompt"));
 
-    expect(outcome).toEqual({
-      history: [{ provider: "OpenAI", status: "success" }],
-      imageUrl: "https://bucket.s3.nl-ams.scw.cloud/memes/meme-1.jpg",
-      kind: "success",
-      memeId: "meme-1",
-      metadata: {
-        costCents: 0.108,
-        usage: { inputTokens: 12, outputTokens: 34, totalTokens: 46 },
+    expect(receipt).toEqual({
+      status: "recorded",
+      outcome: {
+        history: [{ provider: "OpenAI", status: "success" }],
+        imageUrl: "https://bucket.s3.nl-ams.scw.cloud/memes/meme-1.jpg",
+        kind: "success",
+        memeId: "meme-1",
+        metadata: {
+          costCents: 0.108,
+          usage: { inputTokens: 12, outputTokens: 34, totalTokens: 46 },
+        },
+        prompt: "Current prompt",
+        provider: "OpenAI",
       },
-      prompt: "Current prompt",
-      provider: "OpenAI",
     });
   });
 
@@ -158,19 +178,29 @@ describe("hosted Object Storage", () => {
       getObject: () => Promise.reject(missing()),
       headObject: () => {
         heads += 1;
-        return Promise.resolve({ metadata: winnerMetadata });
+        return heads === 1
+          ? Promise.reject(missing())
+          : Promise.resolve({ metadata: winnerMetadata });
       },
       putObject: () => Promise.reject(preconditionFailed()),
     };
 
+    const receipt = await Effect.runPromise(
+      makeStore(api).receiptFor("A meme"),
+    );
+    expect(receipt.status).toBe("missing");
+    if (receipt.status === "recorded") {
+      throw new Error("Expected a missing receipt");
+    }
     const outcome = await Effect.runPromise(
-      makeStore(api).publishImage({
+      receipt.record({
+        kind: "image",
         image: Buffer.from("loser"),
         outcome: success,
       }),
     );
 
-    expect(heads).toBe(1);
+    expect(heads).toBe(2);
     expect(outcome.provider).toBe("xAI");
     expect(outcome.history).toEqual([{ provider: "xAI", status: "success" }]);
   });
@@ -192,16 +222,19 @@ describe("hosted Object Storage", () => {
         "memes/meme-1.jpg": { body: Buffer.from("jpeg"), metadata },
       });
 
-      const outcome = await Effect.runPromise(
-        makeStore(memory.api).getOutcome("Current prompt"),
+      const receipt = await Effect.runPromise(
+        makeStore(memory.api).receiptFor("Current prompt"),
       );
 
-      expect(outcome).toMatchObject({
-        history: [{ provider: "unknown", status: "success" }],
-        kind: "success",
-        provider: "unknown",
+      expect(receipt).toMatchObject({
+        status: "recorded",
+        outcome: {
+          history: [{ provider: "unknown", status: "success" }],
+          kind: "success",
+          provider: "unknown",
+        },
       });
-      expect(outcome).not.toHaveProperty("metadata");
+      expect(receipt).not.toHaveProperty("outcome.metadata");
     },
   );
 
@@ -215,10 +248,17 @@ describe("hosted Object Storage", () => {
       message: "Provider unavailable",
     };
 
-    await Effect.runPromise(store.recordTerminalFailure("Prompt", failure));
-    const resumed = await Effect.runPromise(store.getOutcome("Prompt"));
+    const missingReceipt = await Effect.runPromise(store.receiptFor("Prompt"));
+    expect(missingReceipt.status).toBe("missing");
+    if (missingReceipt.status === "recorded") {
+      throw new Error("Expected a missing receipt");
+    }
+    await Effect.runPromise(
+      missingReceipt.record({ kind: "terminal-failure", outcome: failure }),
+    );
+    const resumed = await Effect.runPromise(store.receiptFor("Prompt"));
 
-    expect(resumed).toEqual(failure);
+    expect(resumed).toEqual({ status: "recorded", outcome: failure });
     expect(memory.puts).toHaveLength(1);
     expect(memory.puts[0]).toMatchObject({
       cacheControl: "no-store",

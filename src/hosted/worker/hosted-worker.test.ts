@@ -1,45 +1,51 @@
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import type { AppConfig } from "../../shared/config.js";
 import {
   ModerationBlockedError,
   NotificationError,
 } from "../../shared/errors.js";
-import { makeProvidersLayer } from "../../shared/providers.js";
-import { failureOfType } from "../../shared/test-support.js";
-import type { DeliveryOutcome } from "./hosted-delivery.js";
+import {
+  makeProvidersLayer,
+  ProvidersServiceTag,
+} from "../../shared/providers.js";
+import type {
+  DeliveryOutcome,
+  SuccessDeliveryOutcome,
+} from "./hosted-delivery.js";
 import {
   HostedGitHubError,
   type HostedGitHubRepository,
 } from "./hosted-github.js";
 import type { SlackSender } from "./hosted-notifier.js";
-import type { HostedObjectStorage } from "./hosted-object-storage.js";
-import { runHostedTask } from "./hosted-worker.js";
+import type {
+  DeliveryReceiptStore,
+  PublishImagePlan,
+  RecordFailurePlan,
+} from "./hosted-object-storage.js";
+import { makeQueuedDeliveryHandler } from "./hosted-worker.js";
 
-const task = {
+const encode = Schema.encodeSync(Schema.parseJson(Schema.Unknown));
+
+const taskFor = (
+  message: string,
+  overrides: Readonly<Record<string, unknown>> = {},
+) => ({
   deliveryId: "delivery-1",
-  issueBody: "unused",
+  issueBody: `sender: U123\nmessage: ${message}\nchannel: C123\nlink: https://example.test/thread`,
   issueNumber: "42",
   repo: "owner/repo",
-};
+  ...overrides,
+});
 
-const config: AppConfig = {
-  channel: "C123",
-  issueNumber: "42",
-  memePrompt: "A functional meme",
-  readSaga: "story",
-  repo: "owner/repo",
-  requester: "U123",
-  slackLink: "https://example.test/thread",
-  writeSaga: "story",
-};
+const requestFor = (task: Readonly<Record<string, unknown>>): string =>
+  encode({ body: encode(task) });
 
 const storedSuccess: DeliveryOutcome = {
   history: [{ provider: "OpenAI", status: "success" }],
   imageUrl: "https://images.example/memes/meme-1.jpg",
   kind: "success",
   memeId: "meme-1",
-  prompt: config.memePrompt,
+  prompt: "A functional meme",
   provider: "OpenAI",
 };
 
@@ -54,7 +60,7 @@ interface Harness {
   readonly events: () => ReadonlyArray<string>;
   readonly repository: HostedGitHubRepository;
   readonly slack: SlackSender;
-  readonly storage: HostedObjectStorage;
+  readonly storage: DeliveryReceiptStore;
 }
 
 const makeHarness = (
@@ -97,30 +103,41 @@ const makeHarness = (
         record("slack:post");
       }),
   };
-  const storage: HostedObjectStorage = {
-    getOutcome: () =>
-      Effect.sync(() => {
-        record("storage:get");
-        return outcome;
-      }),
-    publishImage: ({ outcome: generated }) =>
-      Effect.sync(() => {
+  function recordDelivery(
+    delivery: PublishImagePlan,
+  ): Effect.Effect<SuccessDeliveryOutcome>;
+  function recordDelivery(
+    delivery: RecordFailurePlan,
+  ): Effect.Effect<StoredOutcome>;
+  function recordDelivery(
+    delivery: PublishImagePlan | RecordFailurePlan,
+  ): Effect.Effect<StoredOutcome> {
+    return Effect.sync(() => {
+      if (delivery.kind === "image") {
         record("storage:put-image");
         const published = {
-          ...generated,
+          ...delivery.outcome,
           imageUrl: "https://images.example/memes/meme-1.jpg",
         };
         outcome = published;
         return published;
-      }),
-    recordTerminalFailure: (_prompt, failure) =>
+      }
+      record("storage:put-failure");
+      outcome = delivery.outcome;
+      return delivery.outcome;
+    });
+  }
+  const storage: DeliveryReceiptStore = {
+    receiptFor: () =>
       Effect.sync(() => {
-        record("storage:put-failure");
-        if (outcome?.kind === "success") {
-          return outcome;
+        record("storage:get");
+        if (outcome != null) {
+          return { status: "recorded" as const, outcome };
         }
-        outcome = failure;
-        return failure;
+        return {
+          status: "missing" as const,
+          record: recordDelivery,
+        };
       }),
   };
 
@@ -148,35 +165,41 @@ const successProviders = (
       }),
   });
 
-const dependencies = (harness: Harness) => ({
+const handlerDependencies = (
+  harness: Harness,
+  providers = successProviders(),
+) => ({
+  allowedRepository: "owner/repo",
   compressSaga: (_saga: string, canon: string, prompt: string) =>
     Effect.succeed(`${canon}\n- ${prompt}`),
-  repository: harness.repository,
+  providers: ProvidersServiceTag.pipe(Effect.provide(providers)),
+  repositoryFor: () => harness.repository,
   slack: harness.slack,
-  storage: harness.storage,
+  storageFor: () => harness.storage,
 });
 
-describe("hosted worker orchestration", () => {
+describe("hosted queued delivery", () => {
   it("publishes a first no-Saga success before notifying", async () => {
     const harness = makeHarness();
     let providerPrompt = "";
-
-    const result = await Effect.runPromise(
-      runHostedTask(
-        task,
-        { ...config, readSaga: null, writeSaga: null },
-        dependencies(harness),
-      ).pipe(
-        Effect.provide(
-          successProviders((prompt) => {
-            providerPrompt = prompt;
-          }),
-        ),
+    const handler = makeQueuedDeliveryHandler(
+      handlerDependencies(
+        harness,
+        successProviders((prompt) => {
+          providerPrompt = prompt;
+        }),
       ),
     );
 
-    expect(result).toBe("processed");
-    expect(providerPrompt).toBe(config.memePrompt);
+    const result = await Effect.runPromise(
+      handler.handle(requestFor(taskFor("A functional meme"))),
+    );
+
+    expect(result).toEqual({
+      body: { disposition: "processed" },
+      status: 200,
+    });
+    expect(providerPrompt).toBe("A functional meme");
     expect(harness.events()).toEqual([
       "storage:get",
       "storage:put-image",
@@ -193,22 +216,20 @@ describe("hosted worker orchestration", () => {
   it("resumes an existing image without calling a provider", async () => {
     const harness = makeHarness(storedSuccess);
     let providerCalls = 0;
-
-    const result = await Effect.runPromise(
-      runHostedTask(
-        task,
-        { ...config, readSaga: null, writeSaga: null },
-        dependencies(harness),
-      ).pipe(
-        Effect.provide(
-          successProviders(() => {
-            providerCalls += 1;
-          }),
-        ),
+    const handler = makeQueuedDeliveryHandler(
+      handlerDependencies(
+        harness,
+        successProviders(() => {
+          providerCalls += 1;
+        }),
       ),
     );
 
-    expect(result).toBe("resumed");
+    const result = await Effect.runPromise(
+      handler.handle(requestFor(taskFor("A functional meme"))),
+    );
+
+    expect(result.body["disposition"]).toBe("resumed");
     expect(providerCalls).toBe(0);
     expect(harness.events()).toEqual([
       "storage:get",
@@ -221,15 +242,17 @@ describe("hosted worker orchestration", () => {
   it("publishes and folds a read-and-write Saga delivery", async () => {
     const harness = makeHarness();
     let providerPrompt = "";
+    const handler = makeQueuedDeliveryHandler(
+      handlerDependencies(
+        harness,
+        successProviders((prompt) => {
+          providerPrompt = prompt;
+        }),
+      ),
+    );
 
     await Effect.runPromise(
-      runHostedTask(task, config, dependencies(harness)).pipe(
-        Effect.provide(
-          successProviders((prompt) => {
-            providerPrompt = prompt;
-          }),
-        ),
-      ),
+      handler.handle(requestFor(taskFor("saga:story A functional meme"))),
     );
 
     expect(providerPrompt).toContain("Existing canon");
@@ -251,30 +274,21 @@ describe("hosted worker orchestration", () => {
   it("processes and resumes a write-only Saga without storage or providers", async () => {
     const harness = makeHarness();
     let providerCalls = 0;
-    const writeOnly = { ...config, readSaga: null };
-    const deps = dependencies(harness);
-
-    const first = await Effect.runPromise(
-      runHostedTask(task, writeOnly, deps).pipe(
-        Effect.provide(
-          successProviders(() => {
-            providerCalls += 1;
-          }),
-        ),
+    const handler = makeQueuedDeliveryHandler(
+      handlerDependencies(
+        harness,
+        successProviders(() => {
+          providerCalls += 1;
+        }),
       ),
     );
-    const second = await Effect.runPromise(
-      runHostedTask(task, writeOnly, deps).pipe(
-        Effect.provide(
-          successProviders(() => {
-            providerCalls += 1;
-          }),
-        ),
-      ),
-    );
+    const request = requestFor(taskFor("write:story A functional meme"));
 
-    expect(first).toBe("processed");
-    expect(second).toBe("resumed");
+    const first = await Effect.runPromise(handler.handle(request));
+    const second = await Effect.runPromise(handler.handle(request));
+
+    expect(first.body["disposition"]).toBe("processed");
+    expect(second.body["disposition"]).toBe("resumed");
     expect(providerCalls).toBe(0);
     expect(harness.events().filter((event) => event === "storage:get")).toEqual(
       [],
@@ -304,21 +318,16 @@ describe("hosted worker orchestration", () => {
           ),
         ),
     });
-    const noSaga = { ...config, readSaga: null, writeSaga: null };
-
-    const first = await Effect.runPromise(
-      runHostedTask(task, noSaga, dependencies(harness)).pipe(
-        Effect.provide(providers),
-      ),
+    const handler = makeQueuedDeliveryHandler(
+      handlerDependencies(harness, providers),
     );
-    const second = await Effect.runPromise(
-      runHostedTask(task, noSaga, dependencies(harness)).pipe(
-        Effect.provide(providers),
-      ),
-    );
+    const request = requestFor(taskFor("A functional meme"));
 
-    expect(first).toBe("processed");
-    expect(second).toBe("resumed");
+    const first = await Effect.runPromise(handler.handle(request));
+    const second = await Effect.runPromise(handler.handle(request));
+
+    expect(first.body["disposition"]).toBe("processed");
+    expect(second.body["disposition"]).toBe("resumed");
     expect(providerCalls).toBe(1);
     expect(
       harness.events().filter((event) => event === "storage:put-failure"),
@@ -332,8 +341,8 @@ describe("hosted worker orchestration", () => {
   it("lets Saga persistence finish when Slack fails quickly", async () => {
     const harness = makeHarness();
     const slackFailed = await Effect.runPromise(Deferred.make<void>());
-    const deps = {
-      ...dependencies(harness),
+    const dependencies = {
+      ...handlerDependencies(harness),
       compressSaga: (_saga: string, canon: string, prompt: string) =>
         Deferred.await(slackFailed).pipe(Effect.as(`${canon}\n- ${prompt}`)),
       slack: {
@@ -348,16 +357,13 @@ describe("hosted worker orchestration", () => {
       },
     };
 
-    const exit = await Effect.runPromise(
-      runHostedTask(task, config, deps).pipe(
-        Effect.provide(successProviders()),
-        Effect.exit,
+    const result = await Effect.runPromise(
+      makeQueuedDeliveryHandler(dependencies).handle(
+        requestFor(taskFor("saga:story A functional meme")),
       ),
     );
 
-    expect(failureOfType(exit, NotificationError).message).toContain(
-      "Slack unavailable",
-    );
+    expect(result.status).toBe(503);
     expect(harness.events()).toContain(
       "github:saga:context/story.md:Existing canon\n- A functional meme",
     );
@@ -383,18 +389,84 @@ describe("hosted worker orchestration", () => {
           Effect.zipRight(harness.slack.post(payload)),
         ),
     };
+    const dependencies = {
+      ...handlerDependencies(harness),
+      repositoryFor: () => repository,
+      slack,
+    };
 
-    const exit = await Effect.runPromise(
-      runHostedTask(task, config, {
-        ...dependencies(harness),
-        repository,
-        slack,
-      }).pipe(Effect.provide(successProviders()), Effect.exit),
+    const result = await Effect.runPromise(
+      makeQueuedDeliveryHandler(dependencies).handle(
+        requestFor(taskFor("saga:story A functional meme")),
+      ),
     );
 
-    expect(failureOfType(exit, HostedGitHubError)).toBe(sagaError);
+    expect(result.status).toBe(503);
     expect(harness.events()).toContain("slack:post");
     expect(harness.events()).toContain("github:comment");
     expect(harness.events()).toContain("github:close");
+  });
+
+  it("rejects malformed envelopes, invalid task identities, repositories, and issue bodies", async () => {
+    const harness = makeHarness();
+    const handler = makeQueuedDeliveryHandler(handlerDependencies(harness));
+    const invalidRequests = [
+      "{",
+      requestFor(taskFor("A functional meme", { deliveryId: " " })),
+      requestFor(taskFor("A functional meme", { issueNumber: "0" })),
+      requestFor(taskFor("A functional meme", { repo: "owner" })),
+      requestFor(taskFor("A functional meme", { repo: "another/repository" })),
+      requestFor({
+        ...taskFor("A functional meme"),
+        issueBody: "invalid",
+      }),
+    ];
+
+    const results = await Promise.all(
+      invalidRequests.map((request) =>
+        Effect.runPromise(handler.handle(request)),
+      ),
+    );
+
+    expect(results.every(({ status }) => status === 200)).toBe(true);
+    expect(
+      results.every(({ body }) => body["disposition"] === "rejected"),
+    ).toBe(true);
+    expect(harness.events()).toEqual([]);
+  });
+
+  it("returns a retryable status for hosted failures and defects", async () => {
+    const harness = makeHarness();
+    const repository: HostedGitHubRepository = {
+      ...harness.repository,
+      readText: () =>
+        Effect.fail(
+          new HostedGitHubError({
+            detail: "temporary failure",
+            operation: "read saga",
+          }),
+        ),
+    };
+    const failed = makeQueuedDeliveryHandler({
+      ...handlerDependencies(harness),
+      repositoryFor: () => repository,
+    });
+    const defective = makeQueuedDeliveryHandler({
+      ...handlerDependencies(harness),
+      providers: Effect.die("unexpected defect"),
+    });
+    const request = requestFor(taskFor("saga:story A functional meme"));
+
+    const failedResult = await Effect.runPromise(failed.handle(request));
+    const defectiveResult = await Effect.runPromise(defective.handle(request));
+
+    expect(failedResult).toEqual({
+      body: { disposition: "retry" },
+      status: 503,
+    });
+    expect(defectiveResult).toEqual({
+      body: { disposition: "retry" },
+      status: 503,
+    });
   });
 });

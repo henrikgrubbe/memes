@@ -143,28 +143,43 @@ interface HostedObjectStorageOptions {
   readonly publicBaseUrl: string;
 }
 
-interface PublishImagePlan {
+export interface PublishImagePlan {
+  readonly kind: "image";
   readonly image: Uint8Array;
   readonly outcome: Omit<SuccessDeliveryOutcome, "imageUrl">;
 }
 
-export interface HostedObjectStorage {
-  readonly getOutcome: (
-    prompt: string,
-  ) => Effect.Effect<StoredDeliveryOutcome | null, HostedObjectStorageError>;
-  readonly publishImage: (
-    plan: PublishImagePlan,
-  ) => Effect.Effect<SuccessDeliveryOutcome, HostedObjectStorageError>;
-  readonly recordTerminalFailure: (
-    prompt: string,
-    outcome: FailureDeliveryOutcome,
-  ) => Effect.Effect<
-    SuccessDeliveryOutcome | FailureDeliveryOutcome,
-    HostedObjectStorageError
-  >;
+export interface RecordFailurePlan {
+  readonly kind: "terminal-failure";
+  readonly outcome: FailureDeliveryOutcome;
+}
+
+export interface MissingDeliveryReceipt {
+  readonly record: {
+    (
+      delivery: PublishImagePlan,
+    ): Effect.Effect<SuccessDeliveryOutcome, HostedObjectStorageError>;
+    (
+      delivery: RecordFailurePlan,
+    ): Effect.Effect<StoredDeliveryOutcome, HostedObjectStorageError>;
+  };
+  readonly status: "missing";
 }
 
 type StoredDeliveryOutcome = SuccessDeliveryOutcome | FailureDeliveryOutcome;
+
+export type DeliveryReceipt =
+  | MissingDeliveryReceipt
+  | {
+      readonly outcome: StoredDeliveryOutcome;
+      readonly status: "recorded";
+    };
+
+export interface DeliveryReceiptStore {
+  readonly receiptFor: (
+    prompt: string,
+  ) => Effect.Effect<DeliveryReceipt, HostedObjectStorageError>;
+}
 
 const errorStatus = (error: unknown): number | undefined => {
   if (!Predicate.isRecord(error)) {
@@ -323,7 +338,7 @@ export const makeHostedObjectStorage = ({
   deliveryId,
   memeId,
   publicBaseUrl,
-}: HostedObjectStorageOptions): HostedObjectStorage => {
+}: HostedObjectStorageOptions): DeliveryReceiptStore => {
   const imageKey = `${IMAGE_PREFIX}/${memeId}.jpg`;
   const failureKey = `${FAILURE_PREFIX}/${memeId}.json`;
   const imageUrl = publicUrl(publicBaseUrl, imageKey);
@@ -417,59 +432,93 @@ export const makeHostedObjectStorage = ({
       ),
     );
 
-  return {
-    getOutcome,
-    publishImage: ({ image, outcome }) =>
-      request(`put ${imageKey}`, () =>
-        api.putObject({
-          body: image,
-          bucket,
-          cacheControl: CACHE_CONTROL,
-          contentType: "image/jpeg",
-          ifNoneMatch: "*",
-          key: imageKey,
-          metadata: imageMetadata(outcome.provider, outcome.metadata),
-          storageClass: "ONEZONE_IA",
-        }),
-      ).pipe(
-        Effect.as({ ...outcome, imageUrl }),
-        Effect.catchIf(isPreconditionFailed, () =>
-          headImage(outcome.prompt).pipe(
-            Effect.filterOrFail(
-              (published): published is SuccessDeliveryOutcome =>
-                published != null,
-              () =>
-                new HostedObjectStorageError({
-                  detail: `Concurrent image winner ${imageKey} is not readable`,
-                  operation: `head ${imageKey}`,
-                }),
-            ),
+  const publishImage = ({
+    image,
+    outcome,
+  }: PublishImagePlan): Effect.Effect<
+    SuccessDeliveryOutcome,
+    HostedObjectStorageError
+  > =>
+    request(`put ${imageKey}`, () =>
+      api.putObject({
+        body: image,
+        bucket,
+        cacheControl: CACHE_CONTROL,
+        contentType: "image/jpeg",
+        ifNoneMatch: "*",
+        key: imageKey,
+        metadata: imageMetadata(outcome.provider, outcome.metadata),
+        storageClass: "ONEZONE_IA",
+      }),
+    ).pipe(
+      Effect.as({ ...outcome, imageUrl }),
+      Effect.catchIf(isPreconditionFailed, () =>
+        headImage(outcome.prompt).pipe(
+          Effect.filterOrFail(
+            (published): published is SuccessDeliveryOutcome =>
+              published != null,
+            () =>
+              new HostedObjectStorageError({
+                detail: `Concurrent image winner ${imageKey} is not readable`,
+                operation: `head ${imageKey}`,
+              }),
           ),
         ),
       ),
-    recordTerminalFailure: (prompt, outcome) =>
-      headImage(prompt).pipe(
-        Effect.flatMap((published) =>
-          published == null
-            ? request(`put ${failureKey}`, () =>
-                api.putObject({
-                  body: `${encodeJson({ deliveryId, memeId, outcome })}\n`,
-                  bucket,
-                  cacheControl: "no-store",
-                  contentType: "application/json",
-                  ifNoneMatch: "*",
-                  key: failureKey,
-                  storageClass: "ONEZONE_IA",
-                }),
-              ).pipe(
-                Effect.as<SuccessDeliveryOutcome | FailureDeliveryOutcome>(
-                  outcome,
-                ),
-                Effect.catchIf(isPreconditionFailed, () =>
-                  loadConcurrentWinner(prompt),
-                ),
-              )
-            : Effect.succeed(published),
+    );
+
+  const recordTerminalFailure = (
+    prompt: string,
+    outcome: FailureDeliveryOutcome,
+  ): Effect.Effect<StoredDeliveryOutcome, HostedObjectStorageError> =>
+    headImage(prompt).pipe(
+      Effect.flatMap((published) =>
+        published == null
+          ? request(`put ${failureKey}`, () =>
+              api.putObject({
+                body: `${encodeJson({ deliveryId, memeId, outcome })}\n`,
+                bucket,
+                cacheControl: "no-store",
+                contentType: "application/json",
+                ifNoneMatch: "*",
+                key: failureKey,
+                storageClass: "ONEZONE_IA",
+              }),
+            ).pipe(
+              Effect.as<StoredDeliveryOutcome>(outcome),
+              Effect.catchIf(isPreconditionFailed, () =>
+                loadConcurrentWinner(prompt),
+              ),
+            )
+          : Effect.succeed(published),
+      ),
+    );
+
+  const missingReceipt = (prompt: string): MissingDeliveryReceipt => {
+    function record(
+      delivery: PublishImagePlan,
+    ): Effect.Effect<SuccessDeliveryOutcome, HostedObjectStorageError>;
+    function record(
+      delivery: RecordFailurePlan,
+    ): Effect.Effect<StoredDeliveryOutcome, HostedObjectStorageError>;
+    function record(
+      delivery: PublishImagePlan | RecordFailurePlan,
+    ): Effect.Effect<StoredDeliveryOutcome, HostedObjectStorageError> {
+      return delivery.kind === "image"
+        ? publishImage(delivery)
+        : recordTerminalFailure(prompt, delivery.outcome);
+    }
+
+    return { status: "missing", record };
+  };
+
+  return {
+    receiptFor: (prompt) =>
+      getOutcome(prompt).pipe(
+        Effect.map((outcome): DeliveryReceipt =>
+          outcome == null
+            ? missingReceipt(prompt)
+            : { status: "recorded", outcome },
         ),
       ),
   };

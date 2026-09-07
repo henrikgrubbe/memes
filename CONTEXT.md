@@ -43,7 +43,7 @@ ref-conflict retries and re-derivation.
 Relevant code: `src/shared/saga.ts` (interface, compression, prompt assembly),
 `src/shared/saga-directives.ts` (`parseSagaDirectives`),
 `src/shared/config.ts` (request configuration), and
-`src/hosted/worker/hosted-worker.ts` (pipeline wiring).
+`src/hosted/worker/hosted-worker.ts` (hosted processing).
 
 ## Hosted processing
 
@@ -58,12 +58,13 @@ publishes work to Scaleway Queues. The worker module lives in
 `src/hosted/worker`; its server exposes the native queue-trigger endpoint and
 its Object Storage adapter publishes new hosted JPEGs, while its GitHub adapter
 owns issue comments/closure and Saga commits. The worker creates request-scoped
-`AppConfig` and directly orchestrates these adapters around the shared provider,
-prompt, and Saga helpers.
+`AppConfig`; the hosted processing module owns queue decoding, request
+admission, image generation, Saga updates, completion, and retry disposition.
+Its completion module owns both GitHub comments and Slack payloads.
 
 Hosted images use deterministic `memes/<memeId>.jpg` keys in a Scaleway Object
 Storage bucket using the Standard One Zone (`ONEZONE_IA`) class. `HeadObject` is
-the publication gate; a missing object is generated and written with
+the delivery receipt gate; a missing receipt allows generation and is written with
 `If-None-Match: *`, and `412` means another worker won. The image carries
 bounded provider/cost/usage metadata so retries can form a correct degraded
 notification without another provider call. Terminal generation failures have
