@@ -361,6 +361,7 @@ const processQueuedTask = (
             issueBody: task.issueBody,
             issueNumber: task.issueNumber,
             repo: task.repo,
+            requestedAt: task.requestedAt,
           }).pipe(
             Effect.mapError(
               () =>
