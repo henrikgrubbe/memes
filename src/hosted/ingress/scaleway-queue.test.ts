@@ -59,4 +59,21 @@ describe("makeScalewayQueue", () => {
       "unavailable",
     );
   });
+
+  it("surfaces stalled message publication before GitHub times out", async () => {
+    const queue = makeScalewayQueue(
+      {
+        send: () => Effect.runPromise(Effect.never),
+      },
+      config,
+      { publishTimeout: "10 millis" },
+    );
+    const result = await Effect.runPromise(
+      queue.enqueue(task).pipe(Effect.exit),
+    );
+
+    expect(failureOfType(result, WebhookQueueError).message).toContain(
+      "timed out",
+    );
+  }, 200);
 });
