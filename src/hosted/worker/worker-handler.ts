@@ -22,16 +22,11 @@ export class WorkerProcessorTag extends Context.Tag("WorkerProcessor")<
   WorkerProcessor
 >() {}
 
-interface WorkerTaskConfig {
-  readonly allowedRepository: string;
-  readonly slackWebhookUrl: string;
-}
-
 export const makeWorkerTaskConfig = (
   task: MemeRequestTask,
-  config: WorkerTaskConfig,
+  allowedRepository: string,
 ): Effect.Effect<AppConfig, WorkerMessageError> =>
-  task.repo !== config.allowedRepository
+  task.repo !== allowedRepository
     ? Effect.fail(
         new WorkerMessageError({
           detail: "Queued task repository is not allowed",
@@ -41,7 +36,6 @@ export const makeWorkerTaskConfig = (
         issueBody: task.issueBody,
         issueNumber: task.issueNumber,
         repo: task.repo,
-        slackWebhookUrl: config.slackWebhookUrl,
       }).pipe(
         Effect.mapError(
           () =>

@@ -10,15 +10,11 @@ import {
 } from "./notification-format.js";
 
 describe("formatSuccessComment", () => {
-  it("includes repo-backed image links without crashing", () => {
+  it("links to the hosted image", () => {
     const comment = formatSuccessComment({
       channel: "#memes",
       history: [{ provider: "xAI", status: "success" }],
-      imageSourceLabel: "memes/meme-123.jpg",
-      imageSourceUrl:
-        "https://github.com/henrikgrubbe/memes/blob/main/memes/meme-123.jpg",
-      imageUrl:
-        "https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg",
+      imageUrl: "https://images.example/memes/meme-123.jpg",
       provider: "xAI",
       requestedPrompt: "make a meme",
       requester: "U123",
@@ -26,13 +22,10 @@ describe("formatSuccessComment", () => {
     });
 
     expect(comment).toContain(
-      "https://github.com/henrikgrubbe/memes/blob/main/memes/meme-123.jpg",
+      "🎉 [Meme generated](https://images.example/memes/meme-123.jpg) _(xAI)_",
     );
     expect(comment).toContain(
-      "Meme generated and committed to [memes/meme-123.jpg]",
-    );
-    expect(comment).toContain(
-      "https://raw.githubusercontent.com/henrikgrubbe/memes/refs/heads/main/memes/meme-123.jpg",
+      "![Generated meme](https://images.example/memes/meme-123.jpg)",
     );
   });
 

@@ -5,8 +5,6 @@ interface SuccessCommentParams {
   readonly channel: string;
   readonly generationPrompt?: string;
   readonly history: ReadonlyArray<HistoryEntry>;
-  readonly imageSourceLabel?: string;
-  readonly imageSourceUrl?: string;
   readonly imageUrl: string;
   readonly metadata?: GenerationMetadata;
   readonly provider: string;
@@ -75,8 +73,6 @@ export function formatSuccessComment({
   channel,
   generationPrompt,
   history,
-  imageSourceLabel,
-  imageSourceUrl,
   imageUrl,
   metadata,
   provider,
@@ -105,13 +101,9 @@ export function formatSuccessComment({
       ? null
       : `${metadata.usage.inputTokens} input, ${metadata.usage.outputTokens} output, ${metadata.usage.totalTokens} total tokens`;
   const costCents = formatCostCents(metadata);
-  const publication =
-    imageSourceUrl == null
-      ? `🎉 [Meme generated](${imageUrl})${providerNote}`
-      : `🎉 Meme generated and committed to [${imageSourceLabel ?? "the repository"}](${imageSourceUrl})${providerNote}`;
 
   return [
-    publication,
+    `🎉 [Meme generated](${imageUrl})${providerNote}`,
     ``,
     `![Generated meme](${imageUrl})`,
     ``,

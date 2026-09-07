@@ -70,16 +70,13 @@ describe("worker HTTP handling", () => {
   });
 
   describe("worker task configuration", () => {
-    const config = {
-      allowedRepository: "owner/repo",
-      slackWebhookUrl: "https://example.test/webhook",
-    };
+    const allowedRepository = "owner/repo";
 
     it("rejects tasks for another repository", async () => {
       const exit = await Effect.runPromise(
         makeWorkerTaskConfig(
           { ...validTask, repo: "another/repository" },
-          config,
+          allowedRepository,
         ).pipe(Effect.exit),
       );
 
@@ -92,7 +89,7 @@ describe("worker HTTP handling", () => {
       const exit = await Effect.runPromise(
         makeWorkerTaskConfig(
           { ...validTask, issueBody: "invalid" },
-          config,
+          allowedRepository,
         ).pipe(Effect.exit),
       );
 

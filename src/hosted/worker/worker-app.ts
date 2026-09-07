@@ -92,10 +92,7 @@ const WorkerProcessorLive = Layer.effect(
 
     return {
       process: (task) =>
-        makeWorkerTaskConfig(task, {
-          allowedRepository: runtime.githubRepository,
-          slackWebhookUrl: runtime.slackWebhookUrl,
-        }).pipe(
+        makeWorkerTaskConfig(task, runtime.githubRepository).pipe(
           Effect.flatMap((config) => {
             const repository = makeHostedGitHubRepository({
               api,

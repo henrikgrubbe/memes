@@ -31,7 +31,6 @@ const config: AppConfig = {
   repo: "owner/repo",
   requester: "U123",
   slackLink: "https://example.test/thread",
-  slackWebhookUrl: "https://example.test/hook",
   writeSaga: "story",
 };
 
