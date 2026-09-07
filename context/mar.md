@@ -1,20 +1,20 @@
 # Team MAR
 
-**Setting**: At Bankdata ("meme-fabrikken"), chaos reigns with ceramic cup painting, DHL runs, and ServiceNow training. Hidden in photos are a mexican lasagne and amusing incidents at Yamas, where Rune escapes golf enthusiasts to Jeppe’s cups. Skjoldbamsen Sigurd navigates ceramics while humorously dealing with Graves disease. Laban, Alpaca Alpár’s tuxedo cat, meows while curling into a "kanelsnegl." In a tense moment, Sæbekassebilen is stolen from the office at night. The trophy competition, initially filled with overblown tension, ended up in Carsten's driveway at 16:25 as this week's ultimate dad gift. Træmand Brandborg, Sebastian, Sigurd, Rune, Henrik OK, and Alpaca Alpár await their burnt ceramics, haunted by Lærke, Nicolai, and Steffen. The battle for the trophy concluded not in a dark, criminal underworld drama but rather in the simplistic act of Carsten bringing it home.
+**Setting**: At Bankdata ("meme-fabrikken"), chaos thrives with ceramic cup painting, DHL runs, and ServiceNow training. Highlights include a Mexican lasagne, amusing nights at Yamas, and Rune escaping golf enthusiasts to Jeppe’s cups. Skjoldbamsen Sigurd manages ceramics while humorously addressing Graves disease. Laban, Alpaca Alpár’s tuxedo cat, meows and curls into a "kanelsnegl." Tensions rise when Sæbekassebilen is stolen from the office at night. The trophy competition ends in Carsten's driveway at 16:25, humorously revealing the trophy's fate. Team MAR recently introduced a news segment featuring their pets reporting daily headlines. 
 
 **Characters**:
-- **Rune (Beaufillou)**: Flamboyant "Viking of Vibes," with a baguette, promises a green PEPE cake.
-- **Persille-Sebastian**: "Parsley Avenger," quirky developer, tired of meetings and full of bewildering questions.
-- **Elmast Jeppe**: "Metal Elmast," punning on electricity and offering hiding spots in cups.
-- **Alpaca Alpár**: Comical alpaca delivering comic relief through mischief.
-- **Laban**: Tuxedo cat of Alpaca, meows exclusively and curls into a "kanelsnegl."
-- **Skjoldbamsen Sigurd**: "Sigurd Newton," bear humorously embracing Graves disease and ceramics.
-- **Træmand Brandborg**: Wooden elf and ceramics rival to Rune, known for coriander jokes.
-- **Henrik (Henrik OK)**: The world's okayest Henrik, often overshadowed by Rune.
-- **Gitte**: Assertive product owner challenging Sebastian’s curiosity.
-- **Teslatrubaduren Morten**: Meme festival enthusiast with a hybrid passion for hunting and music.
-- **Lærke**: Ghost in pink offering afterlife tips.
-- **Nicolai**: Ghost in an oversized suit in search of Faxe Kondi.
-- **Steffen**: Red-haired giant ghost who enjoys bananas with Nutella.
+- **Rune (Beaufillou)**: Flamboyant "Viking of Vibes," promises a green PEPE cake and hosts animal news.
+- **Persille-Sebastian**: "Parsley Avenger," quirky developer fatigued by meetings, raises tech issues.
+- **Elmast Jeppe**: "Metal Elmast," punks on electricity, updates on outages while hiding in cups.
+- **Alpaca Alpár**: Comedic alpaca and co-anchor of animal news, providing mischief and laughs.
+- **Laban**: Tuxedo cat, meows and curls into "kanelsnegl," shares weather updates based on mood.
+- **Skjoldbamsen Sigurd**: "Sigurd Newton," embraces Graves disease and ceramics; the expert in ceramic disaster news.
+- **Træmand Brandborg**: Wooden elf, Rune's ceramics rival; gives eco-tips and coriander jokes.
+- **Henrik (Henrik OK)**: The world's okayest Henrik, contributes optimistic mundane world news.
+- **Gitte**: Assertive product owner challenging Sebastian; reports workplace innovations.
+- **Teslatrubaduren Morten**: Meme festival enthusiast, covers latest crazes, balancing hunting and music.
+- **Lærke**: Ghost in pink, offers bizarre afterlife tips and spectral news.
+- **Nicolai**: Ghost in a suit, searches for Faxe Kondi, blending local drink news with humor.
+- **Steffen**: Red-haired giant ghost who enjoys bananas with Nutella; shares sweet segments and jokes.
 
-In the "mar" saga, Team MAR thrives on humor from their misadventures. Rune’s baking unfolds while Alpaca provides witty interjections. Anticipation for ceramics builds excitement, as Laban’s existential crisis deepens his character. Sigurd’s expertise and Sebastian’s fatigue keep spirits high amid Træmand Brandborg's chaos. The ghostly Lærke, Nicolai’s Faxe Kondi quest, and the theft of Sæbekassebilen add intrigue, culminating with the humorous resolution of the trophy saga, revealing it as a simple delivery in Carsten’s driveway, rather than a dramatic showdown.
+In the "mar" saga, Team MAR humorously navigates misadventures while the animal news brings whimsical insights. Rune’s baking adventures and Alpaca’s witty comments create a lively dynamic. Anticipation builds for ceramics as Laban’s character deepens. Sigurd’s expertise and Sebastian’s reluctance maintain a humorous atmosphere. The ghostly Lærke and Nicolai add intrigue, while the theft of Sæbekassebilen and the trophy saga culminate in a lighthearted delivery in Carsten’s driveway, showcasing the humor in their chaotic lives.
