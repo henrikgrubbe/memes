@@ -60,6 +60,7 @@ interface PutObjectInput extends HeadObjectInput {
   readonly contentType: string;
   readonly ifNoneMatch: "*";
   readonly metadata?: Readonly<Record<string, string>>;
+  readonly storageClass: "ONEZONE_IA";
 }
 
 export interface ObjectStorageApi {
@@ -115,6 +116,7 @@ export const makeS3ObjectStorageApi = ({
       ifNoneMatch,
       key,
       metadata,
+      storageClass,
     }) =>
       client
         .send(
@@ -126,6 +128,7 @@ export const makeS3ObjectStorageApi = ({
             IfNoneMatch: ifNoneMatch,
             Key: key,
             Metadata: metadata,
+            StorageClass: storageClass,
           }),
         )
         .then(() => undefined),
@@ -426,6 +429,7 @@ export const makeHostedObjectStorage = ({
           ifNoneMatch: "*",
           key: imageKey,
           metadata: imageMetadata(outcome.provider, outcome.metadata),
+          storageClass: "ONEZONE_IA",
         }),
       ).pipe(
         Effect.as({ ...outcome, imageUrl }),
@@ -455,6 +459,7 @@ export const makeHostedObjectStorage = ({
                   contentType: "application/json",
                   ifNoneMatch: "*",
                   key: failureKey,
+                  storageClass: "ONEZONE_IA",
                 }),
               ).pipe(
                 Effect.as<SuccessDeliveryOutcome | FailureDeliveryOutcome>(

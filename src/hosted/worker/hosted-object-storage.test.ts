@@ -110,6 +110,7 @@ describe("hosted Object Storage", () => {
       contentType: "image/jpeg",
       ifNoneMatch: "*",
       key: "memes/meme-1.jpg",
+      storageClass: "ONEZONE_IA",
       metadata: {
         "meme-cost-microcents": "108000",
         "meme-input-tokens": "12",
@@ -224,6 +225,7 @@ describe("hosted Object Storage", () => {
       contentType: "application/json",
       ifNoneMatch: "*",
       key: "terminal-outcomes/meme-1.json",
+      storageClass: "ONEZONE_IA",
     });
   });
 });
