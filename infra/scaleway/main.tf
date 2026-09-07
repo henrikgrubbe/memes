@@ -3,7 +3,12 @@ locals {
   object_storage_bucket_name = coalesce(var.object_storage_bucket_name, substr("${var.name_prefix}-${var.project_id}-images", 0, 63))
   object_storage_region      = "nl-ams"
   object_storage_endpoint    = "https://s3.${local.object_storage_region}.scw.cloud"
-  object_storage_public_url  = "https://${local.object_storage_bucket_name}.s3.${local.object_storage_region}.scw.cloud"
+  # Path-style rather than virtual-hosted (`<bucket>.s3.<region>.scw.cloud`) so
+  # the public URL shares the endpoint hostname the S3 client already uses --
+  # the client is configured with force_path_style. Per-bucket subdomains are
+  # also prone to being blocked by DNS filters that leave the endpoint itself
+  # reachable.
+  object_storage_public_url = "${local.object_storage_endpoint}/${local.object_storage_bucket_name}"
 
   ingress_image = "${scaleway_registry_namespace.main.endpoint}/webhook:${var.image_tag}"
   worker_image  = "${scaleway_registry_namespace.main.endpoint}/worker:${var.image_tag}"

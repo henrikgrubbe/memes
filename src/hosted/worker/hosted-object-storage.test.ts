@@ -71,7 +71,7 @@ const makeStore = (api: ObjectStorageApi) =>
     bucket: "bucket",
     deliveryId: "delivery-1",
     memeId: "meme-1",
-    publicBaseUrl: "https://bucket.s3.nl-ams.scw.cloud/",
+    publicBaseUrl: "https://s3.nl-ams.scw.cloud/bucket/",
   });
 
 const success = {
@@ -109,7 +109,7 @@ describe("hosted Object Storage", () => {
     );
 
     expect(outcome.imageUrl).toBe(
-      "https://bucket.s3.nl-ams.scw.cloud/memes/meme-1.jpg",
+      "https://s3.nl-ams.scw.cloud/bucket/memes/meme-1.jpg",
     );
     expect(memory.puts).toHaveLength(1);
     expect(memory.puts[0]).toMatchObject({
@@ -155,7 +155,7 @@ describe("hosted Object Storage", () => {
       status: "recorded",
       outcome: {
         history: [{ provider: "OpenAI", status: "success" }],
-        imageUrl: "https://bucket.s3.nl-ams.scw.cloud/memes/meme-1.jpg",
+        imageUrl: "https://s3.nl-ams.scw.cloud/bucket/memes/meme-1.jpg",
         kind: "success",
         memeId: "meme-1",
         metadata: {
