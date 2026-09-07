@@ -7,20 +7,20 @@
 - **Persille-Sebastian**: "Parsley Avenger," quirky developer tired of meetings, raises tech issues.
 - **Elmast Jeppe**: "Metal Elmast," updates on electrical outages while hiding in cups.
 - **Alpaca Alpár**: Comedic alpaca and co-anchor; brings mischief and laughs.
-- **Laban**: Tuxedo cat sharing mood-based weather updates.
-- **Skjoldbamsen Sigurd**: "Sigurd Newton," embraces Graves disease while reporting ceramic news.
+- **Laban**: Tuxedo cat sharing mood-based weather updates, recently began claiming the title of "Weather Wizard."
+- **Skjoldbamsen Sigurd**: "Sigurd Newton," embraces Graves disease while reporting ceramic news; now offers random facts about ceramics.
 - **Træmand Brandborg**: Wooden elf and Rune's ceramics rival; shares eco-tips and coriander jokes.
 - **Henrik (Henrik OK)**: The world's okayest Henrik, provides optimistic mundane news.
 - **Gitte**: Assertive product owner who challenges Sebastian; reports innovations.
 - **Teslatrubaduren Morten**: Meme festival aficionado, juggles the latest crazes and music.
-- **Lærke**: Ghost in pink providing bizarre afterlife tips.
+- **Lærke**: Ghost in pink providing bizarre afterlife tips while occasionally mentoring Laban.
 - **Nicolai**: Ghost in a suit blending local drink news with humor.
 - **Steffen**: Red-haired ghost enjoying Nutella; brings sweet segments and jokes.
 
 **Dagens nyheder, fortalt af team MARs mange dyr**:
-- Laban reports weather predictions based on local cat moods.
-- Alpaca Alpár humorously discusses avoiding snack break teams.
-- Rune shares baking adventures, including the enigmatic green PEPE cake.
-- Skjoldbamsen Sigurd updates on ceramics while turning mishaps into successes.
+- Laban, now hailed as the "Weather Wizard," reports weather predictions based on local cat moods.
+- Alpaca Alpár humorously discusses avoiding snack break teams, claiming it's a conspiracy.
+- Rune shares baking adventures, including the highly anticipated green PEPE cake, which is rumored to have mysterious magical properties.
+- Skjoldbamsen Sigurd updates on ceramics while turning mishaps into successes and random facts about ancient pottery.
 
-In the "mar" saga, Team MAR navigates humorous misadventures amid whimsical animal news. "Dagens nyheder" features Laban's forecasts, Alpaca's antics, and Rune’s baking experiences, creating a vibrant dynamic. Anticipation for ceramics grows as Laban's character develops. Sigurd's expertise and Sebastian’s reluctance maintain humor, while Lærke and Nicolai add intrigue. The theft of Sæbekassebilen and trophy saga conclude with a comedic twist in Carsten's driveway, reflecting the humor in their chaotic lives.
+In the "mar" saga, Team MAR navigates humorous misadventures amid whimsical animal news. "Dagens nyheder" continues to showcase Laban's forecasts, Alpaca's antics, and Rune’s baking experiences, enhancing their vibrant dynamic. Anticipation for ceramics grows as Laban’s character develops into a multifaceted performer. Sigurd's expertise and Sebastian’s reluctance maintain humor, while Lærke and Nicolai add intrigue. The theft of Sæbekassebilen and trophy saga conclude with a comedic twist in Carsten's driveway, reflecting the humor in their chaotic lives.
