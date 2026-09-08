@@ -179,6 +179,22 @@ tofu -chdir=infra/scaleway init -migrate-state
 Once that reports success, delete the local `terraform.tfstate` and
 `terraform.tfstate.backup` files so nothing can apply from a stale copy.
 
+State locking uses S3 conditional writes and is verified working against
+Scaleway: `init`, `plan`, and `apply` all report acquiring and releasing the
+lock.
+
+### Applying from a workstation may fail on filtered networks
+
+The Scaleway provider addresses buckets as `<bucket>.s3.<region>.scw.cloud`,
+and that is not configurable the way the backend is. DNS filters that
+categorize the public images bucket resolve that hostname to a block address,
+so `plan` and `apply` fail with a TLS handshake error on `GetBucketCors` even
+though the bucket is healthy and the same call succeeds elsewhere. The backend
+itself is unaffected because it is pinned to path style.
+
+If that happens, apply from CI rather than working around it locally; the
+runner is not subject to the filter.
+
 ## Infrastructure deployment
 
 Application deployment and infrastructure deployment are separate paths.
@@ -206,15 +222,15 @@ plan passes `-lock=false` so it never needs to write.
 
 These repository-level values are shared by both environments:
 
-| Name                                     | Kind     | Purpose                            |
-| ---------------------------------------- | -------- | ---------------------------------- |
+| Name                                                  | Kind     | Purpose                                                                            |
+| ----------------------------------------------------- | -------- | ---------------------------------------------------------------------------------- |
 | `SCW_PROJECT_ID`, `SCW_REGION`, `SCW_ORGANIZATION_ID` | Variable | Also set per environment; hoist to repository level so `infra-drift` inherits them |
-| `SCW_TOFU_PRINCIPAL`                     | Variable | `object_storage_provisioning_principal` |
-| `TOFU_GITHUB_WEBHOOK_SECRET`             | Secret   | `github_webhook_secret`            |
-| `TOFU_GITHUB_FINE_GRAINED_PAT`           | Secret   | `github_fine_grained_pat`          |
-| `TOFU_SLACK_WEBHOOK_URL`                 | Secret   | `slack_webhook_url`                |
-| `TOFU_OPENAI_API_KEY`                    | Secret   | `openai_api_key`                   |
-| `TOFU_XAI_API_KEY`                       | Secret   | `xai_api_key`                      |
+| `SCW_TOFU_PRINCIPAL`                                  | Variable | `object_storage_provisioning_principal`                                            |
+| `TOFU_GITHUB_WEBHOOK_SECRET`                          | Secret   | `github_webhook_secret`                                                            |
+| `TOFU_GITHUB_FINE_GRAINED_PAT`                        | Secret   | `github_fine_grained_pat`                                                          |
+| `TOFU_SLACK_WEBHOOK_URL`                              | Secret   | `slack_webhook_url`                                                                |
+| `TOFU_OPENAI_API_KEY`                                 | Secret   | `openai_api_key`                                                                   |
+| `TOFU_XAI_API_KEY`                                    | Secret   | `xai_api_key`                                                                      |
 
 Four of those five secrets are guarded by `precondition` blocks that fail the
 apply if they are missing. `xai_api_key` is not: a missing value drops
