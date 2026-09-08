@@ -24,7 +24,7 @@
     "openai": "^7.4.0"
   },
   "devDependencies": {
-    "@effect/tsgo": "0.41.0",
+    "@effect/tsgo": "0.42.0",
     "@types/node": "^26.1.2",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^5.0.0",
