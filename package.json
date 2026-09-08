@@ -29,7 +29,7 @@
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^5.0.0",
     "@vitest/expect": "^5.0.0",
-    "oxlint": "1.81.0",
+    "oxlint": "1.82.0",
     "prettier": "3.9.6",
     "tsx": "^4.23.9",
     "typescript": "^7.0.2",
