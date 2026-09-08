@@ -345,6 +345,18 @@ const retryMessage = (): Effect.Effect<WorkerHttpResult> =>
     status: 503,
   });
 
+// A retried delivery is invisible in the logs unless the cause is recorded, so
+// a queue that quietly dead-letters after its retries looks identical to one
+// that was never delivered at all.
+const retryAfterFailure = (
+  error: ConfigError | HostedTaskError,
+): Effect.Effect<WorkerHttpResult> =>
+  Effect.logError(
+    `Retrying queue delivery after ${error._tag}: ${
+      error instanceof Error ? error.message : String(error)
+    }`,
+  ).pipe(Effect.zipRight(retryMessage()));
+
 const processQueuedTask = (
   task: MemeRequestTask,
   dependencies: QueuedDeliveryDependencies,
@@ -398,7 +410,7 @@ export const makeQueuedDeliveryHandler = (
               onFailure: (error) =>
                 error instanceof WorkerMessageError
                   ? rejectMessage(error)
-                  : retryMessage(),
+                  : retryAfterFailure(error),
               onSuccess: (disposition) =>
                 Effect.succeed({
                   body: { disposition },

@@ -1,4 +1,4 @@
-import { Deferred, Effect, Schema } from "effect";
+import { Deferred, Effect, Logger, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   ModerationBlockedError,
@@ -514,5 +514,40 @@ describe("hosted queued delivery", () => {
       body: { disposition: "retry" },
       status: 503,
     });
+  });
+
+  it("logs why a delivery is being retried so a dead-lettering loop is diagnosable", async () => {
+    const harness = makeHarness();
+    const repository: HostedGitHubRepository = {
+      ...harness.repository,
+      readText: () =>
+        Effect.fail(
+          new HostedGitHubError({
+            detail: "credentials rejected",
+            operation: "read saga",
+          }),
+        ),
+    };
+    const handler = makeQueuedDeliveryHandler({
+      ...handlerDependencies(harness),
+      repositoryFor: () => repository,
+    });
+    const logged: Array<string> = [];
+
+    const result = await Effect.runPromise(
+      handler.handle(requestFor(taskFor("saga:story A functional meme"))).pipe(
+        Effect.provide(
+          Logger.replace(
+            Logger.defaultLogger,
+            Logger.make(({ message }) => {
+              logged.push(String(message));
+            }),
+          ),
+        ),
+      ),
+    );
+
+    expect(result.status).toBe(503);
+    expect(logged.join("\n")).toContain("credentials rejected");
   });
 });
