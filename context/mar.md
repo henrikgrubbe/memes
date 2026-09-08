@@ -10,7 +10,7 @@
 - **Laban**: Tuxedo cat and "Weather Wizard," shares mood-based weather updates.
 - **Skjoldbamsen Sigurd**: "Sigurd Newton," reports ceramic news and random facts.
 - **Træmand Brandborg**: Wooden elf and Rune’s ceramics rival; shares eco-tips.
-- **Henrik (Henrik OK)**: The world’s okayest Henrik, shares mundane news and struggles with meme machine complaints.
+- **Henrik (Henrik OK)**: The world’s okayest Henrik, shares mundane news and struggles with meme machine complaints. Team MAR is not upset with Henrik's meme machine; two major users are just at home sick, causing a lull in production.
 - **Gitte**: Assertive product owner who reports innovations.
 - **Teslatrubaduren Morten**: Meme festival aficionado, juggles trends and music.
 - **Lærke**: Pink ghost offering bizarre afterlife tips; mentors Laban.
@@ -23,4 +23,4 @@
 - Rune shares baking misadventures, including the mysterious green PEPE cake.
 - Skjoldbamsen Sigurd updates on ceramics, turning mishaps into successes.
 
-In the "mar" saga, Team MAR navigates humorous misadventures amid whimsical animal news. "Dagens nyheder" showcases Laban's forecasts, Alpaca's antics, and Rune’s baking experiences. Anticipation for ceramics grows as Laban evolves into a multifaceted performer. Sigurd's expertise and Sebastian’s reluctance maintain humor, while Lærke and Nicolai add intrigue. Henrik seeks answers amid backlash against his meme machine. The theft of Sæbekassebilen and trophy saga concludes with comedy in Carsten's driveway, reflecting the humor in their chaotic lives.
+In the "mar" saga, Team MAR navigates humorous misadventures amid whimsical animal news. "Dagens nyheder" showcases Laban's forecasts, Alpaca's antics, and Rune’s baking experiences. Anticipation for ceramics grows as Laban evolves into a multifaceted performer. Sigurd's expertise and Sebastian’s reluctance maintain humor, while Lærke and Nicolai add intrigue. Henrik seeks answers amid the lull attributed to illness among major meme machine users. The theft of Sæbekassebilen and trophy saga concludes with comedy in Carsten's driveway, reflecting the humor in their chaotic lives.
