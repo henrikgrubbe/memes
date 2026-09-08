@@ -1,0 +1,25 @@
+name: Apply infrastructure
+
+# Deploying a container image and applying infrastructure are separate paths:
+# deploy-ingress/deploy-worker watch the Dockerfiles, and this watches the
+# OpenTofu configuration. Without it a merged .tf change passes CI and then
+# never reaches production, because nothing else in the repo runs tofu apply.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/scaleway/**.tf"
+      - ".github/workflows/infra-apply.yml"
+      - ".github/workflows/infra-tofu.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    uses: ./.github/workflows/infra-tofu.yml
+    with:
+      environment: production
+      mode: apply
+    secrets: inherit
