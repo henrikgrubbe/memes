@@ -117,6 +117,29 @@ Copy `infra/scaleway/terraform.tfvars.example` to an ignored
 - `slack_webhook_url`
 - optional `xai_api_key`
 
+### Loading a secret manager's mounted env file
+
+Secret managers can expose an env file as a named pipe rather than a regular
+file, so the values never touch the disk. Bash's `source` builtin cannot read
+one: it needs a seekable file, and it fails **silently**, leaving every variable
+empty rather than erroring. Most variables are required and would fail the
+apply, but `xai_api_key` is optional, so an apply from a silently-empty
+environment removes `XAI_API_KEY` from the worker and disables the moderation
+fallback.
+
+Read the file with a command instead, so the load fails loudly if it fails:
+
+```bash
+set -a
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  case "$line" in \#*) continue ;; *=*) export "${line%%=*}=${line#*=}" ;; esac
+done < <(cat .env.scaleway)
+set +a
+```
+
+Check `TF_VAR_project_id` is non-empty before running `apply`.
+
 The container images must exist before Scaleway can create the containers.
 Bootstrap the registry first, push both images, and then apply the complete
 configuration:
@@ -152,9 +175,120 @@ Storage bucket and policy, worker storage identity, both containers, and the
 worker trigger. It keeps the worker private and both containers at zero minimum
 instances.
 
-Local OpenTofu state and secret variable files are sensitive. Keep them
-untracked, mode `0600`, and store backups only in encrypted storage.
+OpenTofu state lives in Scaleway Object Storage (see `infra/scaleway/backend.tf`)
+so that CI can plan and apply it. State contains the rotating worker Object
+Storage key in plaintext, so the state bucket must stay private and versioned,
+and must not be the public images bucket. Secret variable files remain local:
+keep them untracked, mode `0600`, and back them up only to encrypted storage.
 Saved plan files contain secret values and must not be committed.
+
+### Creating the state bucket
+
+The bucket cannot be managed by the configuration it stores, so create it once
+out of band before the first `init`:
+
+```bash
+scw object bucket create name=memes-<project-id>-tfstate region=nl-ams
+scw object bucket update name=memes-<project-id>-tfstate region=nl-ams \
+  versioning.enabled=true
+```
+
+Migrate existing local state into it with:
+
+```bash
+tofu -chdir=infra/scaleway init -migrate-state
+```
+
+Once that reports success, delete the local `terraform.tfstate` and
+`terraform.tfstate.backup` files so nothing can apply from a stale copy.
+
+State locking uses S3 conditional writes and is verified working against
+Scaleway: `init`, `plan`, and `apply` all report acquiring and releasing the
+lock.
+
+### Applying from a workstation may fail on filtered networks
+
+The Scaleway provider addresses buckets as `<bucket>.s3.<region>.scw.cloud`,
+and that is not configurable the way the backend is. DNS filters that
+categorize the public images bucket resolve that hostname to a block address,
+so `plan` and `apply` fail with a TLS handshake error on `GetBucketCors` even
+though the bucket is healthy and the same call succeeds elsewhere. The backend
+itself is unaffected because it is pinned to path style.
+
+If that happens, apply from CI rather than working around it locally; the
+runner is not subject to the filter.
+
+## Infrastructure deployment
+
+Application deployment and infrastructure deployment are separate paths.
+`deploy-ingress.yml` and `deploy-worker.yml` only watch the Dockerfiles and only
+call `scw container container update`, so they never run OpenTofu. Changes under
+`infra/scaleway` are applied by:
+
+- `.github/workflows/infra-apply.yml` on merges to `main` that touch `*.tf`, and
+  on demand. It runs against the approval-gated `production` environment.
+- `.github/workflows/infra-drift.yml` on a daily schedule. It runs a read-only
+  plan against the `infra-drift` environment and fails if production no longer
+  matches the committed configuration. It deliberately does not open an issue,
+  because an issue in this repository is a meme request.
+- Both call `.github/workflows/infra-tofu.yml`.
+
+Add required reviewers to the `production` environment. Its Scaleway key must be
+able to write IAM policies, because the configuration manages
+`scaleway_iam_application`, `scaleway_iam_policy`, and `scaleway_iam_api_key`.
+A key that can write IAM policies can grant itself anything, so it cannot be
+scoped down further and the approval gate is what actually constrains it.
+
+Create a second `infra-drift` environment with no reviewers, holding a Scaleway
+key with read-only access to the project and the state bucket. The scheduled
+plan passes `-lock=false` so it never needs to write.
+
+That read-only key must be a *Scaleway application*, not a user key: a user key
+inherits the user's full permissions and cannot be scoped down. Applications
+can, but this introduces a trap. The images bucket carries an explicit bucket
+policy, and Scaleway bucket policies are **deny-by-default for any principal the
+policy does not name** — including principals that IAM would otherwise allow.
+So an application holding `ObjectStorageReadOnly` is still denied
+`GetBucketCORS` and `ListBucket` on that bucket, and `tofu plan` fails while
+refreshing `scaleway_object_bucket.images`.
+
+The fix is `object_storage_readonly_principals`, a list that appends one
+inspection statement per principal to the bucket policy. It grants the same
+actions as the provisioning statement minus `s3:PutBucketAcl`, so a leaked
+drift credential cannot reopen the bucket. Its permissions are verified two
+ways: the drift key reads remote state successfully, and it is denied
+`PutObject` on the state bucket, which is why the drift plan must keep
+`-lock=false` — acquiring a lock is a write.
+
+Anyone added to this list must be a *read-only* identity. Naming a
+write-capable principal here would silently widen bucket access outside the
+approval gate.
+
+Organization security settings require every API key to carry an expiration
+date, so `scw iam api-key create` fails without `expires-at`. Both CI keys
+therefore expire and must be rotated before they lapse.
+
+These repository-level values are shared by both environments:
+
+| Name                                                  | Kind     | Purpose                                                                            |
+| ----------------------------------------------------- | -------- | ---------------------------------------------------------------------------------- |
+| `SCW_PROJECT_ID`, `SCW_REGION`, `SCW_ORGANIZATION_ID` | Variable | Also set per environment; hoist to repository level so `infra-drift` inherits them |
+| `SCW_TOFU_PRINCIPAL`                                  | Variable | `object_storage_provisioning_principal`                                            |
+| `SCW_TOFU_READONLY_PRINCIPALS`                        | Variable | `object_storage_readonly_principals`, as a JSON array string                       |
+| `TOFU_GITHUB_WEBHOOK_SECRET`                          | Secret   | `github_webhook_secret`                                                            |
+| `TOFU_GITHUB_FINE_GRAINED_PAT`                        | Secret   | `github_fine_grained_pat`                                                          |
+| `TOFU_SLACK_WEBHOOK_URL`                              | Secret   | `slack_webhook_url`                                                                |
+| `TOFU_OPENAI_API_KEY`                                 | Secret   | `openai_api_key`                                                                   |
+| `TOFU_XAI_API_KEY`                                    | Secret   | `xai_api_key`                                                                      |
+
+Four of those five secrets are guarded by `precondition` blocks that fail the
+apply if they are missing. `xai_api_key` is not: a missing value drops
+`XAI_API_KEY` from the worker instead of failing, so `infra-tofu.yml` checks for
+it explicitly before running.
+
+Container images are not affected by an apply. Both containers declare
+`lifecycle { ignore_changes = [image, registry_sha256] }`, so the currently
+deployed images survive an apply that carries a different `image_tag`.
 
 ## Application deployment
 
@@ -198,10 +332,13 @@ receives an HTTP health check.
 - Probe ingress with `curl -fsS "$INGRESS_ENDPOINT/health"`.
 - Monitor visible, in-flight, oldest, and DLQ message counts.
 - Treat any DLQ message as requiring inspection.
-- Run `tofu apply` at least monthly so the rotating worker Object Storage key
-  advances before expiry. Monitor the
+- Run the Apply infrastructure workflow at least monthly so the rotating worker
+  Object Storage key advances before expiry. Monitor the
   `worker_object_storage_key_rotation_at` and
   `worker_object_storage_key_expires_at` outputs.
+- Treat a failing drift detection run as an incident: production and the
+  repository disagree, so the next merge to `main` will revert whatever changed
+  out of band.
 - Pause Slack intake before changing runtime secrets or repairing
   infrastructure. Resume it after ingress and worker are healthy.
 - Alert on `Rejecting queue delivery` worker log entries. They indicate a

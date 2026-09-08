@@ -1,0 +1,98 @@
+name: OpenTofu runtime
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      mode:
+        description: "plan (read-only drift check) or apply (mutates production)."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  tofu:
+    name: OpenTofu ${{ inputs.mode }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: ${{ inputs.environment }}
+    # Applies mutate shared infrastructure and a plan holds the state lock, so
+    # these must never overlap. Queue rather than cancel: cancelling mid-apply
+    # can strand the lock and leave state half-written.
+    concurrency:
+      group: scaleway-tofu-state
+      cancel-in-progress: false
+
+    env:
+      # The s3 backend authenticates with AWS-shaped names; the Scaleway
+      # provider uses its own. Both are the same Scaleway key.
+      AWS_ACCESS_KEY_ID: ${{ secrets.SCW_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SCW_SECRET_KEY }}
+      SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
+      SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+      SCW_DEFAULT_ORGANIZATION_ID: ${{ vars.SCW_ORGANIZATION_ID }}
+
+      # GitHub uppercases secret names, but TF_VAR_ lookups are case-sensitive
+      # and these variables are lowercase, so each one is mapped explicitly
+      # instead of relying on a TF_VAR_-prefixed secret name.
+      TF_VAR_project_id: ${{ vars.SCW_PROJECT_ID }}
+      TF_VAR_region: ${{ vars.SCW_REGION }}
+      TF_VAR_object_storage_provisioning_principal: ${{ vars.SCW_TOFU_PRINCIPAL }}
+      # List-typed variables must be passed as JSON.
+      TF_VAR_object_storage_readonly_principals: ${{ vars.SCW_TOFU_READONLY_PRINCIPALS }}
+      TF_VAR_image_tag: ${{ github.sha }}
+      TF_VAR_github_webhook_secret: ${{ secrets.TOFU_GITHUB_WEBHOOK_SECRET }}
+      TF_VAR_github_fine_grained_pat: ${{ secrets.TOFU_GITHUB_FINE_GRAINED_PAT }}
+      TF_VAR_slack_webhook_url: ${{ secrets.TOFU_SLACK_WEBHOOK_URL }}
+      TF_VAR_openai_api_key: ${{ secrets.TOFU_OPENAI_API_KEY }}
+      TF_VAR_xai_api_key: ${{ secrets.TOFU_XAI_API_KEY }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@v2
+
+      # xai_api_key is the one worker secret with no precondition guarding it:
+      # when it is null the XAI_API_KEY entry is dropped from the container
+      # instead of failing, which would silently disable the xAI provider. The
+      # other four secrets fail the apply loudly, so they need no check here.
+      - name: Require the xAI key
+        run: |
+          if [ -z "${TF_VAR_xai_api_key}" ]; then
+            echo "::error::TOFU_XAI_API_KEY is unset. Applying would remove" \
+              "XAI_API_KEY from the worker and silently disable the xAI" \
+              "provider. Set it on the ${{ inputs.environment }} environment."
+            exit 1
+          fi
+
+      - name: Initialize
+        run: tofu -chdir=infra/scaleway init -input=false
+
+      # -lock=false keeps this read-only so it can run with a key that has no
+      # write access to the state bucket. plan never persists state.
+      - name: Detect drift
+        if: inputs.mode == 'plan'
+        run: |
+          set +e
+          tofu -chdir=infra/scaleway plan -input=false -lock=false \
+            -detailed-exitcode -no-color
+          code=$?
+          set -e
+          case "$code" in
+            0) echo "Production matches the committed configuration." ;;
+            2) echo "::error::Production has drifted from the committed" \
+                 "configuration. Review the plan above, then run the" \
+                 "Apply infrastructure workflow." ; exit 1 ;;
+            *) exit "$code" ;;
+          esac
+
+      - name: Apply
+        if: inputs.mode == 'apply'
+        run: tofu -chdir=infra/scaleway apply -input=false -auto-approve

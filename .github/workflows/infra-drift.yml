@@ -1,0 +1,29 @@
+name: Detect infrastructure drift
+
+# Catches changes made outside the repository (console edits, expired
+# resources, manual fixes) that the apply workflow would otherwise silently
+# revert on the next merge.
+#
+# This runs against the `infra-drift` environment rather than `production`
+# because that one is approval-gated: a scheduled run there would sit waiting
+# for a reviewer every day. `infra-drift` holds a read-only Scaleway key, and
+# the plan runs with -lock=false, so it cannot mutate anything.
+#
+# Drift is reported by failing the workflow, not by opening an issue: in this
+# repository an issue is a meme request and would be enqueued and then
+# rejected by the worker.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    uses: ./.github/workflows/infra-tofu.yml
+    with:
+      environment: infra-drift
+      mode: plan
+    secrets: inherit
