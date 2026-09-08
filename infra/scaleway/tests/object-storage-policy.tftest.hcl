@@ -112,3 +112,70 @@ run "worker_retains_bucket_access" {
     error_message = "The worker API key must expire 330 days after its rotation anchor."
   }
 }
+
+run "rejects_invalid_readonly_principal" {
+  command = plan
+
+  variables {
+    object_storage_readonly_principals = ["application_id:not-a-uuid"]
+  }
+
+  expect_failures = [var.object_storage_readonly_principals]
+}
+
+run "readonly_principals_can_inspect_but_not_modify" {
+  command = plan
+
+  variables {
+    object_storage_readonly_principals = [
+      "application_id:33333333-3333-3333-3333-333333333333",
+    ]
+  }
+
+  assert {
+    condition = contains(
+      jsondecode(scaleway_object_bucket_policy.images.policy).Statement,
+      {
+        Sid    = "AllowReadOnlyBucketInspection0"
+        Effect = "Allow"
+        Principal = {
+          SCW = "application_id:33333333-3333-3333-3333-333333333333"
+        }
+        Action = [
+          "s3:GetBucketAcl",
+          "s3:GetBucketCORS",
+          "s3:GetBucketLocation",
+          "s3:GetBucketObjectLockConfiguration",
+          "s3:GetBucketTagging",
+          "s3:GetBucketVersioning",
+          "s3:GetLifecycleConfiguration",
+          "s3:ListBucket",
+        ]
+        Resource = [scaleway_object_bucket.images.name]
+      },
+    )
+    error_message = "A read-only principal must be granted exactly the bucket inspection actions a refresh needs."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(scaleway_object_bucket_policy.images.policy).Statement :
+      !contains(statement.Action, "s3:PutBucketAcl")
+      if try(statement.Principal.SCW, "") == "application_id:33333333-3333-3333-3333-333333333333"
+    ])
+    error_message = "A read-only principal must never be granted s3:PutBucketAcl."
+  }
+}
+
+run "omitting_readonly_principals_adds_no_statements" {
+  command = plan
+
+  assert {
+    condition = length([
+      for statement in jsondecode(scaleway_object_bucket_policy.images.policy).Statement :
+      statement
+      if startswith(statement.Sid, "AllowReadOnlyBucketInspection")
+    ]) == 0
+    error_message = "The bucket policy must not gain read-only statements when no principals are configured."
+  }
+}

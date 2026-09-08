@@ -53,6 +53,23 @@ variable "object_storage_provisioning_principal" {
   }
 }
 
+variable "object_storage_readonly_principals" {
+  description = "Additional Scaleway IAM principals granted read-only inspection of the images bucket, each formatted as user_id:<uuid> or application_id:<uuid>. A bucket policy denies every principal it does not name, so the scheduled drift plan cannot refresh the bucket unless its identity is listed here."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for principal in var.object_storage_readonly_principals :
+      can(regex(
+        "^(user_id|application_id):[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+        principal,
+      ))
+    ])
+    error_message = "Every object_storage_readonly_principals entry must be user_id:<uuid> or application_id:<uuid>."
+  }
+}
+
 variable "image_tag" {
   description = "Immutable bootstrap tag used when the containers are first created."
   type        = string

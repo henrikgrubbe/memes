@@ -117,7 +117,7 @@ resource "scaleway_object_bucket_policy" "images" {
   region     = local.object_storage_region
   policy = jsonencode({
     Version = "2023-04-17"
-    Statement = [
+    Statement = concat([
       {
         Sid       = "AllowAnonymousMemeReads"
         Effect    = "Allow"
@@ -156,7 +156,30 @@ resource "scaleway_object_bucket_policy" "images" {
         ]
         Resource = [scaleway_object_bucket.images.name]
       }
-    ]
+      ],
+      # Read-only counterpart of the statement above, for identities that must
+      # refresh the bucket without ever changing it. It deliberately omits
+      # s3:PutBucketAcl so a leaked drift credential cannot reopen the bucket.
+      [
+        for index, principal in var.object_storage_readonly_principals : {
+          Sid    = "AllowReadOnlyBucketInspection${index}"
+          Effect = "Allow"
+          Principal = {
+            SCW = principal
+          }
+          Action = [
+            "s3:GetBucketAcl",
+            "s3:GetBucketCORS",
+            "s3:GetBucketLocation",
+            "s3:GetBucketObjectLockConfiguration",
+            "s3:GetBucketTagging",
+            "s3:GetBucketVersioning",
+            "s3:GetLifecycleConfiguration",
+            "s3:ListBucket",
+          ]
+          Resource = [scaleway_object_bucket.images.name]
+        }
+    ])
   })
 
   depends_on = [scaleway_object_bucket_acl.images]

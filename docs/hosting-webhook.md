@@ -243,12 +243,38 @@ Create a second `infra-drift` environment with no reviewers, holding a Scaleway
 key with read-only access to the project and the state bucket. The scheduled
 plan passes `-lock=false` so it never needs to write.
 
+That read-only key must be a *Scaleway application*, not a user key: a user key
+inherits the user's full permissions and cannot be scoped down. Applications
+can, but this introduces a trap. The images bucket carries an explicit bucket
+policy, and Scaleway bucket policies are **deny-by-default for any principal the
+policy does not name** — including principals that IAM would otherwise allow.
+So an application holding `ObjectStorageReadOnly` is still denied
+`GetBucketCORS` and `ListBucket` on that bucket, and `tofu plan` fails while
+refreshing `scaleway_object_bucket.images`.
+
+The fix is `object_storage_readonly_principals`, a list that appends one
+inspection statement per principal to the bucket policy. It grants the same
+actions as the provisioning statement minus `s3:PutBucketAcl`, so a leaked
+drift credential cannot reopen the bucket. Its permissions are verified two
+ways: the drift key reads remote state successfully, and it is denied
+`PutObject` on the state bucket, which is why the drift plan must keep
+`-lock=false` — acquiring a lock is a write.
+
+Anyone added to this list must be a *read-only* identity. Naming a
+write-capable principal here would silently widen bucket access outside the
+approval gate.
+
+Organization security settings require every API key to carry an expiration
+date, so `scw iam api-key create` fails without `expires-at`. Both CI keys
+therefore expire and must be rotated before they lapse.
+
 These repository-level values are shared by both environments:
 
 | Name                                                  | Kind     | Purpose                                                                            |
 | ----------------------------------------------------- | -------- | ---------------------------------------------------------------------------------- |
 | `SCW_PROJECT_ID`, `SCW_REGION`, `SCW_ORGANIZATION_ID` | Variable | Also set per environment; hoist to repository level so `infra-drift` inherits them |
 | `SCW_TOFU_PRINCIPAL`                                  | Variable | `object_storage_provisioning_principal`                                            |
+| `SCW_TOFU_READONLY_PRINCIPALS`                        | Variable | `object_storage_readonly_principals`, as a JSON array string                       |
 | `TOFU_GITHUB_WEBHOOK_SECRET`                          | Secret   | `github_webhook_secret`                                                            |
 | `TOFU_GITHUB_FINE_GRAINED_PAT`                        | Secret   | `github_fine_grained_pat`                                                          |
 | `TOFU_SLACK_WEBHOOK_URL`                              | Secret   | `slack_webhook_url`                                                                |
