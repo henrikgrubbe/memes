@@ -117,6 +117,29 @@ Copy `infra/scaleway/terraform.tfvars.example` to an ignored
 - `slack_webhook_url`
 - optional `xai_api_key`
 
+### Loading a secret manager's mounted env file
+
+Secret managers can expose an env file as a named pipe rather than a regular
+file, so the values never touch the disk. Bash's `source` builtin cannot read
+one: it needs a seekable file, and it fails **silently**, leaving every variable
+empty rather than erroring. Most variables are required and would fail the
+apply, but `xai_api_key` is optional, so an apply from a silently-empty
+environment removes `XAI_API_KEY` from the worker and disables the moderation
+fallback.
+
+Read the file with a command instead, so the load fails loudly if it fails:
+
+```bash
+set -a
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  case "$line" in \#*) continue ;; *=*) export "${line%%=*}=${line#*=}" ;; esac
+done < <(cat .env.scaleway)
+set +a
+```
+
+Check `TF_VAR_project_id` is non-empty before running `apply`.
+
 The container images must exist before Scaleway can create the containers.
 Bootstrap the registry first, push both images, and then apply the complete
 configuration:
