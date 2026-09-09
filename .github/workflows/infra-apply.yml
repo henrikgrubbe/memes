@@ -20,6 +20,10 @@ jobs:
   apply:
     uses: ./.github/workflows/infra-tofu.yml
     with:
-      environment: production
+      # Not `production`: that environment is what deploy-ingress and
+      # deploy-worker publish images through, and gating it on a reviewer to
+      # protect applies also blocked every routine image deploy. Applies are
+      # gated here instead, on their own environment and their own key.
+      environment: infra-production
       mode: apply
     secrets: inherit

@@ -44,6 +44,11 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # `production` holds the runtime-deploy key, which can push images and
+    # update these two containers and nothing else. It is deliberately
+    # ungated: a deploy is a routine, reversible rollout that rolls itself
+    # back on failure, and requiring a reviewer here strands Renovate updates.
+    # Infrastructure applies are the gated path and use `infra-production`.
     environment:
       name: production
       url: ${{ vars.PRODUCTION_URL }}

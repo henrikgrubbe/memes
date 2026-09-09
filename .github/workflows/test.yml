@@ -168,7 +168,7 @@ jobs:
 
           if [[ "$runtime" == "ingress" ]]; then
             configuration=(
-              --env GITHUB_WEBHOOK_SECRET=ci-dummy
+              --env GH_WEBHOOK_SECRET=ci-dummy
               --env SQS_ACCESS_KEY=ci-dummy
               --env SQS_ENDPOINT=https://sqs.invalid
               --env SQS_QUEUE_URL=https://sqs.invalid/queue
@@ -178,7 +178,7 @@ jobs:
           else
             configuration=(
               --env GITHUB_API_URL=https://api.github.invalid
-              --env GITHUB_FINE_GRAINED_PAT=ci-dummy
+              --env GH_API_TOKEN=ci-dummy
               --env GITHUB_REPOSITORY=example/memes
               --env OBJECT_STORAGE_ACCESS_KEY=ci-dummy
               --env OBJECT_STORAGE_BUCKET=ci-images
@@ -220,6 +220,9 @@ jobs:
 
       - name: Test deployment behavior
         run: infra/scaleway/deploy/deploy-runtime.test.sh
+
+      - name: Test secret sync behavior
+        run: infra/scaleway/deploy/sync-secrets.test.sh
 
   infrastructure:
     name: OpenTofu

@@ -134,7 +134,7 @@ variable "github_webhook_secret" {
   nullable    = true
 }
 
-variable "github_fine_grained_pat" {
+variable "github_api_token" {
   description = "Short-lived repository-scoped GitHub token."
   type        = string
   sensitive   = true
@@ -150,7 +150,7 @@ variable "slack_webhook_url" {
   nullable    = true
 }
 
-variable "openai_api_key" {
+variable "ai_provider_openai_api_key" {
   description = "OpenAI API key used for image generation and saga compression."
   type        = string
   sensitive   = true
@@ -158,7 +158,7 @@ variable "openai_api_key" {
   nullable    = true
 }
 
-variable "xai_api_key" {
+variable "ai_provider_xai_api_key" {
   description = "Optional xAI fallback key."
   type        = string
   sensitive   = true

@@ -17,7 +17,7 @@ class WebhookSecret extends Context.Tag("WebhookSecret")<
 
 const WebhookSecretLive = Layer.effect(
   WebhookSecret,
-  Config.string("GITHUB_WEBHOOK_SECRET"),
+  Config.string("GH_WEBHOOK_SECRET"),
 );
 
 const githubWebhook = Effect.gen(function* () {

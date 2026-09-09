@@ -78,7 +78,7 @@ fails.
 
 | Variable                | Purpose                        |
 | ----------------------- | ------------------------------ |
-| `GITHUB_WEBHOOK_SECRET` | GitHub webhook signing secret  |
+| `GH_WEBHOOK_SECRET` | GitHub webhook signing secret  |
 | `SQS_ACCESS_KEY`        | Publish-only queue credential  |
 | `SQS_SECRET_KEY`        | Queue credential secret        |
 | `SQS_ENDPOINT`          | Regional Scaleway SQS endpoint |
@@ -90,13 +90,13 @@ fails.
 
 | Variable                         | Purpose                                                    |
 | -------------------------------- | ---------------------------------------------------------- |
-| `GITHUB_FINE_GRAINED_PAT`        | Repository token with Contents and Issues read/write       |
+| `GH_API_TOKEN`                   | Repository token with Contents and Issues read/write       |
 | `GITHUB_REPOSITORY`              | Repository the worker may mutate                           |
 | `GITHUB_TARGET_BRANCH`           | Saga target branch; defaults to `main`                     |
 | `GITHUB_API_URL`                 | GitHub REST base URL; defaults to `https://api.github.com` |
 | `SLACK_WEBHOOK_URL`              | Slack incoming webhook                                     |
-| `OPENAI_API_KEY`                 | Primary image generation and Saga compression              |
-| `XAI_API_KEY`                    | Optional moderation fallback                               |
+| `AI_PROVIDER_OPENAI_API_KEY`     | Primary image generation and Saga compression              |
+| `AI_PROVIDER_XAI_API_KEY`        | Optional moderation fallback                               |
 | `OBJECT_STORAGE_ENDPOINT`        | Regional S3-compatible endpoint                            |
 | `OBJECT_STORAGE_REGION`          | Object Storage signing region                              |
 | `OBJECT_STORAGE_BUCKET`          | Image and terminal-outcome bucket                          |
@@ -112,10 +112,10 @@ Copy `infra/scaleway/terraform.tfvars.example` to an ignored
 `TF_VAR_*`. Supply the sensitive variables without committing them:
 
 - `github_webhook_secret`
-- `github_fine_grained_pat`
-- `openai_api_key`
+- `github_api_token`
+- `ai_provider_openai_api_key`
 - `slack_webhook_url`
-- optional `xai_api_key`
+- optional `ai_provider_xai_api_key`
 
 ### Loading a secret manager's mounted env file
 
@@ -123,8 +123,8 @@ Secret managers can expose an env file as a named pipe rather than a regular
 file, so the values never touch the disk. Bash's `source` builtin cannot read
 one: it needs a seekable file, and it fails **silently**, leaving every variable
 empty rather than erroring. Most variables are required and would fail the
-apply, but `xai_api_key` is optional, so an apply from a silently-empty
-environment removes `XAI_API_KEY` from the worker and disables the moderation
+apply, but `ai_provider_xai_api_key` is optional, so an apply from a silently-empty
+environment removes `AI_PROVIDER_XAI_API_KEY` from the worker and disables the moderation
 fallback.
 
 Read the file with a command instead, so the load fails loudly if it fails:
@@ -139,6 +139,59 @@ set +a
 ```
 
 Check `TF_VAR_project_id` is non-empty before running `apply`.
+
+### Secret management
+
+1Password is the source of truth for every secret. GitHub holds a derived copy
+because CI cannot read 1Password, and Scaleway holds another because containers
+cannot either. Those copies must only ever be written by
+`infra/scaleway/deploy/sync-secrets.sh` and `tofu apply` respectively.
+
+This is not a style preference. The GitHub webhook signing secret once lived in
+three uncoupled places — the GitHub webhook configuration, the container, and
+1Password — and nothing compared them. They diverged, every delivery started
+failing signature verification, and the pipeline was down until the secret was
+rotated in all three. Container secrets are argon2-hashed in state, so the
+deployed value cannot even be read back to see which copy was wrong; the only
+repair is rotation.
+
+GitHub secrets are equally write-only. Nothing can read them back to diff
+against 1Password, so drift there is undetectable by construction. The only
+defence is that values travel in one direction, through one script:
+
+```bash
+DRY_RUN=true infra/scaleway/deploy/sync-secrets.sh   # show the mapping
+infra/scaleway/deploy/sync-secrets.sh                # write it
+```
+
+It reads the mounted env file once (see above — it is a named pipe), refuses to
+write anything if a value is missing rather than syncing part of the set, and
+never prints a value. The 1Password environment must therefore carry every name
+it expects:
+
+| 1Password name                                          | Becomes                                     |
+| ------------------------------------------------------- | ------------------------------------------- |
+| `GH_WEBHOOK_SECRET`                                      | repository `GH_WEBHOOK_SECRET`              |
+| `GH_API_TOKEN`                                           | repository `GH_API_TOKEN`                   |
+| `SLACK_WEBHOOK_URL`                                      | repository `SLACK_WEBHOOK_URL`              |
+| `AI_PROVIDER_OPENAI_API_KEY`                            | repository `AI_PROVIDER_OPENAI_API_KEY`     |
+| `AI_PROVIDER_XAI_API_KEY`                               | repository `AI_PROVIDER_XAI_API_KEY`        |
+| `SCW_RUNTIME_DEPLOY_ACCESS_KEY`, `SCW_RUNTIME_DEPLOY_SECRET_KEY` | `production` `SCW_ACCESS_KEY`/`SCW_SECRET_KEY`       |
+| `SCW_INFRA_APPLY_ACCESS_KEY`, `SCW_INFRA_APPLY_SECRET_KEY`       | `infra-production` `SCW_ACCESS_KEY`/`SCW_SECRET_KEY` |
+| `SCW_INFRA_DRIFT_ACCESS_KEY`, `SCW_INFRA_DRIFT_SECRET_KEY`       | `infra-drift` `SCW_ACCESS_KEY`/`SCW_SECRET_KEY`      |
+
+Rotating anything means: change it in 1Password, run the script, then run the
+Apply infrastructure workflow so the containers pick up the new value. Never
+edit a secret in the GitHub UI — that is the one path that creates a copy
+1Password does not know about.
+
+The webhook signing secret needs one extra step, because the GitHub webhook
+configuration is not managed by OpenTofu: update the hook itself as well.
+
+```bash
+gh api repos/henrikgrubbe/memes/hooks --jq '.[] | "\(.id) \(.config.url)"'
+gh api -X PATCH repos/henrikgrubbe/memes/hooks/<id> -f config[secret]="$NEW_SECRET"
+```
 
 The container images must exist before Scaleway can create the containers.
 Bootstrap the registry first, push both images, and then apply the complete
@@ -226,18 +279,25 @@ call `scw container container update`, so they never run OpenTofu. Changes under
 `infra/scaleway` are applied by:
 
 - `.github/workflows/infra-apply.yml` on merges to `main` that touch `*.tf`, and
-  on demand. It runs against the approval-gated `production` environment.
+  on demand. It runs against the approval-gated `infra-production` environment.
 - `.github/workflows/infra-drift.yml` on a daily schedule. It runs a read-only
   plan against the `infra-drift` environment and fails if production no longer
   matches the committed configuration. It deliberately does not open an issue,
   because an issue in this repository is a meme request.
 - Both call `.github/workflows/infra-tofu.yml`.
 
-Add required reviewers to the `production` environment. Its Scaleway key must be
-able to write IAM policies, because the configuration manages
+Add required reviewers to the `infra-production` environment. Its Scaleway key
+must be able to write IAM policies, because the configuration manages
 `scaleway_iam_application`, `scaleway_iam_policy`, and `scaleway_iam_api_key`.
 A key that can write IAM policies can grant itself anything, so it cannot be
 scoped down further and the approval gate is what actually constrains it.
+
+Applies deliberately do **not** run on `production`. That environment is what
+image deploys publish through, and the two paths have opposite requirements: an
+apply mutates shared infrastructure and should pause for a human, while a
+deploy is a routine rollout that must run unattended for Renovate to work.
+Gating one environment for both once blocked every image deploy in the
+repository, so they are split.
 
 Create a second `infra-drift` environment with no reviewers, holding a Scaleway
 key with read-only access to the project and the state bucket. The scheduled
@@ -268,22 +328,23 @@ Organization security settings require every API key to carry an expiration
 date, so `scw iam api-key create` fails without `expires-at`. Both CI keys
 therefore expire and must be rotated before they lapse.
 
-These repository-level values are shared by both environments:
+These repository-level values are shared by every environment:
 
 | Name                                                  | Kind     | Purpose                                                                            |
 | ----------------------------------------------------- | -------- | ---------------------------------------------------------------------------------- |
 | `SCW_PROJECT_ID`, `SCW_REGION`, `SCW_ORGANIZATION_ID` | Variable | Also set per environment; hoist to repository level so `infra-drift` inherits them |
 | `SCW_TOFU_PRINCIPAL`                                  | Variable | `object_storage_provisioning_principal`                                            |
 | `SCW_TOFU_READONLY_PRINCIPALS`                        | Variable | `object_storage_readonly_principals`, as a JSON array string                       |
-| `TOFU_GITHUB_WEBHOOK_SECRET`                          | Secret   | `github_webhook_secret`                                                            |
-| `TOFU_GITHUB_FINE_GRAINED_PAT`                        | Secret   | `github_fine_grained_pat`                                                          |
-| `TOFU_SLACK_WEBHOOK_URL`                              | Secret   | `slack_webhook_url`                                                                |
-| `TOFU_OPENAI_API_KEY`                                 | Secret   | `openai_api_key`                                                                   |
-| `TOFU_XAI_API_KEY`                                    | Secret   | `xai_api_key`                                                                      |
+| `GH_WEBHOOK_SECRET`                                    | Secret   | `github_webhook_secret`                                                            |
+| `GH_API_TOKEN`                                         | Secret   | `github_api_token`                                                                 |
+| `SLACK_WEBHOOK_URL`                                    | Secret   | `slack_webhook_url`                                                                |
+| `AI_PROVIDER_OPENAI_API_KEY`                           | Secret   | `ai_provider_openai_api_key`                                                       |
+| `AI_PROVIDER_XAI_API_KEY`                              | Secret   | `ai_provider_xai_api_key`                                                          |
 
 Four of those five secrets are guarded by `precondition` blocks that fail the
-apply if they are missing. `xai_api_key` is not: a missing value drops
-`XAI_API_KEY` from the worker instead of failing, so `infra-tofu.yml` checks for
+apply if they are missing. `ai_provider_xai_api_key` is not: a missing value
+drops `AI_PROVIDER_XAI_API_KEY` from the worker instead of failing, so
+`infra-tofu.yml` checks for
 it explicitly before running.
 
 Container images are not affected by an apply. Both containers declare
@@ -314,6 +375,30 @@ The `production` GitHub Environment provides:
 
 It also contains `SCW_ACCESS_KEY` and `SCW_SECRET_KEY` as secrets. Runtime
 secrets stay in Scaleway.
+
+That key is the `memes-runtime-deploy` application, not the apply key. Its
+policy is managed in `main.tf` and holds `ContainerRegistryFullAccess` and
+`ContainersFullAccess` for this project only — enough to push an image and roll
+the two containers, and nothing else. Because it cannot touch IAM, Object
+Storage, or the queues, the environment needs no approval gate and Renovate
+deploys run unattended. `infra/scaleway/tests/runtime-deploy-policy.tftest.hcl`
+fails if that scope is ever widened.
+
+The API key itself is created by hand rather than by OpenTofu. An apply that
+rotated it would leave GitHub holding the previous value with nothing to notice
+the difference, which is precisely the failure described under
+[Secret management](#secret-management).
+
+```bash
+scw iam api-key create \
+  application-id="$(tofu -chdir=infra/scaleway output -raw runtime_deploy_application_id)" \
+  default-project-id="$SCW_PROJECT_ID" \
+  description="GitHub Actions runtime deploy" \
+  expires-at="$(date -u -v+18m '+%Y-%m-%dT%H:%M:%SZ')"
+```
+
+Store the result in 1Password as `SCW_RUNTIME_DEPLOY_ACCESS_KEY` and
+`SCW_RUNTIME_DEPLOY_SECRET_KEY`, then run the sync script below.
 
 Populate the container IDs and production URL after the initial apply:
 
@@ -346,8 +431,10 @@ receives an HTTP health check.
   that was acknowledged without retry.
 
 After this version is deployed, delete the unused `MEME_PROCESSING_BACKEND`
-repository variable, the `hosted-canary` label, and the old request-processing
-`OPENAI_API_KEY`, `XAI_API_KEY`, and `SLACK_WEBHOOK_URL` GitHub Actions secrets.
+repository variable, the `hosted-canary` label, and any obsolete duplicate
+GitHub Actions secrets. The canonical application secret names are
+`GH_WEBHOOK_SECRET`, `GH_API_TOKEN`, `SLACK_WEBHOOK_URL`,
+`AI_PROVIDER_OPENAI_API_KEY`, and `AI_PROVIDER_XAI_API_KEY`.
 Do not remove deployment credentials used by the `production` Environment.
 
 To inspect or replay the DLQ, load the sensitive operations credentials only
