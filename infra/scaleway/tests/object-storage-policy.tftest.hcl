@@ -22,10 +22,10 @@ mock_provider "time" {
 }
 
 variables {
-  github_fine_grained_pat               = "github_pat_test"
+  github_api_token                      = "github_pat_test"
   github_webhook_secret                 = "test-secret"
   object_storage_provisioning_principal = "user_id:22222222-2222-2222-2222-222222222222"
-  openai_api_key                        = "test-key"
+  ai_provider_openai_api_key            = "test-key"
   project_id                            = "00000000-0000-0000-0000-000000000000"
   slack_webhook_url                     = "https://example.invalid/webhook"
 }

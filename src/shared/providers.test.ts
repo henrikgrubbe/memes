@@ -350,7 +350,7 @@ describe("model candidates", () => {
     const candidates = makeCandidates(
       {
         name: "OpenAI",
-        envKey: "OPENAI_API_KEY",
+        envKey: "AI_PROVIDER_OPENAI_API_KEY",
         models: [
           { model: "gpt-image-2", params: { quality: "low" } },
           {
@@ -416,19 +416,21 @@ describe("ProvidersLayer (disable-by-omission)", () => {
   });
 
   it("treats a blank key as disabled and dies with no primary configured", async () => {
-    const exit = await buildWith({ OPENAI_API_KEY: "   " });
+    const exit = await buildWith({ AI_PROVIDER_OPENAI_API_KEY: "   " });
     expect(Exit.isFailure(exit)).toBe(true);
   });
 
   it("builds when the primary key is set, with or without the fallback key", async () => {
     expect(
-      Exit.isSuccess(await buildWith({ OPENAI_API_KEY: "sk-primary" })),
+      Exit.isSuccess(
+        await buildWith({ AI_PROVIDER_OPENAI_API_KEY: "sk-primary" }),
+      ),
     ).toBe(true);
     expect(
       Exit.isSuccess(
         await buildWith({
-          OPENAI_API_KEY: "sk-primary",
-          XAI_API_KEY: "xai-key",
+          AI_PROVIDER_OPENAI_API_KEY: "sk-primary",
+          AI_PROVIDER_XAI_API_KEY: "xai-key",
         }),
       ),
     ).toBe(true);

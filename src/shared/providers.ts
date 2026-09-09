@@ -32,7 +32,7 @@ export {
 export const PRIMARY_PROVIDERS: ReadonlyArray<ProviderConfig> = [
   {
     name: "OpenAI",
-    envKey: "OPENAI_API_KEY",
+    envKey: "AI_PROVIDER_OPENAI_API_KEY",
     models: [
       {
         model: "gpt-image-2",
@@ -51,7 +51,7 @@ export const PRIMARY_PROVIDERS: ReadonlyArray<ProviderConfig> = [
 
 export const MODERATION_FALLBACK_PROVIDER: ProviderConfig = {
   name: "xAI",
-  envKey: "XAI_API_KEY",
+  envKey: "AI_PROVIDER_XAI_API_KEY",
   baseURL: "https://api.x.ai/v1",
   models: [
     { model: "grok-imagine-image", params: { response_format: "b64_json" } },

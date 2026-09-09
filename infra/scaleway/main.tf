@@ -225,6 +225,40 @@ resource "scaleway_iam_api_key" "worker_storage" {
   }
 }
 
+# The image deploy path and the OpenTofu apply path used to share one
+# full-permission key on one approval-gated environment. That coupled a
+# routine image push to an infrastructure approval, so gating applies also
+# blocked every Renovate deploy.
+#
+# This identity pushes images and updates the two containers, and can do
+# nothing else: no IAM, no Object Storage, no queues. It is what the
+# unattended `production` environment holds, so a deploy needs no reviewer
+# while an apply still does.
+#
+# Its API key is deliberately not managed here. OpenTofu cannot write a GitHub
+# environment secret, so a key rotated by an apply would silently diverge from
+# the copy GitHub holds and break deploys - the same failure mode that took the
+# webhook down. The key is minted once by hand and synced with
+# scripts/sync-secrets.sh; see docs/hosting-webhook.md.
+resource "scaleway_iam_application" "runtime_deploy" {
+  name        = "${var.name_prefix}-runtime-deploy"
+  description = "CI identity that pushes images and updates containers"
+}
+
+resource "scaleway_iam_policy" "runtime_deploy" {
+  name           = "${var.name_prefix}-runtime-deploy"
+  description    = "Publish container images and roll out the hosted runtimes"
+  application_id = scaleway_iam_application.runtime_deploy.id
+
+  rule {
+    project_ids = [var.project_id]
+    permission_set_names = [
+      "ContainerRegistryFullAccess",
+      "ContainersFullAccess",
+    ]
+  }
+}
+
 resource "scaleway_mnq_sqs_queue" "dead_letter" {
   name                        = "${var.name_prefix}-requests-dlq.fifo"
   fifo_queue                  = true
@@ -288,9 +322,9 @@ resource "scaleway_container" "ingress" {
   }
 
   secret_environment_variables = {
-    GITHUB_WEBHOOK_SECRET = var.github_webhook_secret
-    SQS_ACCESS_KEY        = scaleway_mnq_sqs_credentials.ingress.access_key
-    SQS_SECRET_KEY        = scaleway_mnq_sqs_credentials.ingress.secret_key
+    GH_WEBHOOK_SECRET = var.github_webhook_secret
+    SQS_ACCESS_KEY    = scaleway_mnq_sqs_credentials.ingress.access_key
+    SQS_SECRET_KEY    = scaleway_mnq_sqs_credentials.ingress.secret_key
   }
 
   liveness_probe {
@@ -340,13 +374,15 @@ resource "scaleway_container" "worker" {
 
   secret_environment_variables = merge(
     {
-      GITHUB_FINE_GRAINED_PAT   = var.github_fine_grained_pat
-      OBJECT_STORAGE_ACCESS_KEY = scaleway_iam_api_key.worker_storage.access_key
-      OBJECT_STORAGE_SECRET_KEY = scaleway_iam_api_key.worker_storage.secret_key
-      OPENAI_API_KEY            = var.openai_api_key
-      SLACK_WEBHOOK_URL         = var.slack_webhook_url
+      GH_API_TOKEN               = var.github_api_token
+      OBJECT_STORAGE_ACCESS_KEY  = scaleway_iam_api_key.worker_storage.access_key
+      OBJECT_STORAGE_SECRET_KEY  = scaleway_iam_api_key.worker_storage.secret_key
+      AI_PROVIDER_OPENAI_API_KEY = var.ai_provider_openai_api_key
+      SLACK_WEBHOOK_URL          = var.slack_webhook_url
     },
-    var.xai_api_key == null ? {} : { XAI_API_KEY = var.xai_api_key },
+    var.ai_provider_xai_api_key == null ? {} : {
+      AI_PROVIDER_XAI_API_KEY = var.ai_provider_xai_api_key
+    },
   )
 
   scaling_option {
@@ -367,8 +403,8 @@ resource "scaleway_container" "worker" {
 
     precondition {
       condition = alltrue([
-        var.github_fine_grained_pat != null,
-        var.openai_api_key != null,
+        var.github_api_token != null,
+        var.ai_provider_openai_api_key != null,
         var.slack_webhook_url != null,
       ])
       error_message = "GitHub, OpenAI, and Slack worker secrets are required."

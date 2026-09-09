@@ -4,10 +4,11 @@ name: Detect infrastructure drift
 # resources, manual fixes) that the apply workflow would otherwise silently
 # revert on the next merge.
 #
-# This runs against the `infra-drift` environment rather than `production`
-# because that one is approval-gated: a scheduled run there would sit waiting
-# for a reviewer every day. `infra-drift` holds a read-only Scaleway key, and
-# the plan runs with -lock=false, so it cannot mutate anything.
+# This runs against the `infra-drift` environment rather than
+# `infra-production` because that one is approval-gated: a scheduled run there
+# would sit waiting for a reviewer every day. `infra-drift` holds a read-only
+# Scaleway key, and the plan runs with -lock=false, so it cannot mutate
+# anything.
 #
 # Drift is reported by failing the workflow, not by opening an issue: in this
 # repository an issue is a meme request and would be enqueued and then

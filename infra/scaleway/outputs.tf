@@ -101,3 +101,8 @@ output "worker_trigger_id" {
   description = "Queue trigger ID."
   value       = scaleway_container_trigger.worker.id
 }
+
+output "runtime_deploy_application_id" {
+  description = "Application whose API key CI uses to push images and roll out containers."
+  value       = scaleway_iam_application.runtime_deploy.id
+}
