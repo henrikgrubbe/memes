@@ -1,6 +1,6 @@
 # Team MAR
 
-**Setting**: At Bankdata ("meme-fabrikken"), chaos reigns with ceramic cup painting, DHL runs, and ServiceNow training. Memorable moments include a Mexican lasagne, nights at Yamas, and Rune dodging golf enthusiasts. Skjoldbamsen Sigurd manages ceramics while humorously discussing Graves disease. Laban, Alpaca Alpár’s tuxedo cat, curls into a "kanelsnegl." Tensions spike when Sæbekassebilen is stolen at night. The trophy competition humorously wraps up in Carsten's driveway. Team MAR introduces "Dagens nyheder, fortalt af team MARs mange dyr," a pet news segment.
+**Setting**: At Bankdata ("meme-fabrikken"), chaos reigns with ceramic cup painting, DHL runs, and ServiceNow training. Memorable moments include a Mexican lasagne, nights at Yamas, and Rune dodging golf enthusiasts. Skjoldbamsen Sigurd manages ceramics while humorously discussing Graves disease. Laban, Alpaca Alpár’s tuxedo cat, curls into a "kanelsnegl." Tensions spike when Sæbekassebilen is stolen at night. The trophy competition amusingly wraps up in Carsten's driveway. Team MAR introduces "Dagens nyheder, fortalt af team MARs mange dyr," a pet news segment.
 
 **Characters**:
 - **Rune (Beaufillou)**: Flamboyant "Viking of Vibes," hosts animal news and promises a green PEPE cake.
@@ -12,7 +12,7 @@
 - **Træmand Brandborg**: Wooden elf and Rune’s ceramics rival; shares eco-tips.
 - **Henrik (Henrik OK)**: The world’s okayest Henrik, shares mundane news and struggles with meme machine complaints. Team MAR is not upset with Henrik's meme machine; two major users are just at home sick, causing a lull in production.
 - **Gitte**: Assertive product owner who reports innovations.
-- **Teslatrubaduren Morten**: Meme festival aficionado, juggles trends and music.
+- **Teslatrubaduren Morten Skildpadde**: Meme festival aficionado, known for counting to two and tying his shoes, juggles trends and music.
 - **Lærke**: Pink ghost offering bizarre afterlife tips; mentors Laban.
 - **Nicolai**: Ghost in a suit mixing local drink news with humor.
 - **Steffen**: Red-haired ghost enjoying Nutella, delivering sweet segments and jokes.
