@@ -7,7 +7,7 @@ terraform {
   required_providers {
     scaleway = {
       source  = "scaleway/scaleway"
-      version = "~> 2.82.0"
+      version = "~> 2.83.0"
     }
     time = {
       source  = "hashicorp/time"
