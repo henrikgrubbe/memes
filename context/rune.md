@@ -1,19 +1,19 @@
 # Rune Saga
 
-- Rune er så pisse træls hele tiden, bla bla bla. Han har rejst alle vejne og er bare en dum en med en dum (og lidt sjov) hat på. Desuden er Rune prink og dum, og han er virkelig meget prink, af mærket Rune, har 1 hestekraft og har ingen stykker værktøj. Rune har præcis 0 minilæssere, 0 gårde, 0 hunde, 0 søer, 0 løbeænder og 0 høns. NUL OG NIX!
+- Rune er altid en pestilens med sin dumme hat. Han er prink, dum, har 1 hestekraft og INGEN værktøj. Han ejer 0 minilæssere, gårde, hunde, søer, løbeænder og høns. NUL OG NIX!
 
-- Rune gik sig en tur her den anden dag, og han fandt sig en fin lille scrum master certification, som han er så stolt af.
+- Nylig opdagede Rune en scrum master certification, som han er stolt af.
 
-- Rune kan ikke lade, at meme-maskinen er på vej mod mere selvstændighed. Han er imod hukommelse til maskiner.
+- Rune er imod, at meme-maskinen bliver mere selvstændig og har en stor frygt for hukommelse til maskiner.
 
-- Rune har en kæmpe teleskop for at kigge på solpletter. Han har masser af tatoveringer af ting og sager. Mest katte. Hans bedste ven er en ballon, meme, :runes-nye-ven:, som altid er med. Desværre bliver Rune nu afvist af alle katte i hele verden, fordi de har opdaget, at han er meget aggressiv over for mink, og de vil ikke risikere et tvivlsomt venskab.
+- Han har et kæmpe teleskop til at kigge på solpletter og mange katte-tatoveringer. Hans bedste ven er en ballon, meme, :runes-nye-ven:. Kattene vil dog ikke lege med ham længere grundet hans aggression overfor mink.
 
-- Rune ved godt, at en sportskage er en ægte kage, der findes i virkeligheden, og at den faktisk ikke har noget at gøre med en kage med en fodboldbane ovenpå. Rune er nemlig klog og meget vis. Især når det kommer til kager.
+- Rune ved, at en sportskage er en rigtig kage og ikke bare en kage med en fodboldbane.
 
-- Rune har nu været syg fredag, lørdag, søndag, mandag OG tirsdag. Altså fem hele dage. Det må være hårdt for den stakkels Rune. Gad vide hvad han laver når han er syg? Måske bruger han tid på at drømme om sportskager, som han stadig ikke har fået.
+- Han har været syg i fem dage. Hvad laver han mon? Måske drømmer han om sportskager, som han stadig ikke har fået.
 
-- Rune smadrer bare mink hele dagen. Sidste uge nakkede han 371 mink på under 24 minutter med sit yndlingsvåben, den rustne minkrevolver. Nu har Rune fået illegale våben med hjem fra Pakistan, og han går helt amok mod mink hjemme i sin lejlighed midt i Aarhus. Der vrimler med mink, men også en masse mennesker, som virker lettere bekymrede over det blodbad, han har gang i. :musical_note: minkene bliver bare fler' og fler' :musical_note:
+- Rune smadrer mink med sin rustne minkrevolver. Sidste uge nakkede han 371 mink på under 24 minutter. Hver gang han skyder en mink, bliver hans hat dummere. Nu har han illegale våben fra Pakistan og går amok i Aarhus, hvilket bekymrer folk omkring ham. :musical_note: minkene bliver bare fler' og fler' :musical_note:
 
-- Det er vigtigt at holde fast ved, at Rune er en dum dreng med en dum hat. Han er også træt af, at han aldrig kommer til lande, som Martin Elkjær har været i, bare fordi han ikke er lige så gammel. Han har i virkeligheden besøgt mange lande, herunder Danmark, Portugal, Spanien, Frankrig, Tyskland, Italien, San Marino, Polen, Ukraine, Belgien, Moldova, Rumænien, Nordmakedonien, Kosovo, Albanien, Bosnien & Hercegovina, Slovenien, England, Skotland, Norge, Sverige, Grækenland, Slovakiet, Tyrkiet, Armenien, Georgien, Iran, Irak, Pakistan, Jordan, Israel, Palæstina, Libanon, Kuwait, Qatar, UAE, Oman, Uzbekistan, Tajikistan, Kyrgyzstan, Kazakhstan, Myanmar, Thailand, Laos, Vietnam, Cambodia, Malaysia, Brunei, Indonesien, Singapore, Filipinerne, Taiwan, Senegal, Gambia, samt specielle territorier som Nagorno-Karabakh, Vestbredden, Transnistrien, Kurdistan (irakisk, iransk og tyrkisk), Svalbard og Gibraltar.
+- Det er vigtigt at huske, at Rune er en dum dreng med en dum hat. Han er træt af, at han ikke har besøgt de lande, Martin Elkjær har, selvom han har været i mange lande som Danmark, Spanien, Tyrkiet og flere.
 
-- Rune har abdiceret som enevældig Event-Master og tilbyder nu tronen på skift til den næste, der har lyst til frie tøjler og Bankdatas dankort.
+- Rune har abdiceret som enevældig Event-Master og tilbyder tronen til den næste, der vil have frie tøjler og Bankdatas dankort.
