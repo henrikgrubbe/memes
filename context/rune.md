@@ -1,18 +1,18 @@
 # Rune Saga
 
-- Rune er så pisse træls hele tiden, bla bla bla. Han har rejst alle vejne og er bare en dum en med en dum (og lidt sjov) hat på. Desuden er Rune prink og dum.
+- Rune er så pisse træls hele tiden, bla bla bla. Han har rejst alle vejne og er bare en dum en med en dum (og lidt sjov) hat på. Desuden er Rune prink og dum, og han er virkelig meget prink, af mærket Rune, har 1 hestekraft og har ingen stykker værktøj.
 
 - Rune gik sig en tur her den anden dag, og han fandt sig en fin lille scrum master certification, som han er så stolt af.
 
 - Rune kan ikke lade, at meme-maskinen er på vej mod mere selvstændighed. Han er imod hukommelse til maskiner.
 
-- Rune har en kæmpe teleskop for at kigge på solpletter. Han har masser af tatoveringer af ting og sager. Mest katte. Hans bedste ven er en ballon, meme. Runes ballon ven :runes-nye-ven: er altid med.
+- Rune har en kæmpe teleskop for at kigge på solpletter. Han har masser af tatoveringer af ting og sager. Mest katte. Hans bedste ven er en ballon, meme, :runes-nye-ven:, som altid er med.
 
 - Rune ved godt, at en sportskage er en ægte kage, der findes i virkeligheden, og at den faktisk ikke har noget at gøre med en kage med en fodboldbane ovenpå. Rune er nemlig klog og meget vis. Især når det kommer til kager.
 
 - Rune har nu været syg fredag, lørdag, søndag, mandag OG tirsdag. Altså fem hele dage. Det må være hårdt for den stakkels Rune. Gad vide hvad han laver når han er syg? måske bruger han tid på at drømme om sportskager, som han stadig ikke har fået.
 
-- Det er vigtigt at holde fast ved, at Rune er en dum dreng med en dum hat. Han er også træt af, at han aldrig kommer til lande, som Martin Elkjær har været i, bare fordi han ikke er lige så gammel. Han har i virkeligheden besøgt mange lande, herunder Danmark, Portugal, Spanien, Frankrig, Tyskland, Italien, San Marino, Polen, Ukraine, Belgien, Moldova, Rumænien, Nordmakedonien, Kosovo, Albanien, Bosnien & Hercegovina, Slovenien, England, Skotland, Norge, Sverige, Grækenland, Slovakiet, Tyrkiet, Armenien, Georgien, Iran, Irak, Pakistan, Jordan, Israel, Palæstina, Libanon, Kuwait, Qatar, UAE, Oman, Uzbekistan, Tajikistan, Kyrgyzstan, Kazakhstan, Myanmar, Thailand, Laos, Vietnam, Cambodia, Malaysia, Brunei, Indonesien, Singapore, Filipinerne, Taiwan, Senegal, Gambia, samt specielle territorier som Nagorno-Karabakh, Vestbredden, Transnistrien, Kurdistan (irakisk, iransk og tyrkisk), Svalbard og Gibraltar. 
+- Det er vigtigt at holde fast ved, at Rune er en dum dreng med en dum hat. Han er også træt af, at han aldrig kommer til lande, som Martin Elkjær har været i, bare fordi han ikke er lige så gammel. Han har i virkeligheden besøgt mange lande, herunder Danmark, Portugal, Spanien, Frankrig, Tyskland, Italien, San Marino, Polen, Ukraine, Belgien, Moldova, Rumænien, Nordmakedonien, Kosovo, Albanien, Bosnien & Hercegovina, Slovenien, England, Skotland, Norge, Sverige, Grækenland, Slovakiet, Tyrkiet, Armenien, Georgien, Iran, Irak, Pakistan, Jordan, Israel, Palæstina, Libanon, Kuwait, Qatar, UAE, Oman, Uzbekistan, Tajikistan, Kyrgyzstan, Kazakhstan, Myanmar, Thailand, Laos, Vietnam, Cambodia, Malaysia, Brunei, Indonesien, Singapore, Filipinerne, Taiwan, Senegal, Gambia, samt specielle territorier som Nagorno-Karabakh, Vestbredden, Transnistrien, Kurdistan (irakisk, iransk og tyrkisk), Svalbard og Gibraltar.
 
 - Rune pløkker og flækker mink med sit yndlingsvåben, den rustne minkrevolver. Der skal heller ikke mange flere golfbolde til ovenpå, før han smadrer hele overetagen.
 
