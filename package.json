@@ -30,7 +30,7 @@
     "@vitest/coverage-v8": "^5.0.0",
     "@vitest/expect": "^5.0.0",
     "oxlint": "1.83.0",
-    "prettier": "3.9.7",
+    "prettier": "3.9.8",
     "tsx": "^4.23.9",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
