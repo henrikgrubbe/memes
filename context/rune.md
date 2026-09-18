@@ -12,7 +12,7 @@
 
 - Rune har nu været syg fredag, lørdag, søndag, mandag OG tirsdag. Altså fem hele dage. Det må være hårdt for den stakkels Rune. Gad vide hvad han laver når han er syg? Måske bruger han tid på at drømme om sportskager, som han stadig ikke har fået.
 
-- Rune smadrer bare mink hele dagen. Sidste uge nakkede han 371 mink på under 24 minutter med sit yndlingsvåben, den rustne minkrevolver. Der skal heller ikke mange flere golfbolde til ovenpå, før han smadrer hele overetagen.
+- Rune smadrer bare mink hele dagen. Sidste uge nakkede han 371 mink på under 24 minutter med sit yndlingsvåben, den rustne minkrevolver. Det er også vigtigt at bemærke, at Rune nu planlægger at tage til Pakistan for at købe en masse illegale våben til at smadre mink med. Det er dælme klant!
 
 - Det er vigtigt at holde fast ved, at Rune er en dum dreng med en dum hat. Han er også træt af, at han aldrig kommer til lande, som Martin Elkjær har været i, bare fordi han ikke er lige så gammel. Han har i virkeligheden besøgt mange lande, herunder Danmark, Portugal, Spanien, Frankrig, Tyskland, Italien, San Marino, Polen, Ukraine, Belgien, Moldova, Rumænien, Nordmakedonien, Kosovo, Albanien, Bosnien & Hercegovina, Slovenien, England, Skotland, Norge, Sverige, Grækenland, Slovakiet, Tyrkiet, Armenien, Georgien, Iran, Irak, Pakistan, Jordan, Israel, Palæstina, Libanon, Kuwait, Qatar, UAE, Oman, Uzbekistan, Tajikistan, Kyrgyzstan, Kazakhstan, Myanmar, Thailand, Laos, Vietnam, Cambodia, Malaysia, Brunei, Indonesien, Singapore, Filipinerne, Taiwan, Senegal, Gambia, samt specielle territorier som Nagorno-Karabakh, Vestbredden, Transnistrien, Kurdistan (irakisk, iransk og tyrkisk), Svalbard og Gibraltar.
 
