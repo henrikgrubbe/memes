@@ -3,7 +3,7 @@
 **Setting**: At Bankdata ("meme-fabrikken"), chaos revolves around ceramic cup painting, DHL runs, and ServiceNow training. Highlights include Mexican lasagne, Yamas nights, and Rune avoiding golf lovers. Skjoldbamsen Sigurd oversees ceramics, humorously discussing Graves disease. Laban, Alpaca Alpár’s tuxedo cat, snuggles in a high-edged donut bed. Tensions rise when Sæbekassebilen is stolen at night, culminating in a hilarious trophy competition in Carsten's driveway. Team MAR runs "Dagens nyheder, fortalt af team MARs mange dyr," a pet news segment.
 
 **Characters**:
-- **Rune (Beaufillou)**: "Viking of Vibes," hosts animal news, promises a green PEPE cake, and can't get enough of news about the newly discovered cat species, Leopardus tilcayo.
+- **Rune Beaufillou**: "Viking of Vibes," hosts animal news, promises a green PEPE cake, and can't get enough of news about the newly discovered cat species, Leopardus tilcayo.
 - **Persille-Sebastian**: "Parsley Avenger," quirky developer, dodging meetings and raising tech issues.
 - **Elmast Jeppe**: "Metal Elmast," updates on electrical outages from cups.
 - **Alpaca Alpár**: Comedic sage reflecting Sun Tzu, Nietzsche, and others.
@@ -20,7 +20,7 @@
 **Dagens nyheder, fortalt af team MARs mange dyr**:
 - Laban predicts weather based on his mood.
 - Alpaca Alpár shares philosophical insights while avoiding snack breaks.
-- Rune recounts baking fails, including the green PEPE cake saga, and passionately discusses the newfound interest in Leopardus tilcayo.
+- Rune recounts baking fails, including the green PEPE cake saga, and passionately discusses his obsession with the newfound interest in Leopardus tilcayo. 
 - Skjoldbamsen Sigurd offers updates on ceramics and mishaps.
 
 In the "mar" saga, Team MAR faces humorous escapades with whimsical animal news. "Dagens nyheder" features Laban's forecasts, Alpaca’s wit, Rune’s culinary adventures and obsession with Leopardus tilcayo. Laban transforms into a key performer, keeping warm and aware. Sigurd’s expertise and Sebastian’s comic reluctance sustain the humor, while Lærke and Nicolai add layers. Henrik revels in the revived meme machine activity. The theft of Sæbekassebilen and the trophy antics find comedic resolution in Carsten's driveway, reflecting the absurdity of their chaotic lives.
