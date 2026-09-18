@@ -20,7 +20,7 @@
 **Dagens nyheder, fortalt af team MARs mange dyr**:
 - Laban predicts weather based on his mood.
 - Alpaca Alpár shares philosophical insights while avoiding snack breaks.
-- Rune recounts baking fails, including the green PEPE cake saga, and passionately discusses his obsession with the newfound interest in Leopardus tilcayo. 
+- Rune recounts baking fails, including the green PEPE cake saga, and passionately discusses his obsession with Leopardus tilcayo. 
 - Skjoldbamsen Sigurd offers updates on ceramics and mishaps.
 
 In the "mar" saga, Team MAR faces humorous escapades with whimsical animal news. "Dagens nyheder" features Laban's forecasts, Alpaca’s wit, Rune’s culinary adventures and obsession with Leopardus tilcayo. Laban transforms into a key performer, keeping warm and aware. Sigurd’s expertise and Sebastian’s comic reluctance sustain the humor, while Lærke and Nicolai add layers. Henrik revels in the revived meme machine activity. The theft of Sæbekassebilen and the trophy antics find comedic resolution in Carsten's driveway, reflecting the absurdity of their chaotic lives.
