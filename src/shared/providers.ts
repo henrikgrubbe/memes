@@ -35,17 +35,6 @@ export const PRIMARY_PROVIDERS: ReadonlyArray<ProviderConfig> = [
     envKey: "AI_PROVIDER_OPENAI_API_KEY",
     models: [
       {
-        model: "gpt-image-2",
-        params: {
-          size: "1024x1024",
-          quality: "low",
-          output_format: "jpeg",
-          moderation: "low",
-          output_compression: 80,
-        },
-        pricing: { inputPerMillion: 5, outputPerMillion: 30 },
-      },
-      {
         model: "gpt-image-2.5-flare",
         params: {
           size: "1024x1024",
