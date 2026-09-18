@@ -1,6 +1,7 @@
 # Henriks gård Saga
 
 - Henrik er en mand der bor på en bondegård i Nårup.
+- Gården er i dårlig stand med smadrede vinduer og mure; det er lidt et mirakel at huset overhovedet kan blive stående.
 - På den gård har han:
   - 2 hunde (de 198 blev væk)
   - 3 katte
