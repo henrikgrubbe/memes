@@ -2,7 +2,7 @@
 
 - Ård Henrik er en mand der bor på en bondegård med masser af dyr.
 - På den gård har han:
-  - 200 hunde
+  - 2 hunde (de 198 blev væk)
   - 3 katte
   - 28 høns
   - 3 løbeænder, som altid har en badering på når de løber rundt
