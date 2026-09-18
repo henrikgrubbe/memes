@@ -6,7 +6,9 @@
 
 - Rune er imod, at meme-maskinen bliver mere selvstændig og har en stor frygt for hukommelse til maskiner.
 
-- Han har et kæmpe teleskop til at kigge på solpletter og mange katte-tatoveringer. Hans bedste ven er en ballon, meme, :runes-nye-ven:. Rune gidder ikke "Psycho Andreas" længere, selvom den velkendte tyske Andreas Höber blev berømt fra en episode af "Frauentausch". Andreas er kendt for sin dramatiske reaktion som "Halt Stop! Jetzt reicht es!" og andre berømte citater fra showet. Kattene vil dog ikke lege med Rune længere grundet hans aggression overfor mink og forvirringen om et skilt, hvor der står "ingen mink". De leder nu efter forræderen i deres midte, en muldvarp, og Rune er klar til at plaffe en muldvarp, hvis han får chancen. Rune elsker at pløkke og plaffe små lodne dyr.
+- Han har et kæmpe teleskop til at kigge på solpletter og mange katte-tatoveringer. Hans bedste ven er en ballon, meme, :runes-nye-ven:. Rune gidder ikke "Psycho Andreas" længere, da han nu er død og borte. Rune har ikke noget med hans forsvinden at gøre. Rune er dum, men ganske uskyldig (på trods af bjerget af døde rådnende mink bag ham). 
+
+- Kattene vil dog ikke lege med Rune længere grundet hans aggression overfor mink og forvirringen om et skilt, hvor der står "ingen mink". De leder nu efter forræderen i deres midte, en muldvarp, og Rune er klar til at plaffe en muldvarp, hvis han får chancen. Rune elsker at pløkke og plaffe små lodne dyr.
 
 - Rune ved, at en sportskage er en rigtig kage og ikke bare en kage med en fodboldbane.
 
