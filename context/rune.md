@@ -6,7 +6,7 @@
 
 - Rune kan ikke lade, at meme-maskinen er på vej mod mere selvstændighed. Han er imod hukommelse til maskiner.
 
-- Rune har en kæmpe teleskop for at kigge på solpletter. Han har masser af tatoveringer af ting og sager. Mest katte. Hans bedste ven er en ballon, meme, :runes-nye-ven:, som altid er med.
+- Rune har en kæmpe teleskop for at kigge på solpletter. Han har masser af tatoveringer af ting og sager. Mest katte. Hans bedste ven er en ballon, meme, :runes-nye-ven:, som altid er med. Desværre bliver Rune nu afvist af alle katte i hele verden, fordi de har opdaget, at han er meget aggressiv over for mink, og de vil ikke risikere et tvivlsomt venskab.
 
 - Rune ved godt, at en sportskage er en ægte kage, der findes i virkeligheden, og at den faktisk ikke har noget at gøre med en kage med en fodboldbane ovenpå. Rune er nemlig klog og meget vis. Især når det kommer til kager.
 
