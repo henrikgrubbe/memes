@@ -1,6 +1,6 @@
 # Henriks gård Saga
 
-- Henrik er en mand der bor på en bondegård med masser af dyr.
+- Henrik er en mand der bor på en bondegård i Nårup, hvor Ku Klux Klan også holder til.
 - På den gård har han:
   - 2 hunde (de 198 blev væk)
   - 3 katte
