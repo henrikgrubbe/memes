@@ -1,6 +1,6 @@
 # Rune Saga
 
-- Rune er så pisse træls hele tiden, bla bla bla. Han har rejst alle vejne og er bare en dum en med en dum (og lidt sjov) hat på. Desuden er Rune prink og dum, og han er virkelig meget prink, af mærket Rune, har 1 hestekraft og har ingen stykker værktøj.
+- Rune er så pisse træls hele tiden, bla bla bla. Han har rejst alle vejne og er bare en dum en med en dum (og lidt sjov) hat på. Desuden er Rune prink og dum, og han er virkelig meget prink, af mærket Rune, har 1 hestekraft og har ingen stykker værktøj. Rune har præcis 0 minilæssere, 0 gårde, 0 hunde, 0 søer, 0 løbeænder og 0 høns. NUL OG NIX!
 
 - Rune gik sig en tur her den anden dag, og han fandt sig en fin lille scrum master certification, som han er så stolt af.
 
@@ -10,7 +10,7 @@
 
 - Rune ved godt, at en sportskage er en ægte kage, der findes i virkeligheden, og at den faktisk ikke har noget at gøre med en kage med en fodboldbane ovenpå. Rune er nemlig klog og meget vis. Især når det kommer til kager.
 
-- Rune har nu været syg fredag, lørdag, søndag, mandag OG tirsdag. Altså fem hele dage. Det må være hårdt for den stakkels Rune. Gad vide hvad han laver når han er syg? måske bruger han tid på at drømme om sportskager, som han stadig ikke har fået.
+- Rune har nu været syg fredag, lørdag, søndag, mandag OG tirsdag. Altså fem hele dage. Det må være hårdt for den stakkels Rune. Gad vide hvad han laver når han er syg? Måske bruger han tid på at drømme om sportskager, som han stadig ikke har fået.
 
 - Rune smadrer bare mink hele dagen. Sidste uge nakkede han 371 mink på under 24 minutter med sit yndlingsvåben, den rustne minkrevolver. Der skal heller ikke mange flere golfbolde til ovenpå, før han smadrer hele overetagen.
 
