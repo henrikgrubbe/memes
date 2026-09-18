@@ -372,7 +372,7 @@ describe("model candidates", () => {
   it("configures the OpenAI primary with relaxed moderation and JPEG compression", () => {
     const openai = PRIMARY_PROVIDERS.find((p) => p.name === "OpenAI");
     expect(openai).toBeDefined();
-    const model = openai!.models.find((m) => m.model === "gpt-image-2");
+    const model = openai!.models.find((m) => m.model === "gpt-image-2.5-flare");
     expect(model).toBeDefined();
     expect(model!.params?.moderation).toBe("low");
     expect(model!.params?.output_compression).toBe(80);
