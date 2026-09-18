@@ -45,6 +45,17 @@ export const PRIMARY_PROVIDERS: ReadonlyArray<ProviderConfig> = [
         },
         pricing: { inputPerMillion: 5, outputPerMillion: 30 },
       },
+      {
+        model: "gpt-image-2.5-flare",
+        params: {
+          size: "1024x1024",
+          quality: "low",
+          output_format: "jpeg",
+          moderation: "low",
+          output_compression: 80,
+        },
+        pricing: { inputPerMillion: 8, outputPerMillion: 30 },
+      },
     ],
   },
 ];
