@@ -2,3 +2,4 @@
 
 - Henrik er en ske.
 - Henrik elsker at gemme mexicanske lasagner, så de er svære at finde.
+- Henrik tegner altid en rød pil til lasagnerne, så man kan se hvor de er.
