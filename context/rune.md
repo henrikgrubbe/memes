@@ -1,6 +1,6 @@
 # Rune Saga
 
-- Rune er så pisse træls hele tiden, bla bla bla. Han har rejst alle vejne og er bare en dum en med en dum (og lidt sjov) hat på.
+- Rune er så pisse træls hele tiden, bla bla bla. Han har rejst alle vejne og er bare en dum en med en dum (og lidt sjov) hat på. Desuden er Rune prink og dum.
 
 - Rune gik sig en tur her den anden dag, og han fandt sig en fin lille scrum master certification, som han er så stolt af.
 
