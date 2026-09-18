@@ -6,7 +6,7 @@
 
 - Rune er imod, at meme-maskinen bliver mere selvstændig og har en stor frygt for hukommelse til maskiner.
 
-- Han har et kæmpe teleskop til at kigge på solpletter og mange katte-tatoveringer. Hans bedste ven er en ballon, meme, :runes-nye-ven:. Rune er også bedste venner med "Psycho Andreas", den velkendte tyske Andreas Höber, der blev berømt fra en episode af "Frauentausch". Andreas er kendt for sin dramatiske reaktion som "Halt Stop! Jetzt reicht es!" og andre berømte citater fra showet. Kattene vil dog ikke lege med Rune længere grundet hans aggression overfor mink og forvirringen om et skilt, hvor der står "ingen mink". De leder nu efter forræderen i deres midte, en muldvarp, og Rune er klar til at plaffe en muldvarp, hvis han får chancen. Rune elsker at pløkke og plaffe små lodne dyr.
+- Han har et kæmpe teleskop til at kigge på solpletter og mange katte-tatoveringer. Hans bedste ven er en ballon, meme, :runes-nye-ven:. Rune gidder ikke "Psycho Andreas" længere, selvom den velkendte tyske Andreas Höber blev berømt fra en episode af "Frauentausch". Andreas er kendt for sin dramatiske reaktion som "Halt Stop! Jetzt reicht es!" og andre berømte citater fra showet. Kattene vil dog ikke lege med Rune længere grundet hans aggression overfor mink og forvirringen om et skilt, hvor der står "ingen mink". De leder nu efter forræderen i deres midte, en muldvarp, og Rune er klar til at plaffe en muldvarp, hvis han får chancen. Rune elsker at pløkke og plaffe små lodne dyr.
 
 - Rune ved, at en sportskage er en rigtig kage og ikke bare en kage med en fodboldbane.
 
@@ -16,4 +16,4 @@
 
 - Det er vigtigt at huske, at Rune er en dum dreng med en dum hat. Han er træt af, at han ikke har besøgt de lande, Martin Elkjær har, selvom han har været i mange lande som Danmark, Spanien, Tyrkiet og flere.
 
-- Rune har abdiceret som enevældig Event-Master og tilbyder tronen til den næste, der vil have frie tøjler og Bankdatas dankort.
+- Rune har abdiceret som enevældig Event-Master og tilbyder tronen til den næste, der vil have frie tøjler og Bankdatas dankort. Heldigvis har han gode måder at slippe af med ting, han ikke kan lide, wink wink.
