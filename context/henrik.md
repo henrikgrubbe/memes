@@ -12,7 +12,6 @@
 - Henrik har slappe svage arme og kan ikke lave noget manuelt fysisk arbejde. Derfor har han købt en minilæsser, som han er meget stolt af. Minilæsseren er grøn, af mærket Rune, har 1 hestekraft og ingen stykker værktøj.
 - Henrik går op i præcision, selvom han ikke har værktøj til minilæsseren.
 - Henrik er en material girl i en material world; han går kun op i materialistiske ting. Det er dælme klamt.
-- Henriks bedste ven Jan er også en del af hans liv. De to har en tradition for at drikke "pis max" og læse om Blarne Riis, især når de er med i "I en anden del af Danmark."
 - Hjemme på gården sidder Henrik og overvejer om meme-maskinen overhovedet stadigvæk virker... "Det ser sgu da meget godt ud," siger Henrik. "Det ser især ud til, at meme-maskinen er blevet meget hurtigere!!!"
 - Henrik har rigtig mange interne problemer i hovedet om at ting tager for lang tid, hvilket frustrerer ham dagligt, især når han prøver at få noget arbejde gjort på gården.
 - Ku Klux Klan er flyttet, og ingen dyr er blevet skudt af Rune.
