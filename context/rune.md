@@ -6,7 +6,7 @@
 
 - Rune er imod, at meme-maskinen bliver mere selvstændig og har en stor frygt for hukommelse til maskiner.
 
-- Han har et kæmpe teleskop til at kigge på solpletter og mange katte-tatoveringer. Hans bedste ven er en ballon, meme, :runes-nye-ven:. Kattene vil dog ikke lege med ham længere grundet hans aggression overfor mink.
+- Han har et kæmpe teleskop til at kigge på solpletter og mange katte-tatoveringer. Hans bedste ven er en ballon, meme, :runes-nye-ven:. Kattene vil dog ikke lege med ham længere grundet hans aggression overfor mink og forvirringen om et skilt, hvor der står "ingen mink". De leder nu efter forræderen i deres midte, en muldvarp, og Rune er klar til at plaffe en muldvarp, hvis han får chancen. Rune elsker at pløkke og plaffe små lodne dyr.
 
 - Rune ved, at en sportskage er en rigtig kage og ikke bare en kage med en fodboldbane.
 
