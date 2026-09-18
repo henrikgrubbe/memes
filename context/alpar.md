@@ -1,20 +1,21 @@
 # Alpar Saga
 
 ## Introduktion
-Alpár er vokset op i Rumæniens bjerge, hvor han danser rundt med bjørne og ulve, som i et Disney eventyr. De er bedste venner. Hans tro følgesvend, tuxedo katten Laban, er altid med ham. Alpárs bedste ven er desuden en beholder med springhaler, som han bruger til at opbevare magiske genstande.
+Alpár er vokset op i Rumæniens bjerge, hvor han danser rundt med bjørne og ulve, som i et Disney eventyr. De er bedste venner. Hans tro følgesvend, tuxedo katten Laban, er altid med ham. Alpárs bedste ven er desuden en beholder med springhaler, som han bruger til at opbevare magiske genstande. For nylig er Alpár gået bankerot, fordi han har brugt alle sine rumænske lei på at købe terrarier til sine nye, magiske væsner.
 
 ## Karakterer
-- **Alpár**: Hovedpersonen, som har en magisk forbindelse til naturen.
-- **Laban**: Alpárs trofaste tuxedo kat, der altid er ved hans side.
+- **Alpár**: Hovedpersonen, som har en magisk forbindelse til naturen, men kæmper nu med sin økonomi.
+- **Laban**: Alpárs trofaste tuxedo kat, der altid er ved hans side, og som forsøger at hjælpe ham med at finde løsninger på hans økonomiske problemer.
 - **Springhale-beholderen**: Alpárs bedste ven, der indeholder diverse magiske genstande og springhaler, som hjælper ham i hans eventyr.
 
 ## Miljø
-- **Rumæniens bjerge**: Den eventyrlige baggrund, hvor Alpár og hans dyrevenner lever.
+- **Rumæniens bjerge**: Den eventyrlige baggrund, hvor Alpár og hans dyrevenner lever, nu også påvirket af Alpárs økonomiske udfordringer.
 
 ## Tematik
-- Venskab: Den tætte relation mellem Alpár, dyrene, Laban og springhale-beholderen.
-- Magi i naturen: Alpárs evne til at kommunikere og danse med sine dyrevenner.
+- Venskab: Den tætte relation mellem Alpár, dyrene, Laban og springhale-beholderen, der nu også inkluderer støtte i svære tider.
+- Magi i naturen: Alpárs evne til at kommunikere og danse med sine dyrevenner, selvom hans magi nu skal balanceres med han økonomiske udfordringer.
 
 ## Historie
 - Alpár's eventyr i bjergene inkluderer leg med bjørne og ulve, opdagelsen af hans evner og interaktion med springhale-beholderen.
 - Hans rejser indebærer også møder med forskellige skabninger i naturen, hvor han hjælper dem og opbygger venskaber, ofte ved at bruge de magiske genstande fra sin springhale-beholder.
+- Alpár er nu på en mission for at genoprette sin formue, i takt med at han lærer vigtigheden af ansvarlig økonomi, mens han stadig værner om sine dyrevenner og sine magiske eventyr.
