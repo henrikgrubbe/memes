@@ -6,6 +6,7 @@
   - 3 katte
   - 28 høns
   - 3 løbeænder, som altid har en badering på når de løber rundt
+  - En kæle-løbeand, som Henrik altid har med i sin Gucci taske.
 - Gården har også en masse kartofler.
 - Gården har et utæt tag, så om vinteren når det sner, må Henrik op på loftet og skovle sne væk med sine små svage arme. Stakkels Henrik. Henrik er bare dum.
 - På gården er der også en sø, der er fin igen og ikke længere truer med at oversvømme dyrene. De har stadig redningsveste og baderinge klar.
