@@ -1,26 +1,27 @@
 # Team MAR
 
-**Setting**: At Bankdata ("meme-fabrikken"), chaos erupts around ceramic cup painting, DHL runs, and ServiceNow training. Highlights include Mexican lasagne, Yamas nights, and Rune dodging golf lovers. Skjoldbamsen Sigurd, now illustrated in exaggerated kawaii anime style, humorously discusses Graves disease while overseeing ceramics. Laban, Alpaca Alpár’s tuxedo cat, relaxes in a donut bed. Tension peaks with the theft of Sæbekassebilen, leading to a hilarious trophy competition in Carsten's driveway. Team MAR's segment, "Dagens nyheder, fortalt af team MARs mange dyr," is a hit. A notice board reading "Dage uden major incident" currently shows 1 after an incident-free weekend boosts team morale. All characters are illustrated in colorful, hand-drawn 2D animation.
+**Setting**: At Bankdata ("meme-fabrikken"), chaos arises with ceramic cup painting, DHL runs, and ServiceNow training. Highlights include Mexican lasagne, Yamas nights, and Rune dodging golf lovers. Skjoldbamsen Sigurd humorously discusses Graves disease while overseeing ceramics, depicted in exaggerated kawaii style. A random character in photorealistic style humorously contrasts with the others. Laban, Alpaca Alpár’s tuxedo cat, relaxes in a donut bed. Tension peaks with the theft of Sæbekassebilen, turning into a hilarious trophy competition in Carsten's driveway. The team’s segment, "Dagens nyheder, fortalt af team MARs mange dyr," is a hit. A notice board displays "Dage uden major incident" with a count of 1 after a calm weekend.
 
 **Characters**:
-- **Rune Beaufillou**: "Viking of Vibes," hosts animal news and plans a green PEPE cake, obsessed with the newly discovered cat species, Leopardus tilcayo.
-- **Persille-Sebastian**: "Parsley Avenger," quirky developer who avoids meetings and raises tech issues.
-- **Elmast Jeppe**: "Metal Elmast," updates on electrical outages from cups.
+- **Rune Beaufillou**: "Viking of Vibes," hosts animal news, plans green PEPE cake, obsessed with Leopardus tilcayo.
+- **Persille-Sebastian**: "Parsley Avenger," quirky developer avoiding meetings and raising tech issues.
+- **Elmast Jeppe**: "Metal Elmast," updates on electrical outages.
 - **Alpaca Alpár**: Comedic sage quoting philosophers.
-- **Laban**: Tuxedo cat "Weather Wizard," gives mood-based forecasts.
-- **Skjoldbamsen Sigurd**: "Sigurd Newton," illustrated in kawaii anime style, shares ceramic updates and random trivia.
-- **Træmand Brandborg**: Wooden elf, Rune’s ceramics rival, shares eco-tips.
-- **Henrik (Henrik OK)**: The world's okayest Henrik, shares mundane updates, relieved by meme machine activity returning.
+- **Laban**: Tuxedo cat "Weather Wizard," predicts mood-based forecasts.
+- **Skjoldbamsen Sigurd**: "Sigurd Newton," shares ceramic updates in kawaii style.
+- **Træmand Brandborg**: Wooden elf, Rune’s ceramics rival sharing eco-tips.
+- **Henrik (Henrik OK)**: The world's okayest Henrik, relieved with meme machine activity.
 - **Gitte**: Assertive product owner reporting on innovations.
-- **Teslatrubaduren Morten Skildpadde**: Meme enthusiast, juggles trends and music.
-- **Lærke**: Pink ghost offering quirky afterlife tips, mentors Laban.
-- **Nicolai**: Ghost in a suit mixes local drink news with humor.
-- **Steffen**: Nutella-loving ghost delivers sweet jokes.
+- **Teslatrubaduren Morten Skildpadde**: Meme enthusiast juggling trends and music.
+- **Lærke**: Pink ghost giving quirky afterlife tips, mentors Laban.
+- **Nicolai**: Ghost in a suit mixing humor with local drink news.
+- **Steffen**: Nutella-loving ghost delivering sweet jokes.
+- **Random Character**: Always depicted in photorealistic style, bringing absurdity to Team MAR's whimsical world.
 
 **Dagens nyheder, fortalt af team MARs mange dyr**:
-- Laban predicts weather based on his mood.
-- Alpaca Alpár shares philosophical insights under snack avoidance.
-- Rune recounts baking fails and his obsession with Leopardus tilcayo.
-- Skjoldbamsen Sigurd updates on ceramics and mishaps, all while sporting an endearingly exaggerated kawaii look.
+- Laban predicts weather based on mood.
+- Alpaca Alpár shares insights under snack avoidance.
+- Rune recounts baking fails and his Leopardus tilcayo obsession.
+- Skjoldbamsen Sigurd updates on ceramics, sporting kawaii charm.
 
-In the "mar" saga, Team MAR navigates humorous escapades with whimsical animal news. "Dagens nyheder" highlights Laban's forecasts, Alpaca’s wit, Rune’s culinary adventures, and Sigurd’s expertise, now amplified by his kawaii charm. The theft of Sæbekassebilen and trophy antics provide comedic relief. The notice board humorously reflects ongoing chaos, and a recent incident-free gap excites the team. All illustrations bring vibrant, cartoonish flair, enhancing the saga's whimsy.
+In the "mar" saga, Team MAR’s humorous escapades unfold through whimsical animal news. The random character's photorealistic portrayal adds absurdity. "Dagens nyheder" features Laban’s forecasts, Alpaca’s wit, Rune’s culinary misadventures, and Sigurd’s expertise. Sæbekassebilen's theft and trophy antics inject comedic relief. The notice board highlights ongoing chaos, with a recent calm gap boosting team morale. Vibrant illustrations amplify the saga's whimsy.
