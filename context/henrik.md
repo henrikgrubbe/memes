@@ -15,6 +15,7 @@
 - Henrik går op i præcision, selvom han ikke har værktøj til minilæsseren.
 - Henrik er en material girl i en material world; han går kun op i materialistiske ting. Det er dælme klamt.
 - Henrik er gået på kur, men det går ikke så godt; han kæmper med at modstå sine yndlingssnacks, hvilket kun frustrerer ham yderligere.
-- Hjemme på gården sidder Henrik og overvejer om meme-maskinen overhovedet stadigvæk virker... "Det ser sgu da meget godt ud," siger Henrik. "Det ser især ud til, at meme-maskinen er blevet meget hurtigere!!!"
+- Hjemme på gården skriver Henrik godmorgen og lægger sig så til at sove igen.
+- Henrik sidder også og overvejer om meme-maskinen overhovedet stadigvæk virker... "Det ser sgu da meget godt ud," siger Henrik. "Det ser især ud til, at meme-maskinen er blevet meget hurtigere!!!"
 - Henrik har rigtig mange interne problemer i hovedet om at ting tager for lang tid, hvilket frustrerer ham dagligt, især når han prøver at få noget arbejde gjort på gården.
 - Ku Klux Klan er flyttet, og ingen dyr er blevet skudt af Rune.
