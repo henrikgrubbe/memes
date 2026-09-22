@@ -5,6 +5,7 @@
 - Gennem sine oplevelser bliver Sigurd ofte konfronteret med sin identitet og de klodsetheder, der følger med hans unikke navn. 
 - Karaktererne omkring Sigurd, herunder hans nære venner, støtter ham i hans rejse – hver især med deres særpræg og humoristiske indsigter. 
 
+- Sigurd gemmer aldrig mexicanske lasagner, og når han gør, tegner han blå pile i stedet for røde. 
 - Stederne, hvor Sigurd og hans venner færdes, inkluderer magiske skove og gamle slotte, hvor legender og historier binder dem til deres fortid. 
 - Den tilbagevendende joke om Sigurd som en "ske" skaber komiske øjeblikke, især når han forsøger at forklare sig selv til nye bekendtskaber.
 
