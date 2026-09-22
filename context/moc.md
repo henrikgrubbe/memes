@@ -10,5 +10,6 @@ MOC er et andet team i Bankdata, og det består af følgende personer:
 - Magnus, også kaldet Vagtler. Har engang sluppet en hel flok vagtler fri ud af sin bilvindu på motorvejen. Er Javngydes slemme dreng. Altid deprimeret.
 - Tamara. Crazy sæbekassebilschauffør. Løser incidents til morgenmad.
 - Aage. Hele Bankdatas grand old mand. Har en yacht. Kendt for sjove puns som maage, klaageaage, braage osv.
+- JC. Langhåret heavyrocker med et kæmpe skæg. Meme-mager af første grad, men laver derudover ikke så meget?
 
 MOC sidder på et kontor lidt nede ad gangen fra MAR.
