@@ -26,7 +26,6 @@ interface SuccessCommentParams {
 // webhook to the moment the worker reports completion. Measured against the
 // task's own `requestedAt` stamp, so it survives queue wait and retries.
 interface Elapsed {
-  readonly seconds: number;
   readonly text: string;
 }
 
@@ -65,14 +64,11 @@ const elapsedSince = (
     return null;
   }
   const seconds = Math.round(elapsedMillis / 1000);
-  return { seconds, text: formatElapsed(seconds) };
+  return { text: formatElapsed(seconds) };
 };
 
 const elapsedCommentLines = (elapsed: Elapsed | null): ReadonlyArray<string> =>
   elapsed == null ? [] : [`**Took:** ${elapsed.text}`];
-
-const elapsedSlackFields = (elapsed: Elapsed | null) =>
-  elapsed == null ? {} : { duration_seconds: elapsed.seconds };
 
 const formatCostCents = (metadata?: GenerationMetadata): string | null => {
   const costCents = metadata?.costCents;
@@ -90,11 +86,6 @@ const fencedCode = (value: string): ReadonlyArray<string> => {
   const fence = "`".repeat(Math.max(3, longestBacktickRun + 1));
   return [`${fence}text`, value, fence];
 };
-
-const sagaFields = (readSaga?: string, writeSaga?: string) => ({
-  ...(readSaga == null ? {} : { read_saga: readSaga }),
-  ...(writeSaga == null ? {} : { write_saga: writeSaga }),
-});
 
 const renderProviderAttempts = (
   history: ReadonlyArray<HistoryEntry>,
@@ -194,6 +185,18 @@ const sagaUpdateComment = ({
   );
 };
 
+const sagaContextComment = ({
+  canon,
+  saga,
+}: Extract<DeliveryOutcome, { readonly kind: "saga-context" }>): string =>
+  canon.trim() === ""
+    ? `📖 Saga \`${saga}\` has no context yet.`
+    : [
+        `📖 Current context for saga \`${saga}\`:`,
+        ``,
+        ...fencedCode(canon),
+      ].join("\n");
+
 export interface SlackSender {
   readonly post: (payload: unknown) => Effect.Effect<void, NotificationError>;
 }
@@ -247,6 +250,46 @@ interface CompletionPlan {
   readonly slackPayload: unknown;
 }
 
+interface SlackCompletionPayload {
+  readonly channel: string;
+  readonly content_url: string;
+  readonly cost_cents: string;
+  readonly meme_id: string;
+  readonly read_sagas: string;
+  readonly requester: string;
+  readonly text: string;
+  readonly title: string;
+  readonly type: "failure" | "image" | "saga-context" | "saga-updated";
+  readonly write_saga: string;
+}
+
+const slackPayload = (
+  config: AppConfig,
+  fields: Pick<
+    SlackCompletionPayload,
+    "content_url" | "text" | "title" | "type"
+  > &
+    Partial<
+      Pick<SlackCompletionPayload, "cost_cents" | "meme_id" | "write_saga">
+    >,
+): SlackCompletionPayload => ({
+  channel: config.channel,
+  content_url: fields.content_url,
+  cost_cents: fields.cost_cents ?? "",
+  meme_id: fields.meme_id ?? "",
+  read_sagas: config.readSagas.join(", "),
+  requester: config.requester,
+  text: fields.text,
+  title: fields.title,
+  type: fields.type,
+  write_saga: fields.write_saga ?? config.writeSaga ?? "",
+});
+
+const imageContextText = (readSagas: ReadonlyArray<string>): string =>
+  readSagas.length === 0
+    ? "No Saga context."
+    : `Saga context: ${readSagas.join(", ")}`;
+
 const completionPlan = (
   config: AppConfig,
   branch: string,
@@ -270,41 +313,45 @@ const completionPlan = (
           requester: config.requester,
           slackLink: config.slackLink,
         }),
-        slackPayload: {
-          status: "success",
+        slackPayload: slackPayload(config, {
+          type: "image",
           content_url: outcome.imageUrl,
           title: config.memePrompt,
-          requester: config.requester,
-          channel: config.channel,
-          error: "",
-          provider: outcome.provider,
-          ...(costCents == null ? {} : { cost_cents: costCents }),
-          ...elapsedSlackFields(elapsed),
-          ...sagaFields(
-            config.readSaga ?? undefined,
-            config.writeSaga ?? undefined,
-          ),
-        },
+          text: imageContextText(config.readSagas),
+          cost_cents: costCents ?? "not reported",
+          meme_id: outcome.memeId,
+        }),
       };
     }
     case "saga-updated":
       return {
         close: outcome.updated,
         comment: sagaUpdateComment(outcome),
-        slackPayload: {
-          status: outcome.updated ? "saga-updated" : "saga-update-failed",
+        slackPayload: slackPayload(config, {
+          type: outcome.updated ? "saga-updated" : "failure",
           content_url: outcome.updated
             ? `https://github.com/${config.repo}/blob/${branch}/context/${outcome.saga}.md`
             : "",
           title: `Saga "${outcome.saga}": ${outcome.contribution}`,
-          requester: config.requester,
-          channel: config.channel,
-          error: outcome.updated
+          text: outcome.updated
             ? ""
             : `Saga "${outcome.saga}" could not be updated.`,
           write_saga: outcome.saga,
-          ...elapsedSlackFields(elapsed),
-        },
+        }),
+      };
+    case "saga-context":
+      return {
+        close: true,
+        comment: sagaContextComment(outcome),
+        slackPayload: slackPayload(config, {
+          type: "saga-context",
+          content_url: `https://github.com/${config.repo}/blob/${branch}/context/${outcome.saga}.md`,
+          title: `Current context for Saga "${outcome.saga}"`,
+          text:
+            outcome.canon.trim() === ""
+              ? `Saga "${outcome.saga}" has no context yet.`
+              : outcome.canon,
+        }),
       };
     case "failure":
       return {
@@ -313,19 +360,12 @@ const completionPlan = (
           ? { closeReason: "not_planned" as const }
           : {}),
         comment: failureComment(outcome.message, elapsed, outcome.history),
-        slackPayload: {
-          status: "failure",
+        slackPayload: slackPayload(config, {
+          type: "failure",
           content_url: "",
           title: config.memePrompt,
-          requester: config.requester,
-          channel: config.channel,
-          error: outcome.message,
-          ...elapsedSlackFields(elapsed),
-          ...sagaFields(
-            config.readSaga ?? undefined,
-            config.writeSaga ?? undefined,
-          ),
-        },
+          text: outcome.message,
+        }),
       };
   }
 };

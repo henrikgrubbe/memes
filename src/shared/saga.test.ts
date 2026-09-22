@@ -10,6 +10,8 @@ import {
   foldCanon,
   MAX_CANON_CHARS,
   MAX_PROMPT_CHARS,
+  maxSagaContextChars,
+  renderSagaContexts,
   sagaPath,
 } from "./saga.js";
 
@@ -54,6 +56,36 @@ describe("buildMemePrompt", () => {
     });
     expect(prompt.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS);
     expect(prompt).not.toContain("some canon");
+  });
+
+  it("labels multiple saga canons to preserve their separate identities", () => {
+    const prompt = buildMemePrompt("the crossover", [
+      { name: "heist", canon: "Cats rob a bank." },
+      { name: "space", canon: "Dogs pilot a spaceship." },
+    ]);
+
+    expect(prompt).toContain('Saga "heist":\nCats rob a bank.');
+    expect(prompt).toContain('Saga "space":\nDogs pilot a spaceship.');
+  });
+
+  it("calculates the exact context budget left by an image request", () => {
+    const request = "draw a reunion";
+    const budget = maxSagaContextChars(request);
+    const prompt = buildMemePrompt(request, {
+      name: "story",
+      canon: "x".repeat(budget),
+    });
+
+    expect(prompt.length).toBe(MAX_PROMPT_CHARS);
+  });
+
+  it("returns empty context when all requested saga canons are empty", () => {
+    expect(
+      renderSagaContexts([
+        { name: "one", canon: " " },
+        { name: "two", canon: "" },
+      ]),
+    ).toBe("");
   });
 });
 

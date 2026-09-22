@@ -54,6 +54,60 @@ The request queue retains messages for 24 hours, uses a 240-second visibility
 timeout, and moves a message to the DLQ after four receives. Pause Slack intake
 before maintenance expected to exceed the retention period.
 
+### Slack completion webhook
+
+The worker sends a flat, stable payload to Slack Workflow Builder. Its contract
+is defined by
+[`docs/slack-completion-payload.schema.json`](slack-completion-payload.schema.json).
+Every field is always present and has a string value because Workflow Builder
+requires individually declared top-level variables and cannot consume nested
+JSON objects or arrays.
+
+The `type` field is the sole branch discriminator. Configure mutually exclusive
+branches for `image`, `saga-updated`, `saga-context`, and `failure`. Bind
+`channel` as a Slack channel ID and use it as the dynamic destination rather
+than hard-coding a channel. A `saga-context` payload carries the complete
+current canon in `text`; an `image` payload carries a stable `meme_id` for
+future image-edit requests and a visible Saga-provenance sentence in `text`.
+
+#### Workflow Builder migration
+
+The existing workflow used `status` and a nested `provider` branch. Replace it
+with one top-level branch step that tests `type`. Before deploying the worker,
+make the following changes in Slack Workflow Builder:
+
+1. Declare these webhook variables. Use **Slack channel ID** for `channel`,
+   **Slack user ID** for `requester`, and **Text** for every other field:
+
+   | `type` | `channel` | `requester` | `title` | `content_url` |
+   | --- | --- | --- | --- |
+   | `text` | `cost_cents` | `read_sagas` | `write_saga` | `meme_id` |
+
+2. In every **Send a message** step, select the webhook's `channel` variable
+   as the destination. Do not retain the current hard-coded channel. This
+   dynamic binding is supported for the workflow's private-channel `G...`
+   conversation ID. If the workflow identity lacks access to a returned
+   channel, Slack surfaces that delivery failure rather than silently rerouting
+   the message.
+
+3. Add exactly four mutually exclusive branches, in any order:
+
+   | `type`         | Message content                                                                                                               | Follow-up                                                                                                                         |
+   | -------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+   | `image`        | Quote `title`, link `content_url`, identify `requester`, then show `text` (for example, `Saga context: characters, setting`). | Reply in thread with `Puuha den var dyr, kostede fandme da {cost_cents}. Meme ID: {meme_id}`. Keep the money reaction if desired. |
+   | `saga-updated` | `Så {requester}! Dine skriblerier er nu skrevet ind i sagaen om {write_saga}` linked to `content_url`.                        | Keep the receipt reaction if desired.                                                                                             |
+   | `saga-context` | Show `title`, followed by the complete `text` canon.                                                                          | Optional book or receipt reaction.                                                                                                |
+   | `failure`      | Keep the existing failure copy, substituting `title` and `text`.                                                              | Keep the existing failure reaction if desired.                                                                                    |
+
+4. Delete the nested provider switch and its provider-specific reactions:
+   `provider` is deliberately not in the new contract. Cost remains in the
+   image thread reply.
+
+This is a breaking contract change. Replace the old `status`, `provider`,
+`error`, and singular `read_saga` variables and their branches rather than
+retaining compatibility paths. Publish the rebuilt workflow before deploying
+the worker, then verify one completion of each type.
+
 ### Idempotency
 
 The repository, issue number, and GitHub delivery ID form the durable request
@@ -76,15 +130,15 @@ fails.
 
 ### Ingress
 
-| Variable                | Purpose                        |
-| ----------------------- | ------------------------------ |
+| Variable            | Purpose                        |
+| ------------------- | ------------------------------ |
 | `GH_WEBHOOK_SECRET` | GitHub webhook signing secret  |
-| `SQS_ACCESS_KEY`        | Publish-only queue credential  |
-| `SQS_SECRET_KEY`        | Queue credential secret        |
-| `SQS_ENDPOINT`          | Regional Scaleway SQS endpoint |
-| `SQS_QUEUE_URL`         | FIFO request queue URL         |
-| `SQS_REGION`            | Queue region                   |
-| `PORT`                  | HTTP port; defaults to `8080`  |
+| `SQS_ACCESS_KEY`    | Publish-only queue credential  |
+| `SQS_SECRET_KEY`    | Queue credential secret        |
+| `SQS_ENDPOINT`      | Regional Scaleway SQS endpoint |
+| `SQS_QUEUE_URL`     | FIFO request queue URL         |
+| `SQS_REGION`        | Queue region                   |
+| `PORT`              | HTTP port; defaults to `8080`  |
 
 ### Worker
 
@@ -169,13 +223,13 @@ write anything if a value is missing rather than syncing part of the set, and
 never prints a value. The 1Password environment must therefore carry every name
 it expects:
 
-| 1Password name                                          | Becomes                                     |
-| ------------------------------------------------------- | ------------------------------------------- |
-| `GH_WEBHOOK_SECRET`                                      | repository `GH_WEBHOOK_SECRET`              |
-| `GH_API_TOKEN`                                           | repository `GH_API_TOKEN`                   |
-| `SLACK_WEBHOOK_URL`                                      | repository `SLACK_WEBHOOK_URL`              |
-| `AI_PROVIDER_OPENAI_API_KEY`                            | repository `AI_PROVIDER_OPENAI_API_KEY`     |
-| `AI_PROVIDER_XAI_API_KEY`                               | repository `AI_PROVIDER_XAI_API_KEY`        |
+| 1Password name                                                   | Becomes                                              |
+| ---------------------------------------------------------------- | ---------------------------------------------------- |
+| `GH_WEBHOOK_SECRET`                                              | repository `GH_WEBHOOK_SECRET`                       |
+| `GH_API_TOKEN`                                                   | repository `GH_API_TOKEN`                            |
+| `SLACK_WEBHOOK_URL`                                              | repository `SLACK_WEBHOOK_URL`                       |
+| `AI_PROVIDER_OPENAI_API_KEY`                                     | repository `AI_PROVIDER_OPENAI_API_KEY`              |
+| `AI_PROVIDER_XAI_API_KEY`                                        | repository `AI_PROVIDER_XAI_API_KEY`                 |
 | `SCW_RUNTIME_DEPLOY_ACCESS_KEY`, `SCW_RUNTIME_DEPLOY_SECRET_KEY` | `production` `SCW_ACCESS_KEY`/`SCW_SECRET_KEY`       |
 | `SCW_INFRA_APPLY_ACCESS_KEY`, `SCW_INFRA_APPLY_SECRET_KEY`       | `infra-production` `SCW_ACCESS_KEY`/`SCW_SECRET_KEY` |
 | `SCW_INFRA_DRIFT_ACCESS_KEY`, `SCW_INFRA_DRIFT_SECRET_KEY`       | `infra-drift` `SCW_ACCESS_KEY`/`SCW_SECRET_KEY`      |
@@ -303,7 +357,7 @@ Create a second `infra-drift` environment with no reviewers, holding a Scaleway
 key with read-only access to the project and the state bucket. The scheduled
 plan passes `-lock=false` so it never needs to write.
 
-That read-only key must be a *Scaleway application*, not a user key: a user key
+That read-only key must be a _Scaleway application_, not a user key: a user key
 inherits the user's full permissions and cannot be scoped down. Applications
 can, but this introduces a trap. The images bucket carries an explicit bucket
 policy, and Scaleway bucket policies are **deny-by-default for any principal the
@@ -320,7 +374,7 @@ ways: the drift key reads remote state successfully, and it is denied
 `PutObject` on the state bucket, which is why the drift plan must keep
 `-lock=false` — acquiring a lock is a write.
 
-Anyone added to this list must be a *read-only* identity. Naming a
+Anyone added to this list must be a _read-only_ identity. Naming a
 write-capable principal here would silently widen bucket access outside the
 approval gate.
 
@@ -335,11 +389,11 @@ These repository-level values are shared by every environment:
 | `SCW_PROJECT_ID`, `SCW_REGION`, `SCW_ORGANIZATION_ID` | Variable | Also set per environment; hoist to repository level so `infra-drift` inherits them |
 | `SCW_TOFU_PRINCIPAL`                                  | Variable | `object_storage_provisioning_principal`                                            |
 | `SCW_TOFU_READONLY_PRINCIPALS`                        | Variable | `object_storage_readonly_principals`, as a JSON array string                       |
-| `GH_WEBHOOK_SECRET`                                    | Secret   | `github_webhook_secret`                                                            |
-| `GH_API_TOKEN`                                         | Secret   | `github_api_token`                                                                 |
-| `SLACK_WEBHOOK_URL`                                    | Secret   | `slack_webhook_url`                                                                |
-| `AI_PROVIDER_OPENAI_API_KEY`                           | Secret   | `ai_provider_openai_api_key`                                                       |
-| `AI_PROVIDER_XAI_API_KEY`                              | Secret   | `ai_provider_xai_api_key`                                                          |
+| `GH_WEBHOOK_SECRET`                                   | Secret   | `github_webhook_secret`                                                            |
+| `GH_API_TOKEN`                                        | Secret   | `github_api_token`                                                                 |
+| `SLACK_WEBHOOK_URL`                                   | Secret   | `slack_webhook_url`                                                                |
+| `AI_PROVIDER_OPENAI_API_KEY`                          | Secret   | `ai_provider_openai_api_key`                                                       |
+| `AI_PROVIDER_XAI_API_KEY`                             | Secret   | `ai_provider_xai_api_key`                                                          |
 
 Four of those five secrets are guarded by `precondition` blocks that fail the
 apply if they are missing. `ai_provider_xai_api_key` is not: a missing value

@@ -19,6 +19,12 @@ interface SagaDeliveryOutcome {
   readonly updated: boolean;
 }
 
+interface SagaContextDeliveryOutcome {
+  readonly canon: string;
+  readonly kind: "saga-context";
+  readonly saga: string;
+}
+
 export interface FailureDeliveryOutcome {
   readonly closeNotPlanned: boolean;
   readonly history?: ReadonlyArray<HistoryEntry>;
@@ -27,4 +33,7 @@ export interface FailureDeliveryOutcome {
 }
 
 export type DeliveryOutcome =
-  SuccessDeliveryOutcome | SagaDeliveryOutcome | FailureDeliveryOutcome;
+  | SuccessDeliveryOutcome
+  | SagaDeliveryOutcome
+  | SagaContextDeliveryOutcome
+  | FailureDeliveryOutcome;

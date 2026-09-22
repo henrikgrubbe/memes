@@ -8,6 +8,7 @@ import {
   makeProvidersLayer,
   ProvidersServiceTag,
 } from "../../shared/providers.js";
+import type { SagaContext } from "../../shared/saga.js";
 import type {
   DeliveryOutcome,
   SuccessDeliveryOutcome,
@@ -51,7 +52,7 @@ const storedSuccess: DeliveryOutcome = {
 
 type StoredOutcome = Exclude<
   DeliveryOutcome,
-  { readonly kind: "saga-updated" }
+  { readonly kind: "saga-updated" | "saga-context" }
 >;
 
 interface Harness {
@@ -174,6 +175,8 @@ const handlerDependencies = (
     Effect.succeed(`${canon}\n- ${prompt}`),
   providers: ProvidersServiceTag.pipe(Effect.provide(providers)),
   repositoryFor: () => harness.repository,
+  shortenSagaContexts: (contexts: ReadonlyArray<SagaContext>) =>
+    Effect.succeed(contexts.map(({ canon }) => canon).join("\n")),
   slack: harness.slack,
   storageFor: () => harness.storage,
 });
@@ -315,6 +318,86 @@ describe("hosted queued delivery", () => {
       "<summary><strong>Full generation prompt</strong></summary>",
     );
     expect(harness.comments()[0]).toContain("Existing canon");
+  });
+
+  it("reads multiple sagas and creates an ephemeral reduced context when they exceed the prompt budget", async () => {
+    const harness = makeHarness();
+    let providerPrompt = "";
+    let shortened: ReadonlyArray<string> = [];
+    let maximumChars = 0;
+    const repository: HostedGitHubRepository = {
+      ...harness.repository,
+      readText: (path) =>
+        Effect.succeed(
+          path.endsWith("characters.md") ? "A".repeat(3000) : "B".repeat(3000),
+        ),
+    };
+    const handler = makeQueuedDeliveryHandler({
+      ...handlerDependencies(
+        harness,
+        successProviders((prompt) => {
+          providerPrompt = prompt;
+        }),
+      ),
+      repositoryFor: () => repository,
+      shortenSagaContexts: (contexts, budget) =>
+        Effect.sync(() => {
+          shortened = contexts.map(({ name }) => name);
+          maximumChars = budget;
+          return 'Saga "characters": temporary canon\n\nSaga "setting": temporary canon';
+        }),
+    });
+
+    const result = await Effect.runPromise(
+      handler.handle(
+        requestFor(
+          taskFor("read:characters read:setting draw their next adventure"),
+        ),
+      ),
+    );
+
+    expect(result.body["disposition"]).toBe("processed");
+    expect(shortened).toEqual(["characters", "setting"]);
+    expect(maximumChars).toBeGreaterThan(0);
+    expect(providerPrompt).toContain("temporary canon");
+    expect(providerPrompt).not.toContain("A".repeat(3000));
+    expect(providerPrompt.length).toBeLessThanOrEqual(4000);
+  });
+
+  it("prints a saga context without generating an image or modifying the canon", async () => {
+    const harness = makeHarness();
+    let providerCalls = 0;
+    const repository: HostedGitHubRepository = {
+      ...harness.repository,
+      readText: () => Effect.succeed("The cats still need a getaway car."),
+    };
+    const handler = makeQueuedDeliveryHandler({
+      ...handlerDependencies(
+        harness,
+        successProviders(() => {
+          providerCalls += 1;
+        }),
+      ),
+      repositoryFor: () => repository,
+    });
+
+    const result = await Effect.runPromise(
+      handler.handle(requestFor(taskFor("print:heist"))),
+    );
+
+    expect(result).toEqual({
+      body: { disposition: "processed" },
+      status: 200,
+    });
+    expect(providerCalls).toBe(0);
+    expect(harness.events()).toEqual([
+      "slack:post",
+      "github:comment",
+      "github:close",
+    ]);
+    expect(harness.comments()[0]).toContain(
+      "The cats still need a getaway car.",
+    );
   });
 
   it("processes and resumes a write-only Saga without storage or providers", async () => {

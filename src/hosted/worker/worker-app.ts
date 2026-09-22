@@ -8,7 +8,10 @@ import {
 import { NodeHttpServer } from "@effect/platform-node";
 import { Config, Context, Effect, Layer, Option } from "effect";
 import { ProvidersLayer, ProvidersServiceTag } from "../../shared/providers.js";
-import { makeSagaCompressor } from "../../shared/saga.js";
+import {
+  makeSagaCompressor,
+  makeSagaContextShortener,
+} from "../../shared/saga.js";
 import { makeGitHubApi, makeHostedGitHubRepository } from "./hosted-github.js";
 import { makeSlackSender } from "./hosted-notifier.js";
 import {
@@ -90,10 +93,12 @@ const QueuedDeliveryLive = Layer.effect(
       webhookUrl: runtime.slackWebhookUrl,
     });
     const compressSaga = makeSagaCompressor(runtime.openAiApiKey);
+    const shortenSagaContexts = makeSagaContextShortener(runtime.openAiApiKey);
 
     return makeQueuedDeliveryHandler({
       allowedRepository: runtime.githubRepository,
       compressSaga,
+      shortenSagaContexts,
       providers: ProvidersServiceTag.pipe(Effect.provide(ProvidersLayer)),
       repositoryFor: (task) =>
         makeHostedGitHubRepository({

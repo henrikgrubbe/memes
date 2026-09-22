@@ -161,7 +161,8 @@ describe("request-scoped AppConfig", () => {
     expect(config).toMatchObject({
       issueNumber: "823",
       memePrompt: "make a sequel",
-      readSaga: "origin",
+      printSaga: null,
+      readSagas: ["origin"],
       repo: "henrikgrubbe/memes",
       writeSaga: "origin",
     });

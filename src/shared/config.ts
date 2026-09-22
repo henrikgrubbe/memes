@@ -8,7 +8,8 @@ export interface AppConfig {
   readonly memePrompt: string;
   readonly channel: string;
   readonly slackLink: string;
-  readonly readSaga: string | null;
+  readonly printSaga: string | null;
+  readonly readSagas: ReadonlyArray<string>;
   readonly writeSaga: string | null;
   readonly requestedAt: string | null;
 }
@@ -36,7 +37,8 @@ export const makeRequestAppConfig = ({
         memePrompt: directives.prompt,
         channel: fields.channel,
         slackLink: fields.link,
-        readSaga: directives.readSaga,
+        printSaga: directives.printSaga,
+        readSagas: directives.readSagas,
         writeSaga: directives.writeSaga,
         requestedAt: requestedAt ?? null,
       } satisfies AppConfig;
