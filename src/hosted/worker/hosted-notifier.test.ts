@@ -11,7 +11,8 @@ const config: AppConfig = {
   channel: "C123",
   issueNumber: "42",
   memePrompt: "Prompt",
-  readSaga: null,
+  printSaga: null,
+  readSagas: [],
   repo: "owner/repo",
   requester: "U123",
   slackLink: "https://example.test/thread",
@@ -72,9 +73,9 @@ describe("hosted notifier", () => {
       webhookUrl: "https://example.test/hook",
     });
 
-    await Effect.runPromise(sender.post({ status: "success" }));
+    await Effect.runPromise(sender.post({ type: "image" }));
 
-    expect(postedBody).toContain('"status":"success"');
+    expect(postedBody).toContain('"type":"image"');
   });
 
   it("surfaces a non-successful Slack response without response contents", async () => {
@@ -84,7 +85,7 @@ describe("hosted notifier", () => {
     });
 
     const exit = await Effect.runPromise(
-      sender.post({ status: "failure" }).pipe(Effect.exit),
+      sender.post({ type: "failure" }).pipe(Effect.exit),
     );
 
     expect(Exit.isFailure(exit)).toBe(true);
@@ -108,13 +109,15 @@ describe("hosted notifier", () => {
 
     expect(payloads).toEqual([
       {
-        status: "success",
-        content_url: outcome.imageUrl,
-        title: "Prompt",
-        requester: "U123",
         channel: "C123",
-        error: "",
-        provider: "OpenAI",
+        content_url: outcome.imageUrl,
+        cost_cents: "not reported",
+        meme_id: "meme-1",
+        read_sagas: "",
+        requester: "U123",
+        text: "No Saga context.",
+        title: "Prompt",
+        type: "image",
         write_saga: "story",
       },
     ]);
@@ -153,7 +156,7 @@ describe("hosted notifier", () => {
 
     const { events, payloads } = await captureCompletion(outcome, {
       ...config,
-      readSaga: "original",
+      readSagas: ["original"],
       writeSaga: "sequel",
     });
     const comments = events.filter((event) => event.startsWith("comment:"));
@@ -175,8 +178,10 @@ describe("hosted notifier", () => {
     expect(payloads).toEqual([
       expect.objectContaining({
         cost_cents: "0.108¢",
-        read_saga: "original",
-        status: "success",
+        meme_id: "meme-1",
+        read_sagas: "original",
+        text: "Saga context: original",
+        type: "image",
         write_saga: "sequel",
       }),
     ]);
@@ -208,8 +213,19 @@ describe("hosted notifier", () => {
       ),
     );
 
-    expect(payloads).toMatchObject([
-      { status: "saga-updated", write_saga: "story" },
+    expect(payloads).toEqual([
+      {
+        channel: "C123",
+        content_url: "https://github.com/owner/repo/blob/main/context/story.md",
+        cost_cents: "",
+        meme_id: "",
+        read_sagas: "",
+        requester: "U123",
+        text: "",
+        title: 'Saga "story": New beat',
+        type: "saga-updated",
+        write_saga: "story",
+      },
     ]);
     expect(events.at(-1)).toBe("close:completed");
   });
@@ -239,15 +255,46 @@ describe("hosted notifier", () => {
     expect(failedCapture.payloads).toEqual([
       expect.objectContaining({
         content_url: "",
-        status: "saga-update-failed",
+        text: 'Saga "heist" could not be updated.',
+        type: "failure",
       }),
     ]);
     expect(succeededCapture.payloads).toEqual([
       expect.objectContaining({
         content_url:
           "https://github.com/owner/repo/blob/sagas/context/heist.md",
-        status: "saga-updated",
+        type: "saga-updated",
       }),
+    ]);
+  });
+
+  it("sends the actual Saga canon in a flat context payload", async () => {
+    const { payloads } = await captureCompletion(
+      {
+        canon: "The cats still need a getaway car.",
+        kind: "saga-context",
+        saga: "heist",
+      },
+      {
+        ...config,
+        printSaga: "heist",
+        writeSaga: null,
+      },
+    );
+
+    expect(payloads).toEqual([
+      {
+        channel: "C123",
+        content_url: "https://github.com/owner/repo/blob/main/context/heist.md",
+        cost_cents: "",
+        meme_id: "",
+        read_sagas: "",
+        requester: "U123",
+        text: "The cats still need a getaway car.",
+        title: 'Current context for Saga "heist"',
+        type: "saga-context",
+        write_saga: "",
+      },
     ]);
   });
 
@@ -262,12 +309,15 @@ describe("hosted notifier", () => {
 
     expect(payloads).toEqual([
       {
-        status: "failure",
-        content_url: "",
-        title: "Prompt",
-        requester: "U123",
         channel: "C123",
-        error: "Blocked",
+        content_url: "",
+        cost_cents: "",
+        meme_id: "",
+        read_sagas: "",
+        requester: "U123",
+        text: "Blocked",
+        title: "Prompt",
+        type: "failure",
         write_saga: "story",
       },
     ]);
@@ -305,7 +355,7 @@ describe("hosted notifier", () => {
 
     const { events, payloads } = await captureCompletion(outcome, {
       ...config,
-      readSaga: "original",
+      readSagas: ["original"],
       writeSaga: "sequel",
     });
 
@@ -314,9 +364,9 @@ describe("hosted notifier", () => {
     expect(events.some((event) => event.startsWith("close:"))).toBe(false);
     expect(payloads).toEqual([
       expect.objectContaining({
-        error: "Generation failed",
-        read_saga: "original",
-        status: "failure",
+        read_sagas: "original",
+        text: "Generation failed",
+        type: "failure",
         write_saga: "sequel",
       }),
     ]);
@@ -365,17 +415,10 @@ describe("hosted notifier elapsed time", () => {
 
   const epoch = "1970-01-01T00:00:00.000Z";
 
-  it("reports elapsed time in the issue comment and the Slack payload", async () => {
-    const { events, payloads } = await captureAfter(
-      90_000,
-      successOutcome,
-      epoch,
-    );
+  it("reports elapsed time in the issue comment", async () => {
+    const { events } = await captureAfter(90_000, successOutcome, epoch);
 
     expect(events.join("\n")).toContain("**Took:** 1m 30s");
-    expect(payloads).toEqual([
-      expect.objectContaining({ duration_seconds: 90 }),
-    ]);
   });
 
   it("formats sub-minute, multi-minute, and multi-hour durations", async () => {
@@ -387,27 +430,19 @@ describe("hosted notifier elapsed time", () => {
   });
 
   it("reports elapsed time on failures too", async () => {
-    const { events, payloads } = await captureAfter(
+    const { events } = await captureAfter(
       30_000,
       { closeNotPlanned: false, kind: "failure", message: "Generation failed" },
       epoch,
     );
 
     expect(events.join("\n")).toContain("**Took:** 30s");
-    expect(payloads).toEqual([
-      expect.objectContaining({ duration_seconds: 30 }),
-    ]);
   });
 
   it("omits timing when the task carries no requestedAt stamp", async () => {
-    const { events, payloads } = await captureAfter(
-      90_000,
-      successOutcome,
-      null,
-    );
+    const { events } = await captureAfter(90_000, successOutcome, null);
 
     expect(events.join("\n")).not.toContain("**Took:**");
-    expect(payloads[0]).not.toHaveProperty("duration_seconds");
   });
 
   it("omits timing rather than rendering a negative or nonsense duration", async () => {
@@ -424,6 +459,5 @@ describe("hosted notifier elapsed time", () => {
       "1970-01-01T00:01:00.000Z",
     );
     expect(skewed.events.join("\n")).not.toContain("**Took:**");
-    expect(skewed.payloads[0]).not.toHaveProperty("duration_seconds");
   });
 });

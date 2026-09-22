@@ -6,17 +6,23 @@ A meme can opt in to a shared, evolving context called a **saga**, so
 generations can build on each other (recurring characters, running jokes,
 story beats).
 
-Two inline tokens in the Slack message opt in (they are stripped from the
+Four inline tokens in the Slack message opt in (they are stripped from the
 prompt before generation, and are case-insensitive; saga names are slugs of
 `A–Z a–z 0–9 _ -`):
 
 - `read:<saga>` — prepend that saga's canon to the image prompt for continuity.
+  Repeat it to combine multiple sagas, for example
+  `read:characters read:setting draw their reunion`.
 - `write:<saga>` — contribute the request to that saga's canon.
 - `saga:<saga>` — shorthand for both: read _and_ write the same saga (the usual
   "keep participating in this saga" case).
+- `print:<saga>` — post the current canon to the request's GitHub issue and
+  link it from the Slack notification without generating or updating anything.
 
 They are independent: a meme may read one saga, write another, both, or
 neither. A space after the colon (`read: the news`) is **not** a directive.
+`print:` is a standalone inspection command and takes precedence if combined
+with other directives.
 
 When `write:<saga>` is used without `read:<saga>`, the contribution updates the
 canon without generating an image. The issue and Slack thread receive a
@@ -39,6 +45,11 @@ the prompt always fits the image prompt cap (`MAX_PROMPT_CHARS`, 4000). If the
 model is unavailable the write falls back to a raw capped append, so a meme is
 never lost. Concurrent writes to the same saga serialize through GitHub
 ref-conflict retries and re-derivation.
+
+When multiple read canons together exceed the available image-prompt budget,
+the same text model first creates a temporary, labeled combined context. It is
+never written to a saga. If that model cannot be used, the worker logs the
+failure and sends a bounded source-context fallback instead.
 
 Relevant code: `src/shared/saga.ts` (interface, compression, prompt assembly),
 `src/shared/saga-directives.ts` (`parseSagaDirectives`),

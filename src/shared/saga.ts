@@ -13,6 +13,11 @@ export const MAX_CANON_TOKENS = 900;
 // Directory (repo-relative) holding one markdown file per saga.
 export const CONTEXT_DIR = "context";
 
+export interface SagaContext {
+  readonly canon: string;
+  readonly name: string;
+}
+
 /** Repo-relative path for a saga's canon file. */
 export const sagaPath = (saga: string): string => `${CONTEXT_DIR}/${saga}.md`;
 
@@ -43,15 +48,50 @@ export function capCanon(text: string): string {
  * supplied as background, while the current request remains the primary image
  * instruction. The canon is trimmed to whatever budget remains under the cap.
  */
+const promptPrefix = "Background for continuity:\n";
+
+const sagaContextText = (contexts: ReadonlyArray<SagaContext>): string => {
+  const nonEmpty = contexts.filter(({ canon }) => canon.trim() !== "");
+  if (nonEmpty.length === 0) {
+    return "";
+  }
+  if (nonEmpty.length === 1) {
+    return nonEmpty[0].canon;
+  }
+  return nonEmpty
+    .map(({ name, canon }) => `Saga "${name}":\n${canon}`)
+    .join("\n\n");
+};
+
+export const maxSagaContextChars = (memePrompt: string): number =>
+  Math.max(
+    0,
+    MAX_PROMPT_CHARS -
+      promptPrefix.length -
+      "\n\nCurrent request - depict this now:\n".length -
+      memePrompt.length,
+  );
+
+/** Render one or more saga canons as labeled background for an image request. */
+export const renderSagaContexts = (
+  contexts: ReadonlyArray<SagaContext>,
+): string => sagaContextText(contexts);
+
 export function buildMemePrompt(
   memePrompt: string,
-  saga?: { readonly name: string; readonly canon: string } | null,
+  saga?: string | SagaContext | ReadonlyArray<SagaContext> | null,
 ): string {
   const base = memePrompt;
-  if (saga == null || saga.canon.trim() === "") {
+  const context =
+    typeof saga === "string"
+      ? saga
+      : sagaContextText(
+          saga == null ? [] : Array.isArray(saga) ? saga : [saga],
+        );
+  if (context === "") {
     return base.slice(0, MAX_PROMPT_CHARS);
   }
-  const prefix = `Background for continuity:\n`;
+  const prefix = promptPrefix;
   const suffix = `\n\nCurrent request - depict this now:\n${base}`;
   const budget = MAX_PROMPT_CHARS - prefix.length - suffix.length;
 
@@ -59,7 +99,7 @@ export function buildMemePrompt(
     return base.slice(0, MAX_PROMPT_CHARS);
   }
 
-  const canon = saga.canon.slice(0, budget);
+  const canon = context.slice(0, budget);
   return prefix + canon + suffix;
 }
 
@@ -200,6 +240,33 @@ type ModelCall = (
   messages: ReadonlyArray<ChatMessage>,
 ) => Effect.Effect<string, CompressionError>;
 
+export type SagaContextShortener = (
+  contexts: ReadonlyArray<SagaContext>,
+  maximumChars: number,
+) => Effect.Effect<string>;
+
+const buildCombinedContextShortenMessages = (
+  contexts: ReadonlyArray<SagaContext>,
+  maximumChars: number,
+): ReadonlyArray<ChatMessage> => [
+  {
+    role: "system",
+    content: [
+      `You condense background canon from several independent meme sagas.`,
+      `Produce one temporary concise Markdown context under ${maximumChars} characters.`,
+      `Preserve each saga's recurring characters, running jokes, locations, and`,
+      `key story beats. Keep each saga clearly labeled so unrelated facts are not`,
+      `merged. Use the same language as the input. Do not use tables, deep nesting,`,
+      `emphasis, decorative formatting, preamble, or commentary.`,
+      `Output ONLY the temporary context. It will not be saved back to any saga.`,
+    ].join("\n"),
+  },
+  {
+    role: "user",
+    content: `Saga canons to combine:\n${renderSagaContexts(contexts)}`,
+  },
+];
+
 export type SagaCompressor = (
   saga: string,
   canon: string,
@@ -248,4 +315,38 @@ export const makeSagaCompressor = (apiKey: string | null): SagaCompressor => {
     callModel == null
       ? Effect.succeed(appendFallback(canon, prompt))
       : foldCanon(callModel, saga, canon, prompt);
+};
+
+/**
+ * Build an ephemeral combined context only when several read sagas no longer
+ * fit alongside the image instruction. A model outage still leaves a bounded,
+ * labeled context and is recorded for operational visibility.
+ */
+export const makeSagaContextShortener = (
+  apiKey: string | null,
+): SagaContextShortener => {
+  const callModel =
+    apiKey == null || apiKey.trim() === ""
+      ? null
+      : makeModelCall(new OpenAI({ apiKey }));
+
+  return (contexts, maximumChars) => {
+    const fallback = () =>
+      Effect.succeed(renderSagaContexts(contexts).slice(0, maximumChars));
+    if (callModel == null) {
+      return Effect.logWarning(
+        "Saga context reduction skipped because no text-model API key is configured",
+      ).pipe(Effect.zipRight(fallback()));
+    }
+    return callModel(
+      buildCombinedContextShortenMessages(contexts, maximumChars),
+    ).pipe(
+      Effect.map((context) => context.slice(0, maximumChars)),
+      Effect.catchAll((error) =>
+        Effect.logWarning(
+          `Saga context reduction failed - using capped source context. ${error.message}`,
+        ).pipe(Effect.zipRight(fallback())),
+      ),
+    );
+  };
 };

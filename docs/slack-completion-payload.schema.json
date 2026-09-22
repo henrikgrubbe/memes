@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/henrikgrubbe/memes/blob/main/docs/slack-completion-payload.schema.json",
+  "title": "Meme machine Slack completion payload",
+  "description": "Flat webhook payload consumed by Slack Workflow Builder. Every property is always present because Slack exposes webhook data as individually declared top-level variables.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "channel",
+    "requester",
+    "title",
+    "content_url",
+    "text",
+    "cost_cents",
+    "read_sagas",
+    "write_saga",
+    "meme_id"
+  ],
+  "properties": {
+    "type": {
+      "description": "The mutually exclusive value used by the first Slack branch step.",
+      "type": "string",
+      "enum": ["image", "saga-updated", "saga-context", "failure"]
+    },
+    "channel": {
+      "description": "Slack conversation ID used as the dynamic message destination.",
+      "type": "string",
+      "pattern": "^[CG][A-Z0-9]+$"
+    },
+    "requester": {
+      "description": "Slack member ID of the original requester.",
+      "type": "string",
+      "pattern": "^U[A-Z0-9]+$"
+    },
+    "title": {
+      "description": "Prompt or human-readable event title.",
+      "type": "string"
+    },
+    "content_url": {
+      "description": "Generated image or Saga file URL; empty for failures.",
+      "type": "string"
+    },
+    "text": {
+      "description": "Human-readable type-specific body: Saga provenance for images, the current canon for Saga inspection, failure detail for failures, or empty for successful Saga updates.",
+      "type": "string"
+    },
+    "cost_cents": {
+      "description": "Formatted generation cost including the cent symbol, or \"not reported\" for images without available usage; empty when no image was generated.",
+      "type": "string"
+    },
+    "read_sagas": {
+      "description": "Comma-and-space-separated Saga names used as image context.",
+      "type": "string"
+    },
+    "write_saga": {
+      "description": "Saga receiving the contribution; empty when no Saga is updated.",
+      "type": "string"
+    },
+    "meme_id": {
+      "description": "Stable UUID for a generated image, reserved for future edit requests.",
+      "type": "string"
+    }
+  }
+}

@@ -10,8 +10,12 @@ import {
 } from "../../shared/providers.js";
 import {
   buildMemePrompt,
+  maxSagaContextChars,
+  renderSagaContexts,
   sagaPath,
   type SagaCompressor,
+  type SagaContext,
+  type SagaContextShortener,
 } from "../../shared/saga.js";
 import {
   MemeRequestTask as MemeRequestTaskSchema,
@@ -39,12 +43,6 @@ import type {
 const providerFrom = (result: GenerationResult): string =>
   result.history.find(({ status }) => status === "success")?.provider ??
   "unknown";
-
-const sagaContext = (
-  saga: string | null,
-  canon: string | null,
-): { readonly canon: string; readonly name: string } | null =>
-  saga != null && canon != null ? { canon, name: saga } : null;
 
 const generatedOutcome = (
   memeId: string,
@@ -150,18 +148,30 @@ const runGeneratedDelivery = (
   repository: HostedGitHubRepository,
   receipt: MissingDeliveryReceipt,
   compressSaga: SagaCompressor,
+  shortenSagaContexts: SagaContextShortener,
   providers: ProvidersService,
   slack: SlackSender,
 ) =>
   Effect.gen(function* () {
-    const canon =
-      config.readSaga == null
-        ? null
-        : yield* repository.readText(sagaPath(config.readSaga));
-    const prompt = buildMemePrompt(
-      config.memePrompt,
-      sagaContext(config.readSaga, canon),
+    const contexts = yield* Effect.forEach(
+      config.readSagas,
+      (name) =>
+        repository
+          .readText(sagaPath(name))
+          .pipe(
+            Effect.map((canon): SagaContext => ({ canon: canon ?? "", name })),
+          ),
+      { concurrency: "unbounded" },
     );
+    const context = renderSagaContexts(contexts);
+    const contextBudget = maxSagaContextChars(config.memePrompt);
+    const generationContext =
+      config.readSagas.length > 1 &&
+      context.length > contextBudget &&
+      contextBudget > 0
+        ? yield* shortenSagaContexts(contexts, contextBudget)
+        : contexts;
+    const prompt = buildMemePrompt(config.memePrompt, generationContext);
 
     return yield* providers.generateWithFallback(prompt, config.requester).pipe(
       Effect.matchEffect({
@@ -199,6 +209,26 @@ const runGeneratedDelivery = (
     );
   });
 
+const runSagaContextDelivery = (
+  config: AppConfig & { readonly printSaga: string },
+  repository: HostedGitHubRepository,
+  slack: SlackSender,
+) =>
+  Effect.gen(function* () {
+    const canon = yield* repository.readText(sagaPath(config.printSaga));
+    yield* deliverHostedCompletion(
+      config,
+      {
+        canon: canon ?? "",
+        kind: "saga-context",
+        saga: config.printSaga,
+      },
+      repository,
+      slack,
+    );
+    return "processed" as const;
+  });
+
 const runWriteOnlyDelivery = (
   config: AppConfig & { readonly writeSaga: string },
   repository: HostedGitHubRepository,
@@ -226,6 +256,7 @@ interface HostedTaskDependencies {
   readonly compressSaga: SagaCompressor;
   readonly providers: ProvidersService;
   readonly repository: HostedGitHubRepository;
+  readonly shortenSagaContexts: SagaContextShortener;
   readonly slack: SlackSender;
   readonly storage: DeliveryReceiptStore;
 }
@@ -241,6 +272,7 @@ const runHostedTask = (
     compressSaga,
     providers,
     repository,
+    shortenSagaContexts,
     slack,
     storage,
   }: HostedTaskDependencies,
@@ -249,7 +281,15 @@ const runHostedTask = (
     yield* Effect.log(
       `Processing queued issue #${task.issueNumber} from ${task.repo}`,
     );
-    if (config.writeSaga != null && config.readSaga == null) {
+    if (config.printSaga != null) {
+      return yield* runSagaContextDelivery(
+        { ...config, printSaga: config.printSaga },
+        repository,
+        slack,
+      );
+    }
+
+    if (config.writeSaga != null && config.readSagas.length === 0) {
       return yield* runWriteOnlyDelivery(
         { ...config, writeSaga: config.writeSaga },
         repository,
@@ -275,6 +315,7 @@ const runHostedTask = (
       repository,
       receipt,
       compressSaga,
+      shortenSagaContexts,
       providers,
       slack,
     );
@@ -304,6 +345,7 @@ interface QueuedDeliveryDependencies {
   readonly compressSaga: SagaCompressor;
   readonly providers: Effect.Effect<ProvidersService, ConfigError>;
   readonly repositoryFor: (task: MemeRequestTask) => HostedGitHubRepository;
+  readonly shortenSagaContexts: SagaContextShortener;
   readonly slack: SlackSender;
   readonly storageFor: (
     task: MemeRequestTask,
@@ -387,6 +429,7 @@ const processQueuedTask = (
                 compressSaga: dependencies.compressSaga,
                 providers,
                 repository,
+                shortenSagaContexts: dependencies.shortenSagaContexts,
                 slack: dependencies.slack,
                 storage: dependencies.storageFor(task, repository.memeId),
               });
