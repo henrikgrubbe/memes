@@ -1,8 +1,8 @@
 # Gakkedehenrik Saga
 
 ## Karakterer
-- **Henrik**: En pudseløjerlig fyr, der er helt vildt gakket.
-  
+- **Henrik**: En pudseløjerlig fyr, der er 70% mere gakket end før.
+
 ## Lokationer
 - **Pløjemarken**: Henriks hjem, hvor han bor i et hul.
 
