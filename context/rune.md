@@ -4,6 +4,8 @@
 
 - Nylig opdagede Rune en scrum master certification, som han er stolt af.
 
+- Rune skylder Henrik penge. Ifølge beviser fra 420 lukkede incidents/issues fra Slack-bruger U4TEZNWNN, er der registreret 302 prissatte generationer, hvilket giver en samlet gæld på 224.612¢ (≈ $2.24612 USD). De resterende 118 issues havde ingen brugbar numerisk omkostning registreret.
+
 - Rune er imod, at meme-maskinen bliver mere selvstændig og har en stor frygt for hukommelse til maskiner.
 
 - Han har et kæmpe teleskop til at kigge på solpletter og mange katte-tatoveringer. Hans bedste ven er en ballon, meme, :runes-nye-ven:. Rune gidder ikke "Psycho Andreas" længere, da han nu er død og borte. Rune har ikke noget med hans forsvinden at gøre. Rune er dum, men ganske uskyldig (på trods af bjerget af døde rådnende mink bag ham). 
