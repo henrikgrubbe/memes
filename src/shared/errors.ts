@@ -11,9 +11,7 @@ import type { HistoryEntry } from "./history.js";
 // list of provider attempts that led to the failure, so the failure notifier
 // can report them just like a successful run does.
 
-export class ModerationBlockedError extends Data.TaggedError(
-  "ModerationBlockedError",
-)<{
+export class ModerationBlockedError extends Data.TaggedError("ModerationBlockedError")<{
   readonly provider: string;
   readonly detail: string;
 }> {
@@ -40,9 +38,7 @@ export class NotificationError extends Data.TaggedError("NotificationError")<{
   }
 }
 
-export class ModerationFailedError extends Data.TaggedError(
-  "ModerationFailedError",
-)<{
+export class ModerationFailedError extends Data.TaggedError("ModerationFailedError")<{
   // The primary provider that flagged the content, and its moderation reason.
   readonly provider: string;
   readonly detail: string;
@@ -70,9 +66,7 @@ export class ProviderError extends Data.TaggedError("ProviderError")<{
   }
 }
 
-export class QuotaExhaustedError extends Data.TaggedError(
-  "QuotaExhaustedError",
-)<{
+export class QuotaExhaustedError extends Data.TaggedError("QuotaExhaustedError")<{
   readonly provider: string;
   readonly detail: string;
   readonly history?: ReadonlyArray<HistoryEntry>;
@@ -82,9 +76,7 @@ export class QuotaExhaustedError extends Data.TaggedError(
   }
 }
 
-export class AllProvidersExhaustedError extends Data.TaggedError(
-  "AllProvidersExhaustedError",
-)<{
+export class AllProvidersExhaustedError extends Data.TaggedError("AllProvidersExhaustedError")<{
   readonly providers: ReadonlyArray<string>;
   readonly history?: ReadonlyArray<HistoryEntry>;
 }> {

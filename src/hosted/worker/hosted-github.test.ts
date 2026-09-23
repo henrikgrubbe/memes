@@ -15,9 +15,7 @@ const task = {
   repo: "owner/repo",
 };
 
-type Handler = (
-  request: GitHubApiRequest,
-) => Effect.Effect<unknown, HostedGitHubError>;
+type Handler = (request: GitHubApiRequest) => Effect.Effect<unknown, HostedGitHubError>;
 
 const makeApi = (handler: Handler): GitHubApi => ({
   request: <T>(request: GitHubApiRequest) =>
@@ -31,9 +29,7 @@ const notFound = (operation: string) =>
     status: 404,
   });
 
-const gitDataHandler = (
-  onRequest?: (request: GitHubApiRequest) => void,
-): Handler => {
+const gitDataHandler = (onRequest?: (request: GitHubApiRequest) => void): Handler => {
   let blob = 0;
   return (request) => {
     onRequest?.(request);
@@ -81,9 +77,7 @@ describe("hosted GitHub persistence", () => {
       baseUrl: "https://github.example/api",
       fetch: (_input, init) => {
         authorization = new Headers(init?.headers).get("Authorization") ?? "";
-        return Promise.resolve(
-          new Response('{"object":{"sha":"head"}}', { status: 200 }),
-        );
+        return Promise.resolve(new Response('{"object":{"sha":"head"}}', { status: 200 }));
       },
       token: "test-token",
     });
@@ -101,8 +95,7 @@ describe("hosted GitHub persistence", () => {
 
   it("reports GitHub status without exposing response contents", async () => {
     const api = makeGitHubApi({
-      fetch: () =>
-        Promise.resolve(new Response('{"message":"private"}', { status: 500 })),
+      fetch: () => Promise.resolve(new Response('{"message":"private"}', { status: 500 })),
       token: "test-token",
     });
 
@@ -160,9 +153,7 @@ describe("hosted GitHub persistence", () => {
       task,
     });
 
-    await expect(Effect.runPromise(repository.listSagas())).resolves.toEqual(
-      [],
-    );
+    await expect(Effect.runPromise(repository.listSagas())).resolves.toEqual([]);
   });
 
   it("reports an unexpected context response explicitly", async () => {
@@ -172,9 +163,7 @@ describe("hosted GitHub persistence", () => {
       task,
     });
 
-    const exit = await Effect.runPromise(
-      repository.listSagas().pipe(Effect.exit),
-    );
+    const exit = await Effect.runPromise(repository.listSagas().pipe(Effect.exit));
 
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) {
@@ -243,10 +232,7 @@ describe("hosted GitHub persistence", () => {
       saga: "story",
     });
     const api = makeApi((request) => {
-      if (
-        request.method === "GET" &&
-        request.path.includes("/git/ref/heads/")
-      ) {
+      if (request.method === "GET" && request.path.includes("/git/ref/heads/")) {
         return Effect.succeed({ object: { sha: "head-1" } });
       }
       if (
@@ -291,10 +277,7 @@ describe("hosted GitHub persistence", () => {
     let blob = 0;
     let observedCanons: ReadonlyArray<string> = [];
     const api = makeApi((request) => {
-      if (
-        request.method === "GET" &&
-        request.path.includes("/git/ref/heads/")
-      ) {
+      if (request.method === "GET" && request.path.includes("/git/ref/heads/")) {
         headReads += 1;
         return Effect.succeed({ object: { sha: `head-${headReads}` } });
       }
@@ -365,25 +348,16 @@ describe("hosted GitHub persistence", () => {
     let posts = 0;
     let patches = 0;
     const api = makeApi((request) => {
-      if (
-        request.method === "GET" &&
-        request.path.includes("/issues/42/comments")
-      ) {
+      if (request.method === "GET" && request.path.includes("/issues/42/comments")) {
         return Effect.succeed(comments);
       }
-      if (
-        request.method === "POST" &&
-        request.path.includes("/issues/42/comments")
-      ) {
+      if (request.method === "POST" && request.path.includes("/issues/42/comments")) {
         posts += 1;
         const body = (request.body as { readonly body: string }).body;
         comments = [{ body, id: 1 }];
         return Effect.succeed({});
       }
-      if (
-        request.method === "PATCH" &&
-        request.path.includes("/issues/comments/1")
-      ) {
+      if (request.method === "PATCH" && request.path.includes("/issues/comments/1")) {
         patches += 1;
         return Effect.succeed({});
       }

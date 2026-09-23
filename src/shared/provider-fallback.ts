@@ -17,8 +17,7 @@ type GenerateError =
   | ProviderError
   | RateLimitError
   | QuotaExhaustedError;
-type AttemptError =
-  ModerationBlockedError | ProviderError | RateLimitError | QuotaExhaustedError;
+type AttemptError = ModerationBlockedError | ProviderError | RateLimitError | QuotaExhaustedError;
 type HistoryError = Exclude<AttemptError, ModerationBlockedError>;
 
 interface FallbackProvider {
@@ -77,10 +76,7 @@ function runModerationFallback(
   request: GenerationRequest,
 ): Effect.Effect<GenerationResult, GenerateError> {
   return Effect.gen(function* () {
-    const priorHistory = [
-      ...skipped,
-      failedAttempt(primary, primaryError.message),
-    ];
+    const priorHistory = [...skipped, failedAttempt(primary, primaryError.message)];
     const moderationFailure = (
       fallbackProvider: string | null,
       fallbackDetail?: string,
@@ -91,31 +87,20 @@ function runModerationFallback(
         detail: primaryError.detail,
         fallbackProvider,
         fallbackDetail,
-        history:
-          fallbackEntry == null
-            ? priorHistory
-            : [...priorHistory, fallbackEntry],
+        history: fallbackEntry == null ? priorHistory : [...priorHistory, fallbackEntry],
       });
 
     const failFallback = (error: AttemptError, detail: string) =>
       Effect.fail(
-        moderationFailure(
-          error.provider,
-          detail,
-          failedAttempt(error.provider, error.message),
-        ),
+        moderationFailure(error.provider, detail, failedAttempt(error.provider, error.message)),
       );
 
     if (fallback.generate == null) {
-      yield* Effect.log(
-        `Moderation block on ${primary} - no fallback provider available.`,
-      );
+      yield* Effect.log(`Moderation block on ${primary} - no fallback provider available.`);
       return yield* moderationFailure(null);
     }
 
-    yield* Effect.log(
-      `Moderation block on ${primary} - falling back to ${fallback.name}...`,
-    );
+    yield* Effect.log(`Moderation block on ${primary} - falling back to ${fallback.name}...`);
 
     return yield* fallback.generate(request.prompt, request.user).pipe(
       Effect.map((result) => ({
@@ -126,10 +111,8 @@ function runModerationFallback(
         failFallback(error, "also blocked by moderation"),
       ),
       Effect.catchTags({
-        QuotaExhaustedError: (error) =>
-          failFallback(error, "out of credits/quota"),
-        RateLimitError: (error) =>
-          failFallback(error, "rate-limit retries exhausted"),
+        QuotaExhaustedError: (error) => failFallback(error, "out of credits/quota"),
+        RateLimitError: (error) => failFallback(error, "rate-limit retries exhausted"),
         ProviderError: (error) => failFallback(error, error.detail),
       }),
     );
@@ -166,17 +149,9 @@ function tryPrimaries(
       })),
       Effect.catchTags({
         QuotaExhaustedError: (error) =>
-          Effect.logWarning(
-            `${primary} is out of credits/quota - skipping. ${error.detail}`,
-          ).pipe(
+          Effect.logWarning(`${primary} is out of credits/quota - skipping. ${error.detail}`).pipe(
             Effect.zipRight(
-              tryPrimaries(
-                primaries,
-                rest,
-                error.history ?? skipped,
-                fallback,
-                request,
-              ),
+              tryPrimaries(primaries, rest, error.history ?? skipped, fallback, request),
             ),
           ),
         ModerationBlockedError: (error) =>

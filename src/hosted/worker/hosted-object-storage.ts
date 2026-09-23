@@ -6,10 +6,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { Data, Effect, Predicate, Schema } from "effect";
 import type { GenerationMetadata } from "../../shared/providers.js";
-import type {
-  FailureDeliveryOutcome,
-  SuccessDeliveryOutcome,
-} from "./hosted-delivery.js";
+import type { FailureDeliveryOutcome, SuccessDeliveryOutcome } from "./hosted-delivery.js";
 
 const CACHE_CONTROL = "public, max-age=31536000, immutable";
 const FAILURE_PREFIX = "terminal-outcomes";
@@ -37,9 +34,7 @@ const TerminalOutcomeRecordSchema = Schema.Struct({
 
 const encodeJson = Schema.encodeSync(Schema.parseJson(Schema.Unknown));
 
-export class HostedObjectStorageError extends Data.TaggedError(
-  "HostedObjectStorageError",
-)<{
+export class HostedObjectStorageError extends Data.TaggedError("HostedObjectStorageError")<{
   readonly detail: string;
   readonly operation: string;
   readonly status?: number;
@@ -93,17 +88,15 @@ export const makeS3ObjectStorageApi = ({
 
   return {
     getObject: ({ bucket, key }) =>
-      client
-        .send(new GetObjectCommand({ Bucket: bucket, Key: key }))
-        .then((response) => {
-          if (response.Body == null) {
-            throw new HostedObjectStorageError({
-              detail: `Object Storage returned an empty body for ${key}`,
-              operation: `get ${key}`,
-            });
-          }
-          return response.Body.transformToString();
-        }),
+      client.send(new GetObjectCommand({ Bucket: bucket, Key: key })).then((response) => {
+        if (response.Body == null) {
+          throw new HostedObjectStorageError({
+            detail: `Object Storage returned an empty body for ${key}`,
+            operation: `get ${key}`,
+          });
+        }
+        return response.Body.transformToString();
+      }),
     headObject: ({ bucket, key }) =>
       client
         .send(new HeadObjectCommand({ Bucket: bucket, Key: key }))
@@ -156,12 +149,8 @@ export interface RecordFailurePlan {
 
 export interface MissingDeliveryReceipt {
   readonly record: {
-    (
-      delivery: PublishImagePlan,
-    ): Effect.Effect<SuccessDeliveryOutcome, HostedObjectStorageError>;
-    (
-      delivery: RecordFailurePlan,
-    ): Effect.Effect<StoredDeliveryOutcome, HostedObjectStorageError>;
+    (delivery: PublishImagePlan): Effect.Effect<SuccessDeliveryOutcome, HostedObjectStorageError>;
+    (delivery: RecordFailurePlan): Effect.Effect<StoredDeliveryOutcome, HostedObjectStorageError>;
   };
   readonly status: "missing";
 }
@@ -176,9 +165,7 @@ export type DeliveryReceipt =
     };
 
 export interface DeliveryReceiptStore {
-  readonly receiptFor: (
-    prompt: string,
-  ) => Effect.Effect<DeliveryReceipt, HostedObjectStorageError>;
+  readonly receiptFor: (prompt: string) => Effect.Effect<DeliveryReceipt, HostedObjectStorageError>;
 }
 
 const errorStatus = (error: unknown): number | undefined => {
@@ -201,10 +188,7 @@ const errorName = (error: unknown): string | undefined =>
     ? error.name
     : undefined;
 
-const storageError = (
-  operation: string,
-  error: unknown,
-): HostedObjectStorageError =>
+const storageError = (operation: string, error: unknown): HostedObjectStorageError =>
   error instanceof HostedObjectStorageError
     ? error
     : new HostedObjectStorageError({
@@ -215,11 +199,9 @@ const storageError = (
         ...(errorStatus(error) == null ? {} : { status: errorStatus(error) }),
       });
 
-const isMissing = (error: HostedObjectStorageError): boolean =>
-  error.status === 404;
+const isMissing = (error: HostedObjectStorageError): boolean => error.status === 404;
 
-const isPreconditionFailed = (error: HostedObjectStorageError): boolean =>
-  error.status === 412;
+const isPreconditionFailed = (error: HostedObjectStorageError): boolean => error.status === 412;
 
 const request = <A>(
   operation: string,
@@ -247,9 +229,7 @@ const request = <A>(
   });
 
 const compactNumber = (value: number | undefined): string | undefined =>
-  value == null || !Number.isFinite(value) || value < 0
-    ? undefined
-    : String(Math.round(value));
+  value == null || !Number.isFinite(value) || value < 0 ? undefined : String(Math.round(value));
 
 const imageMetadata = (
   provider: string,
@@ -257,15 +237,11 @@ const imageMetadata = (
 ): Readonly<Record<string, string>> => {
   const usage = metadata?.usage;
   const costMicrocents =
-    metadata?.costCents == null
-      ? undefined
-      : compactNumber(metadata.costCents * 1_000_000);
+    metadata?.costCents == null ? undefined : compactNumber(metadata.costCents * 1_000_000);
   return {
     "meme-result-version": METADATA_VERSION,
     "meme-provider": Buffer.from(provider, "utf8").toString("base64url"),
-    ...(costMicrocents == null
-      ? {}
-      : { "meme-cost-microcents": costMicrocents }),
+    ...(costMicrocents == null ? {} : { "meme-cost-microcents": costMicrocents }),
     ...(usage == null
       ? {}
       : {
@@ -297,8 +273,7 @@ const decodeProvider = (metadata: Readonly<Record<string, string>>): string => {
   }
   const decoded = Buffer.from(encoded, "base64url");
   const provider = decoded.toString("utf8").trim();
-  return provider === "" ||
-    Buffer.from(provider, "utf8").toString("base64url") !== encoded
+  return provider === "" || Buffer.from(provider, "utf8").toString("base64url") !== encoded
     ? "unknown"
     : provider;
 };
@@ -309,15 +284,12 @@ const decodeGenerationMetadata = (
   const inputTokens = parseNonNegativeInteger(metadata["meme-input-tokens"]);
   const outputTokens = parseNonNegativeInteger(metadata["meme-output-tokens"]);
   const totalTokens = parseNonNegativeInteger(metadata["meme-total-tokens"]);
-  const costMicrocents = parseNonNegativeInteger(
-    metadata["meme-cost-microcents"],
-  );
+  const costMicrocents = parseNonNegativeInteger(metadata["meme-cost-microcents"]);
   const usage =
     inputTokens == null || outputTokens == null || totalTokens == null
       ? undefined
       : { inputTokens, outputTokens, totalTokens };
-  const costCents =
-    costMicrocents == null ? undefined : costMicrocents / 1_000_000;
+  const costCents = costMicrocents == null ? undefined : costMicrocents / 1_000_000;
   return usage == null && costCents == null
     ? undefined
     : {
@@ -363,30 +335,20 @@ export const makeHostedObjectStorage = ({
   const headImage = (
     prompt: string,
   ): Effect.Effect<SuccessDeliveryOutcome | null, HostedObjectStorageError> =>
-    request(`head ${imageKey}`, () =>
-      api.headObject({ bucket, key: imageKey }),
-    ).pipe(
+    request(`head ${imageKey}`, () => api.headObject({ bucket, key: imageKey })).pipe(
       Effect.map(({ metadata }) => successFromMetadata(prompt, metadata)),
       Effect.catchIf(isMissing, () => Effect.succeed(null)),
     );
 
-  const readFailure = (): Effect.Effect<
-    FailureDeliveryOutcome | null,
-    HostedObjectStorageError
-  > =>
-    request(`get ${failureKey}`, () =>
-      api.getObject({ bucket, key: failureKey }),
-    ).pipe(
+  const readFailure = (): Effect.Effect<FailureDeliveryOutcome | null, HostedObjectStorageError> =>
+    request(`get ${failureKey}`, () => api.getObject({ bucket, key: failureKey })).pipe(
       Effect.catchIf(isMissing, () => Effect.succeed(null)),
       Effect.flatMap((content) =>
         content == null
           ? Effect.succeed(null)
-          : Schema.decodeUnknown(Schema.parseJson(TerminalOutcomeRecordSchema))(
-              content,
-            ).pipe(
+          : Schema.decodeUnknown(Schema.parseJson(TerminalOutcomeRecordSchema))(content).pipe(
               Effect.filterOrFail(
-                (record) =>
-                  record.deliveryId === deliveryId && record.memeId === memeId,
+                (record) => record.deliveryId === deliveryId && record.memeId === memeId,
                 () =>
                   new HostedObjectStorageError({
                     detail: `Terminal outcome ${failureKey} has the wrong delivery identity`,
@@ -411,9 +373,7 @@ export const makeHostedObjectStorage = ({
   ): Effect.Effect<StoredDeliveryOutcome | null, HostedObjectStorageError> =>
     headImage(prompt).pipe(
       Effect.flatMap((published) =>
-        published == null
-          ? readFailure()
-          : Effect.succeed<StoredDeliveryOutcome>(published),
+        published == null ? readFailure() : Effect.succeed<StoredDeliveryOutcome>(published),
       ),
     );
 
@@ -425,8 +385,7 @@ export const makeHostedObjectStorage = ({
         (outcome): outcome is StoredDeliveryOutcome => outcome != null,
         () =>
           new HostedObjectStorageError({
-            detail:
-              "Conditional Object Storage write lost without a readable winner",
+            detail: "Conditional Object Storage write lost without a readable winner",
             operation: "load concurrent winner",
           }),
       ),
@@ -435,10 +394,7 @@ export const makeHostedObjectStorage = ({
   const publishImage = ({
     image,
     outcome,
-  }: PublishImagePlan): Effect.Effect<
-    SuccessDeliveryOutcome,
-    HostedObjectStorageError
-  > =>
+  }: PublishImagePlan): Effect.Effect<SuccessDeliveryOutcome, HostedObjectStorageError> =>
     request(`put ${imageKey}`, () =>
       api.putObject({
         body: image,
@@ -455,8 +411,7 @@ export const makeHostedObjectStorage = ({
       Effect.catchIf(isPreconditionFailed, () =>
         headImage(outcome.prompt).pipe(
           Effect.filterOrFail(
-            (published): published is SuccessDeliveryOutcome =>
-              published != null,
+            (published): published is SuccessDeliveryOutcome => published != null,
             () =>
               new HostedObjectStorageError({
                 detail: `Concurrent image winner ${imageKey} is not readable`,
@@ -486,9 +441,7 @@ export const makeHostedObjectStorage = ({
               }),
             ).pipe(
               Effect.as<StoredDeliveryOutcome>(outcome),
-              Effect.catchIf(isPreconditionFailed, () =>
-                loadConcurrentWinner(prompt),
-              ),
+              Effect.catchIf(isPreconditionFailed, () => loadConcurrentWinner(prompt)),
             )
           : Effect.succeed(published),
       ),
@@ -516,9 +469,7 @@ export const makeHostedObjectStorage = ({
     receiptFor: (prompt) =>
       getOutcome(prompt).pipe(
         Effect.map((outcome): DeliveryReceipt =>
-          outcome == null
-            ? missingReceipt(prompt)
-            : { status: "recorded", outcome },
+          outcome == null ? missingReceipt(prompt) : { status: "recorded", outcome },
         ),
       ),
   };

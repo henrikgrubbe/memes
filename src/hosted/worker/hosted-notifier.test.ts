@@ -86,9 +86,7 @@ describe("hosted notifier", () => {
       webhookUrl: "https://example.test/hook",
     });
 
-    const exit = await Effect.runPromise(
-      sender.post({ type: "failure" }).pipe(Effect.exit),
-    );
+    const exit = await Effect.runPromise(sender.post({ type: "failure" }).pipe(Effect.exit));
 
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) {
@@ -164,17 +162,11 @@ describe("hosted notifier", () => {
     const comments = events.filter((event) => event.startsWith("comment:"));
 
     expect(comments).toHaveLength(1);
-    expect(comments[0]).toContain(
-      "<summary><strong>Full generation prompt</strong></summary>",
-    );
+    expect(comments[0]).toContain("<summary><strong>Full generation prompt</strong></summary>");
     expect(comments[0]).toContain(generationPrompt);
-    expect(comments[0]).toContain(
-      "**Requested prompt:** ``Henrik checks the `meme` machine.``",
-    );
+    expect(comments[0]).toContain("**Requested prompt:** ``Henrik checks the `meme` machine.``");
     expect(comments[0]).toContain("**Revised prompt:** ``A revised `prompt```");
-    expect(comments[0]).toContain(
-      "**Usage:** 12 input, 34 output, 46 total tokens",
-    );
+    expect(comments[0]).toContain("**Usage:** 12 input, 34 output, 46 total tokens");
     expect(comments[0]).toContain("**Estimated cost:** 0.108¢");
     expect(comments[0]).toContain("- xAI ⏳ rate limited");
     expect(payloads).toEqual([
@@ -242,18 +234,10 @@ describe("hosted notifier", () => {
     const succeeded = { ...failed, updated: true } as const;
 
     const failedCapture = await captureCompletion(failed);
-    const succeededCapture = await captureCompletion(
-      succeeded,
-      config,
-      "sagas",
-    );
+    const succeededCapture = await captureCompletion(succeeded, config, "sagas");
 
-    expect(failedCapture.events.join("\n")).toContain(
-      "The issue remains open.",
-    );
-    expect(
-      failedCapture.events.some((event) => event.startsWith("close:")),
-    ).toBe(false);
+    expect(failedCapture.events.join("\n")).toContain("The issue remains open.");
+    expect(failedCapture.events.some((event) => event.startsWith("close:"))).toBe(false);
     expect(failedCapture.payloads).toEqual([
       expect.objectContaining({
         content_url: "",
@@ -263,8 +247,7 @@ describe("hosted notifier", () => {
     ]);
     expect(succeededCapture.payloads).toEqual([
       expect.objectContaining({
-        content_url:
-          "https://github.com/owner/repo/blob/sagas/context/heist.md",
+        content_url: "https://github.com/owner/repo/blob/sagas/context/heist.md",
         type: "saga-updated",
       }),
     ]);
@@ -449,9 +432,10 @@ describe("hosted notifier elapsed time", () => {
         },
       );
     });
-    return Effect.runPromise(
-      test.pipe(Effect.provide(TestContext.TestContext)),
-    ).then(() => ({ events, payloads }));
+    return Effect.runPromise(test.pipe(Effect.provide(TestContext.TestContext))).then(() => ({
+      events,
+      payloads,
+    }));
   };
 
   const epoch = "1970-01-01T00:00:00.000Z";
@@ -487,18 +471,10 @@ describe("hosted notifier elapsed time", () => {
   });
 
   it("omits timing rather than rendering a negative or nonsense duration", async () => {
-    const unparseable = await captureAfter(
-      90_000,
-      successOutcome,
-      "not-a-timestamp",
-    );
+    const unparseable = await captureAfter(90_000, successOutcome, "not-a-timestamp");
     expect(unparseable.events.join("\n")).not.toContain("**Took:**");
 
-    const skewed = await captureAfter(
-      0,
-      successOutcome,
-      "1970-01-01T00:01:00.000Z",
-    );
+    const skewed = await captureAfter(0, successOutcome, "1970-01-01T00:01:00.000Z");
     expect(skewed.events.join("\n")).not.toContain("**Took:**");
   });
 });

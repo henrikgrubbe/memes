@@ -33,32 +33,20 @@ describe("generateWithFallback", () => {
 
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
-      expect(exit.value.history).toEqual([
-        { provider: primary, status: "success" },
-      ]);
+      expect(exit.value.history).toEqual([{ provider: primary, status: "success" }]);
     }
   });
 
   it.each([
-    [
-      "provider error",
-      providerErrorProvider(primary),
-      "ProviderError",
-      "failed",
-    ],
+    ["provider error", providerErrorProvider(primary), "ProviderError", "failed"],
     ["rate limit", rateLimitedProvider(primary), "RateLimitError", "failed"],
-  ] as const)(
-    "preserves attempt history for a %s",
-    async (_name, provider, tag, status) => {
-      const exit = await run(provider);
-      const error = failureOrThrow(exit);
+  ] as const)("preserves attempt history for a %s", async (_name, provider, tag, status) => {
+    const exit = await run(provider);
+    const error = failureOrThrow(exit);
 
-      expect(error._tag).toBe(tag);
-      expect(error.history).toEqual([
-        expect.objectContaining({ provider: primary, status }),
-      ]);
-    },
-  );
+    expect(error._tag).toBe(tag);
+    expect(error.history).toEqual([expect.objectContaining({ provider: primary, status })]);
+  });
 
   it("skips exhausted providers and reports that no primary remains", async () => {
     const exit = await run(quotaExhaustedProvider(primary));
@@ -81,10 +69,7 @@ describe("generateWithFallback", () => {
   });
 
   it("uses the fallback after a moderation block", async () => {
-    const exit = await run(
-      moderationBlockedProvider(primary),
-      successfulProvider(fallback),
-    );
+    const exit = await run(moderationBlockedProvider(primary), successfulProvider(fallback));
 
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
@@ -96,27 +81,16 @@ describe("generateWithFallback", () => {
   });
 
   it.each([
-    [
-      "moderation",
-      moderationBlockedProvider(fallback),
-      "also blocked by moderation",
-    ],
+    ["moderation", moderationBlockedProvider(fallback), "also blocked by moderation"],
     ["quota", quotaExhaustedProvider(fallback), "out of credits/quota"],
-    [
-      "rate limit",
-      rateLimitedProvider(fallback),
-      "rate-limit retries exhausted",
-    ],
+    ["rate limit", rateLimitedProvider(fallback), "rate-limit retries exhausted"],
     ["provider error", providerErrorProvider(fallback), "error"],
-  ] as const)(
-    "reports a failed fallback after %s",
-    async (_name, provider, detail) => {
-      const exit = await run(moderationBlockedProvider(primary), provider);
-      const error = failureOfType(exit, ModerationFailedError);
+  ] as const)("reports a failed fallback after %s", async (_name, provider, detail) => {
+    const exit = await run(moderationBlockedProvider(primary), provider);
+    const error = failureOfType(exit, ModerationFailedError);
 
-      expect(error.fallbackProvider).toBe(fallback);
-      expect(error.fallbackDetail).toBe(detail);
-      expect(error.history).toHaveLength(2);
-    },
-  );
+    expect(error.fallbackProvider).toBe(fallback);
+    expect(error.fallbackDetail).toBe(detail);
+    expect(error.history).toHaveLength(2);
+  });
 });

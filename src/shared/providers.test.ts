@@ -22,8 +22,7 @@ import {
 import { failureOfType } from "./test-support.js";
 
 const PROVIDER = "test-provider";
-const call = (client: OpenAI) =>
-  callWithRetry(PROVIDER, client, "m", {}, "prompt");
+const call = (client: OpenAI) => callWithRetry(PROVIDER, client, "m", {}, "prompt");
 
 type ImageResponse = {
   data: Array<{ b64_json?: string; revised_prompt?: string }>;
@@ -101,12 +100,9 @@ const insufficientQuota = () => (): Promise<ImageResponse> =>
     error: { code: "insufficient_quota" },
   });
 
-const run = <A, E>(effect: Effect.Effect<A, E>) =>
-  Effect.runPromise(Effect.exit(effect));
+const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(Effect.exit(effect));
 const runTC = <A, E>(effect: Effect.Effect<A, E, never>) =>
-  Effect.runPromise(
-    Effect.exit(effect).pipe(Effect.provide(TestContext.TestContext)),
-  );
+  Effect.runPromise(Effect.exit(effect).pipe(Effect.provide(TestContext.TestContext)));
 
 describe("callWithRetry", () => {
   it("succeeds on first try", async () => {
@@ -114,9 +110,7 @@ describe("callWithRetry", () => {
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
       expect(exit.value.buffer.toString("base64")).toBe("aGVsbG8=");
-      expect(exit.value.history).toEqual([
-        { provider: PROVIDER, status: "success" },
-      ]);
+      expect(exit.value.history).toEqual([{ provider: PROVIDER, status: "success" }]);
     }
   });
 
@@ -124,9 +118,7 @@ describe("callWithRetry", () => {
     const client = makeClient([
       () =>
         Promise.resolve({
-          data: [
-            { b64_json: "aGVsbG8=", revised_prompt: "revised prompt text" },
-          ],
+          data: [{ b64_json: "aGVsbG8=", revised_prompt: "revised prompt text" }],
           usage: { input_tokens: 12, output_tokens: 34, total_tokens: 46 },
         }),
     ]);
@@ -177,9 +169,7 @@ describe("callWithRetry", () => {
   });
 
   it("returns ProviderError when response has no image data", async () => {
-    const exit = await run(
-      call(makeClient([() => Promise.resolve({ data: [] })])),
-    );
+    const exit = await run(call(makeClient([() => Promise.resolve({ data: [] })])));
     expect(Exit.isFailure(exit)).toBe(true);
     failureOfType(exit, ProviderError);
   });
@@ -292,49 +282,29 @@ describe("callWithRetry", () => {
   it("passes numeric params (e.g. output_compression) through to the API", async () => {
     const recorder = makeRequestRecorder();
     await run(
-      callWithRetry(
-        PROVIDER,
-        recorder.client,
-        "gpt-image-2",
-        { output_compression: 80 },
-        "cat",
-      ),
+      callWithRetry(PROVIDER, recorder.client, "gpt-image-2", { output_compression: 80 }, "cat"),
     );
     expect(recorder.request()["output_compression"]).toBe(80);
   });
 
   it("forwards the end-user id as `user` when provided", async () => {
     const recorder = makeRequestRecorder();
-    await run(
-      callWithRetry(
-        PROVIDER,
-        recorder.client,
-        "gpt-image-2",
-        {},
-        "cat",
-        "U017Z2VDNJJ",
-      ),
-    );
+    await run(callWithRetry(PROVIDER, recorder.client, "gpt-image-2", {}, "cat", "U017Z2VDNJJ"));
     expect(recorder.request()["user"]).toBe("U017Z2VDNJJ");
   });
 
   it("omits `user` entirely when no end-user id is provided", async () => {
     const recorder = makeRequestRecorder();
-    await run(
-      callWithRetry(PROVIDER, recorder.client, "gpt-image-2", {}, "cat"),
-    );
+    await run(callWithRetry(PROVIDER, recorder.client, "gpt-image-2", {}, "cat"));
     expect("user" in recorder.request()).toBe(false);
   });
 });
 
 describe("model candidates", () => {
   it("defaults a candidate label to '<provider> (<model>)'", () => {
-    expect(
-      modelLabel(
-        { name: "OpenAI", envKey: "K", models: [] },
-        { model: "gpt-image-2" },
-      ),
-    ).toBe("OpenAI (gpt-image-2)");
+    expect(modelLabel({ name: "OpenAI", envKey: "K", models: [] }, { model: "gpt-image-2" })).toBe(
+      "OpenAI (gpt-image-2)",
+    );
   });
 
   it("honours an explicit label override", () => {
@@ -362,10 +332,7 @@ describe("model candidates", () => {
       },
       "sk-test",
     );
-    expect(candidates.map(([label]) => label)).toEqual([
-      "OpenAI (gpt-image-2)",
-      "OpenAI HQ",
-    ]);
+    expect(candidates.map(([label]) => label)).toEqual(["OpenAI (gpt-image-2)", "OpenAI HQ"]);
     expect(typeof candidates[0][1]).toBe("function");
   });
 
@@ -397,9 +364,7 @@ describe("ProvidersLayer (disable-by-omission)", () => {
     Effect.runPromise(
       ProvidersServiceTag.pipe(
         Effect.provide(ProvidersLayer),
-        Effect.withConfigProvider(
-          ConfigProvider.fromMap(new Map(Object.entries(env))),
-        ),
+        Effect.withConfigProvider(ConfigProvider.fromMap(new Map(Object.entries(env)))),
         Effect.exit,
       ),
     );
@@ -415,11 +380,9 @@ describe("ProvidersLayer (disable-by-omission)", () => {
   });
 
   it("builds when the primary key is set, with or without the fallback key", async () => {
-    expect(
-      Exit.isSuccess(
-        await buildWith({ AI_PROVIDER_OPENAI_API_KEY: "sk-primary" }),
-      ),
-    ).toBe(true);
+    expect(Exit.isSuccess(await buildWith({ AI_PROVIDER_OPENAI_API_KEY: "sk-primary" }))).toBe(
+      true,
+    );
     expect(
       Exit.isSuccess(
         await buildWith({

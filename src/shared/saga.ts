@@ -58,9 +58,7 @@ const sagaContextText = (contexts: ReadonlyArray<SagaContext>): string => {
   if (nonEmpty.length === 1) {
     return nonEmpty[0].canon;
   }
-  return nonEmpty
-    .map(({ name, canon }) => `Saga "${name}":\n${canon}`)
-    .join("\n\n");
+  return nonEmpty.map(({ name, canon }) => `Saga "${name}":\n${canon}`).join("\n\n");
 };
 
 export const maxSagaContextChars = (memePrompt: string): number =>
@@ -73,9 +71,8 @@ export const maxSagaContextChars = (memePrompt: string): number =>
   );
 
 /** Render one or more saga canons as labeled background for an image request. */
-export const renderSagaContexts = (
-  contexts: ReadonlyArray<SagaContext>,
-): string => sagaContextText(contexts);
+export const renderSagaContexts = (contexts: ReadonlyArray<SagaContext>): string =>
+  sagaContextText(contexts);
 
 export function buildMemePrompt(
   memePrompt: string,
@@ -85,9 +82,7 @@ export function buildMemePrompt(
   const context =
     typeof saga === "string"
       ? saga
-      : sagaContextText(
-          saga == null ? [] : Array.isArray(saga) ? saga : [saga],
-        );
+      : sagaContextText(saga == null ? [] : Array.isArray(saga) ? saga : [saga]);
   if (context === "") {
     return base.slice(0, MAX_PROMPT_CHARS);
   }
@@ -146,10 +141,7 @@ export function buildCompressionMessages(
 }
 
 /** Ask the model to shrink an over-budget canon without losing key elements. */
-export function buildShortenMessages(
-  saga: string,
-  overlong: string,
-): ReadonlyArray<ChatMessage> {
+export function buildShortenMessages(saga: string, overlong: string): ReadonlyArray<ChatMessage> {
   const system = [
     `You are editing the canon for the saga "${saga}".`,
     `Rewrite it to be SHORTER without losing recurring characters, running`,
@@ -187,13 +179,8 @@ export function describeModelError(error: unknown): string {
     readonly cause?: { readonly message?: string };
   };
   const status = value?.status == null ? "" : `HTTP ${value.status} `;
-  const code =
-    value?.code ?? value?.error?.code ?? value?.type ?? value?.error?.type;
-  const message =
-    value?.error?.message ??
-    value?.message ??
-    value?.cause?.message ??
-    String(error);
+  const code = value?.code ?? value?.error?.code ?? value?.type ?? value?.error?.type;
+  const message = value?.error?.message ?? value?.message ?? value?.cause?.message ?? String(error);
 
   return `${status}${code == null ? "" : `[${code}] `}${message}`.trim();
 }
@@ -215,15 +202,13 @@ export function foldCanon<E>(
     Effect.flatMap((first) =>
       first.length <= MAX_CANON_CHARS
         ? Effect.succeed(first)
-        : callModel(buildShortenMessages(saga, first)).pipe(
-            Effect.orElseSucceed(() => first),
-          ),
+        : callModel(buildShortenMessages(saga, first)).pipe(Effect.orElseSucceed(() => first)),
     ),
     Effect.map(capCanon),
     Effect.catchAll((error) =>
-      Effect.logWarning(
-        `Saga compression failed - appending raw. ${String(error)}`,
-      ).pipe(Effect.as(appendFallback(canon, prompt))),
+      Effect.logWarning(`Saga compression failed - appending raw. ${String(error)}`).pipe(
+        Effect.as(appendFallback(canon, prompt)),
+      ),
     ),
   );
 }
@@ -236,9 +221,7 @@ class CompressionError extends Data.TaggedError("CompressionError")<{
   }
 }
 
-type ModelCall = (
-  messages: ReadonlyArray<ChatMessage>,
-) => Effect.Effect<string, CompressionError>;
+type ModelCall = (messages: ReadonlyArray<ChatMessage>) => Effect.Effect<string, CompressionError>;
 
 export type SagaContextShortener = (
   contexts: ReadonlyArray<SagaContext>,
@@ -267,11 +250,7 @@ const buildCombinedContextShortenMessages = (
   },
 ];
 
-export type SagaCompressor = (
-  saga: string,
-  canon: string,
-  prompt: string,
-) => Effect.Effect<string>;
+export type SagaCompressor = (saga: string, canon: string, prompt: string) => Effect.Effect<string>;
 
 const toOpenAiMessage = (
   message: ChatMessage,
@@ -290,8 +269,7 @@ const makeModelCall =
           messages: messages.map(toOpenAiMessage),
           max_completion_tokens: MAX_CANON_TOKENS,
         }),
-      catch: (error) =>
-        new CompressionError({ detail: describeModelError(error) }),
+      catch: (error) => new CompressionError({ detail: describeModelError(error) }),
     }).pipe(
       Effect.flatMap((response) => {
         const content = response.choices[0]?.message?.content?.trim();
@@ -307,9 +285,7 @@ const makeModelCall =
 
 export const makeSagaCompressor = (apiKey: string | null): SagaCompressor => {
   const callModel =
-    apiKey == null || apiKey.trim() === ""
-      ? null
-      : makeModelCall(new OpenAI({ apiKey }));
+    apiKey == null || apiKey.trim() === "" ? null : makeModelCall(new OpenAI({ apiKey }));
 
   return (saga, canon, prompt) =>
     callModel == null
@@ -322,25 +298,18 @@ export const makeSagaCompressor = (apiKey: string | null): SagaCompressor => {
  * fit alongside the image instruction. A model outage still leaves a bounded,
  * labeled context and is recorded for operational visibility.
  */
-export const makeSagaContextShortener = (
-  apiKey: string | null,
-): SagaContextShortener => {
+export const makeSagaContextShortener = (apiKey: string | null): SagaContextShortener => {
   const callModel =
-    apiKey == null || apiKey.trim() === ""
-      ? null
-      : makeModelCall(new OpenAI({ apiKey }));
+    apiKey == null || apiKey.trim() === "" ? null : makeModelCall(new OpenAI({ apiKey }));
 
   return (contexts, maximumChars) => {
-    const fallback = () =>
-      Effect.succeed(renderSagaContexts(contexts).slice(0, maximumChars));
+    const fallback = () => Effect.succeed(renderSagaContexts(contexts).slice(0, maximumChars));
     if (callModel == null) {
       return Effect.logWarning(
         "Saga context reduction skipped because no text-model API key is configured",
       ).pipe(Effect.zipRight(fallback()));
     }
-    return callModel(
-      buildCombinedContextShortenMessages(contexts, maximumChars),
-    ).pipe(
+    return callModel(buildCombinedContextShortenMessages(contexts, maximumChars)).pipe(
       Effect.map((context) => context.slice(0, maximumChars)),
       Effect.catchAll((error) =>
         Effect.logWarning(

@@ -4,10 +4,7 @@ import { NotificationError } from "../../shared/errors.js";
 import type { HistoryEntry } from "../../shared/history.js";
 import type { GenerationMetadata } from "../../shared/providers.js";
 import type { DeliveryOutcome } from "./hosted-delivery.js";
-import type {
-  HostedGitHubError,
-  HostedGitHubRepository,
-} from "./hosted-github.js";
+import type { HostedGitHubError, HostedGitHubRepository } from "./hosted-github.js";
 
 interface SuccessCommentParams {
   readonly channel: string;
@@ -40,18 +37,13 @@ const formatElapsed = (totalSeconds: number): string => {
   }
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
-  return remainingMinutes === 0
-    ? `${hours}h`
-    : `${hours}h ${remainingMinutes}m`;
+  return remainingMinutes === 0 ? `${hours}h` : `${hours}h ${remainingMinutes}m`;
 };
 
 // Defensive: `requestedAt` crosses a queue boundary and is optional on the wire,
 // so an absent, unparseable, or clock-skewed value simply omits the timing
 // rather than rendering nonsense like "-3s".
-const elapsedSince = (
-  requestedAt: string | null,
-  nowMillis: number,
-): Elapsed | null => {
+const elapsedSince = (requestedAt: string | null, nowMillis: number): Elapsed | null => {
   if (requestedAt == null) {
     return null;
   }
@@ -87,9 +79,7 @@ const fencedCode = (value: string): ReadonlyArray<string> => {
   return [`${fence}text`, value, fence];
 };
 
-const renderProviderAttempts = (
-  history: ReadonlyArray<HistoryEntry>,
-): ReadonlyArray<string> =>
+const renderProviderAttempts = (history: ReadonlyArray<HistoryEntry>): ReadonlyArray<string> =>
   history.map(({ provider, status, message }) => {
     switch (status) {
       case "success":
@@ -139,9 +129,7 @@ const successComment = ({
     `**Requested by:** ${requester} in ${channel} - [View in Slack](${slackLink})`,
     `**Requested prompt:** ${inlineCode(requestedPrompt)}`,
     ...fullPromptDetails,
-    ...(revisedPrompt == null
-      ? []
-      : [`**Revised prompt:** ${inlineCode(revisedPrompt)}`]),
+    ...(revisedPrompt == null ? [] : [`**Revised prompt:** ${inlineCode(revisedPrompt)}`]),
     ...(usageSummary == null ? [] : [`**Usage:** ${usageSummary}`]),
     ...(costCents == null ? [] : [`**Estimated cost:** ${costCents}`]),
     ...elapsedCommentLines(elapsed),
@@ -161,15 +149,9 @@ const failureComment = (
       ? [``, `**Provider attempts:**`, ...renderProviderAttempts(history)]
       : [];
   const timing = elapsed == null ? [] : [``, ...elapsedCommentLines(elapsed)];
-  return [
-    `❌ Meme generation failed.`,
-    ``,
-    "```",
-    message,
-    "```",
-    ...attempts,
-    ...timing,
-  ].join("\n");
+  return [`❌ Meme generation failed.`, ``, "```", message, "```", ...attempts, ...timing].join(
+    "\n",
+  );
 };
 
 const sagaUpdateComment = ({
@@ -180,9 +162,7 @@ const sagaUpdateComment = ({
   const status = updated
     ? `✅ Saga \`${saga}\` updated.`
     : `❌ Saga \`${saga}\` could not be updated. The issue remains open.`;
-  return [status, ``, `**Contribution:** ${inlineCode(contribution)}`].join(
-    "\n",
-  );
+  return [status, ``, `**Contribution:** ${inlineCode(contribution)}`].join("\n");
 };
 
 const sagaContextComment = ({
@@ -191,20 +171,14 @@ const sagaContextComment = ({
 }: Extract<DeliveryOutcome, { readonly kind: "saga-context" }>): string =>
   canon.trim() === ""
     ? `📖 Saga \`${saga}\` has no context yet.`
-    : [
-        `📖 Current context for saga \`${saga}\`:`,
-        ``,
-        ...fencedCode(canon),
-      ].join("\n");
+    : [`📖 Current context for saga \`${saga}\`:`, ``, ...fencedCode(canon)].join("\n");
 
 const sagaListComment = ({
   sagas,
 }: Extract<DeliveryOutcome, { readonly kind: "saga-list" }>): string =>
   sagas.length === 0
     ? "📚 There are no Sagas yet."
-    : ["📚 Current Sagas:", ``, ...sagas.map((saga) => `- \`${saga}\``)].join(
-        "\n",
-      );
+    : ["📚 Current Sagas:", ``, ...sagas.map((saga) => `- \`${saga}\``)].join("\n");
 
 export interface SlackSender {
   readonly post: (payload: unknown) => Effect.Effect<void, NotificationError>;
@@ -274,13 +248,8 @@ interface SlackCompletionPayload {
 
 const slackPayload = (
   config: AppConfig,
-  fields: Pick<
-    SlackCompletionPayload,
-    "content_url" | "text" | "title" | "type"
-  > &
-    Partial<
-      Pick<SlackCompletionPayload, "cost_cents" | "meme_id" | "write_saga">
-    >,
+  fields: Pick<SlackCompletionPayload, "content_url" | "text" | "title" | "type"> &
+    Partial<Pick<SlackCompletionPayload, "cost_cents" | "meme_id" | "write_saga">>,
 ): SlackCompletionPayload => ({
   channel: config.channel,
   content_url: fields.content_url,
@@ -295,9 +264,7 @@ const slackPayload = (
 });
 
 const imageContextText = (readSagas: ReadonlyArray<string>): string =>
-  readSagas.length === 0
-    ? "No Saga context."
-    : `Saga context: ${readSagas.join(", ")}`;
+  readSagas.length === 0 ? "No Saga context." : `Saga context: ${readSagas.join(", ")}`;
 
 const completionPlan = (
   config: AppConfig,
@@ -342,9 +309,7 @@ const completionPlan = (
             ? `https://github.com/${config.repo}/blob/${branch}/context/${outcome.saga}.md`
             : "",
           title: `Saga "${outcome.saga}": ${outcome.contribution}`,
-          text: outcome.updated
-            ? ""
-            : `Saga "${outcome.saga}" could not be updated.`,
+          text: outcome.updated ? "" : `Saga "${outcome.saga}" could not be updated.`,
           write_saga: outcome.saga,
         }),
       };
@@ -373,18 +338,13 @@ const completionPlan = (
               ? ""
               : `https://github.com/${config.repo}/tree/${branch}/context`,
           title: "Current Sagas",
-          text:
-            outcome.sagas.length === 0
-              ? "There are no Sagas yet."
-              : outcome.sagas.join("\n"),
+          text: outcome.sagas.length === 0 ? "There are no Sagas yet." : outcome.sagas.join("\n"),
         }),
       };
     case "failure":
       return {
         close: outcome.closeNotPlanned,
-        ...(outcome.closeNotPlanned
-          ? { closeReason: "not_planned" as const }
-          : {}),
+        ...(outcome.closeNotPlanned ? { closeReason: "not_planned" as const } : {}),
         comment: failureComment(outcome.message, elapsed, outcome.history),
         slackPayload: slackPayload(config, {
           type: "failure",

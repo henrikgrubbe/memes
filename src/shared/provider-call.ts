@@ -7,11 +7,7 @@ import {
   RateLimitError,
 } from "./errors.js";
 import type { HistoryEntry } from "./history.js";
-import {
-  computeCostCents,
-  type GenerationResult,
-  type ModelPricing,
-} from "./provider-model.js";
+import { computeCostCents, type GenerationResult, type ModelPricing } from "./provider-model.js";
 
 export const MAX_RETRIES = 10;
 const RETRY_DELAY_PADDING_MS = 1_000;
@@ -46,8 +42,7 @@ function isQuotaExhausted(error: ApiError | null | undefined): boolean {
   return (
     code === "insufficient_quota" ||
     code === "billing_hard_limit_reached" ||
-    (error?.status === 403 &&
-      /credit|spending limit|quota|billing/i.test(error.message ?? ""))
+    (error?.status === 403 && /credit|spending limit|quota|billing/i.test(error.message ?? ""))
   );
 }
 
@@ -62,9 +57,7 @@ function parseRetryDelayMs(error: ApiError): number | null {
   }
 
   const match = (error.message ?? "").match(/try again in (\d+(?:\.\d+)?)s/i);
-  return match == null
-    ? null
-    : parseFloat(match[1]) * 1000 + RETRY_DELAY_PADDING_MS;
+  return match == null ? null : parseFloat(match[1]) * 1000 + RETRY_DELAY_PADDING_MS;
 }
 
 function classifyApiError(error: unknown, model: string): CallError {
@@ -144,13 +137,9 @@ export function callWithRetry(
               };
         const revisedPrompt = result.data?.[0]?.revised_prompt;
         const costCents =
-          usage == null || pricing == null
-            ? undefined
-            : computeCostCents(usage, pricing);
+          usage == null || pricing == null ? undefined : computeCostCents(usage, pricing);
         const metadata =
-          usage == null && revisedPrompt == null
-            ? undefined
-            : { usage, revisedPrompt, costCents };
+          usage == null && revisedPrompt == null ? undefined : { usage, revisedPrompt, costCents };
 
         return Effect.succeed({
           buffer: Buffer.from(b64, "base64"),

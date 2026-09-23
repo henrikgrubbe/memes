@@ -1,27 +1,13 @@
 import { createServer } from "node:http";
-import {
-  HttpRouter,
-  HttpServer,
-  HttpServerRequest,
-  HttpServerResponse,
-} from "@effect/platform";
+import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "@effect/platform";
 import { NodeHttpServer } from "@effect/platform-node";
 import { Config, Context, Effect, Layer, Option } from "effect";
 import { ProvidersLayer, ProvidersServiceTag } from "../../shared/providers.js";
-import {
-  makeSagaCompressor,
-  makeSagaContextShortener,
-} from "../../shared/saga.js";
+import { makeSagaCompressor, makeSagaContextShortener } from "../../shared/saga.js";
 import { makeGitHubApi, makeHostedGitHubRepository } from "./hosted-github.js";
 import { makeSlackSender } from "./hosted-notifier.js";
-import {
-  makeHostedObjectStorage,
-  makeS3ObjectStorageApi,
-} from "./hosted-object-storage.js";
-import {
-  makeQueuedDeliveryHandler,
-  type QueuedDeliveryHandler,
-} from "./hosted-worker.js";
+import { makeHostedObjectStorage, makeS3ObjectStorageApi } from "./hosted-object-storage.js";
+import { makeQueuedDeliveryHandler, type QueuedDeliveryHandler } from "./hosted-worker.js";
 
 interface WorkerRuntimeConfig {
   readonly githubApiUrl: string;
@@ -39,9 +25,7 @@ interface WorkerRuntimeConfig {
 }
 
 const WorkerConfig = Config.all({
-  githubApiUrl: Config.string("GITHUB_API_URL").pipe(
-    Config.withDefault("https://api.github.com"),
-  ),
+  githubApiUrl: Config.string("GITHUB_API_URL").pipe(Config.withDefault("https://api.github.com")),
   githubRepository: Config.string("GITHUB_REPOSITORY"),
   githubToken: Config.string("GH_API_TOKEN"),
   objectStorageAccessKey: Config.string("OBJECT_STORAGE_ACCESS_KEY"),
@@ -52,14 +36,10 @@ const WorkerConfig = Config.all({
   objectStorageSecretKey: Config.string("OBJECT_STORAGE_SECRET_KEY"),
   openAiApiKey: Config.option(Config.string("AI_PROVIDER_OPENAI_API_KEY")),
   slackWebhookUrl: Config.string("SLACK_WEBHOOK_URL"),
-  targetBranch: Config.string("GITHUB_TARGET_BRANCH").pipe(
-    Config.withDefault("main"),
-  ),
+  targetBranch: Config.string("GITHUB_TARGET_BRANCH").pipe(Config.withDefault("main")),
 });
 
-const WorkerRuntimeConfigTag = Context.GenericTag<WorkerRuntimeConfig>(
-  "WorkerRuntimeConfig",
-);
+const WorkerRuntimeConfigTag = Context.GenericTag<WorkerRuntimeConfig>("WorkerRuntimeConfig");
 
 const WorkerConfigLive = Layer.effect(
   WorkerRuntimeConfigTag,
@@ -71,9 +51,7 @@ const WorkerConfigLive = Layer.effect(
   ),
 );
 
-const QueuedDeliveryHandlerTag = Context.GenericTag<QueuedDeliveryHandler>(
-  "QueuedDeliveryHandler",
-);
+const QueuedDeliveryHandlerTag = Context.GenericTag<QueuedDeliveryHandler>("QueuedDeliveryHandler");
 
 const QueuedDeliveryLive = Layer.effect(
   QueuedDeliveryHandlerTag,
@@ -122,13 +100,9 @@ const QueuedDeliveryLive = Layer.effect(
 const workerRequest = HttpServerRequest.HttpServerRequest.pipe(
   Effect.flatMap((request) => request.text),
   Effect.flatMap((requestBody) =>
-    QueuedDeliveryHandlerTag.pipe(
-      Effect.flatMap((handler) => handler.handle(requestBody)),
-    ),
+    QueuedDeliveryHandlerTag.pipe(Effect.flatMap((handler) => handler.handle(requestBody))),
   ),
-  Effect.map((result) =>
-    HttpServerResponse.unsafeJson(result.body, { status: result.status }),
-  ),
+  Effect.map((result) => HttpServerResponse.unsafeJson(result.body, { status: result.status })),
 );
 
 const router = HttpRouter.empty.pipe(

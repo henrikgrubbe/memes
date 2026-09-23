@@ -21,9 +21,7 @@ describe("buildMemePrompt", () => {
   });
 
   it("ignores an empty canon", () => {
-    expect(buildMemePrompt("a cat", { name: "heist", canon: "   " })).toBe(
-      "a cat",
-    );
+    expect(buildMemePrompt("a cat", { name: "heist", canon: "   " })).toBe("a cat");
   });
 
   it("distinguishes continuity background from the current request", () => {
@@ -43,9 +41,7 @@ describe("buildMemePrompt", () => {
     const canon = "x".repeat(MAX_CANON_CHARS);
     const prompt = buildMemePrompt("short prompt", { name: "s", canon });
     expect(prompt.length).toBeLessThanOrEqual(MAX_PROMPT_CHARS);
-    expect(
-      prompt.endsWith("Current request - depict this now:\nshort prompt"),
-    ).toBe(true);
+    expect(prompt.endsWith("Current request - depict this now:\nshort prompt")).toBe(true);
   });
 
   it("drops the canon entirely when the prompt alone fills the budget", () => {
@@ -95,9 +91,7 @@ describe("capCanon", () => {
   });
 
   it("truncates canon longer than the ceiling", () => {
-    expect(
-      capCanon("z".repeat(MAX_CANON_CHARS + 500)).length,
-    ).toBeLessThanOrEqual(MAX_CANON_CHARS);
+    expect(capCanon("z".repeat(MAX_CANON_CHARS + 500)).length).toBeLessThanOrEqual(MAX_CANON_CHARS);
   });
 
   it("cuts at the last line boundary rather than mid-word", () => {
@@ -125,9 +119,7 @@ describe("appendFallback", () => {
   });
 
   it("caps the result at the ceiling", () => {
-    expect(appendFallback("a".repeat(MAX_CANON_CHARS), "overflow").length).toBe(
-      MAX_CANON_CHARS,
-    );
+    expect(appendFallback("a".repeat(MAX_CANON_CHARS), "overflow").length).toBe(MAX_CANON_CHARS);
   });
 });
 
@@ -145,9 +137,7 @@ describe("buildCompressionMessages", () => {
       "The cats plan a bank robbery.",
       "The cats cancel the robbery.",
     );
-    expect(system.content).toContain(
-      "correct, replace, invalidate, resolve or remove",
-    );
+    expect(system.content).toContain("correct, replace, invalidate, resolve or remove");
     expect(system.content).toContain("without keeping obsolete versions");
     expect(user.content).toContain("This is the story so far:");
     expect(user.content).toContain("New contribution:");
@@ -164,21 +154,13 @@ describe("buildCompressionMessages", () => {
   });
 
   it("marks an empty canon as the first entry and includes the new idea", () => {
-    const [, user] = buildCompressionMessages(
-      "heist",
-      "   ",
-      "a cat cracks a safe",
-    );
+    const [, user] = buildCompressionMessages("heist", "   ", "a cat cracks a safe");
     expect(user.content).toContain("(empty - this is the first entry)");
     expect(user.content).toContain("a cat cracks a safe");
   });
 
   it("includes the existing canon when present", () => {
-    const [, user] = buildCompressionMessages(
-      "heist",
-      "prior canon text",
-      "next",
-    );
+    const [, user] = buildCompressionMessages("heist", "prior canon text", "next");
     expect(user.content).toContain("prior canon text");
   });
 });
@@ -208,24 +190,15 @@ describe("foldCanon", () => {
       return r instanceof Error ? Effect.fail(r) : Effect.succeed(r);
     };
   };
-  const run = (
-    responses: Array<string | Error>,
-    canon = "old canon",
-    prompt = "new idea",
-  ) =>
-    Effect.runPromise(
-      foldCanon(queuedModel(responses), "heist", canon, prompt),
-    );
+  const run = (responses: Array<string | Error>, canon = "old canon", prompt = "new idea") =>
+    Effect.runPromise(foldCanon(queuedModel(responses), "heist", canon, prompt));
 
   it("returns the model's canon unchanged when it is within budget", async () => {
     expect(await run(["a tidy canon"])).toBe("a tidy canon");
   });
 
   it("retries with a shorten pass when the first response overshoots", async () => {
-    const result = await run([
-      "x".repeat(MAX_CANON_CHARS + 500),
-      "shortened canon",
-    ]);
+    const result = await run(["x".repeat(MAX_CANON_CHARS + 500), "shortened canon"]);
     expect(result).toBe("shortened canon");
   });
 
@@ -243,10 +216,7 @@ describe("foldCanon", () => {
   });
 
   it("clamps the first response when the shorten retry fails", async () => {
-    const result = await run([
-      "z".repeat(MAX_CANON_CHARS + 500),
-      new Error("boom"),
-    ]);
+    const result = await run(["z".repeat(MAX_CANON_CHARS + 500), new Error("boom")]);
     expect(result.length).toBeLessThanOrEqual(MAX_CANON_CHARS);
     expect(result).toContain("z");
   });
@@ -257,8 +227,7 @@ describe("describeModelError", () => {
     const err = {
       status: 404,
       code: "model_not_found",
-      message:
-        "The model `gpt-4o-mini` does not exist or you do not have access to it.",
+      message: "The model `gpt-4o-mini` does not exist or you do not have access to it.",
     };
     expect(describeModelError(err)).toBe(
       "HTTP 404 [model_not_found] The model `gpt-4o-mini` does not exist or you do not have access to it.",

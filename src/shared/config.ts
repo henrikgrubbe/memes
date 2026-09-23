@@ -61,13 +61,7 @@ export class IssueFields extends Schema.Class<IssueFields>("IssueFields")({
 // new field; any other line is treated as a continuation of the current value so
 // that multi-line messages (which may themselves contain "word: ..." lines, e.g.
 // "Rune: :sadpepe:") are preserved instead of being truncated at the first line.
-const KNOWN_KEYS = new Set([
-  "sender",
-  "channel",
-  "message",
-  "link",
-  "timestamp",
-]);
+const KNOWN_KEYS = new Set(["sender", "channel", "message", "link", "timestamp"]);
 
 interface TokenizerState {
   readonly fields: Readonly<Record<string, string>>;
@@ -80,8 +74,7 @@ function tokenizeIssueBody(body: string): Readonly<Record<string, string>> {
   return body.split("\n").reduce<TokenizerState>((state, rawLine) => {
     const line = rawLine.replace(/\r$/, "");
     const separator = line.indexOf(": ");
-    const potentialKey =
-      separator === -1 ? null : line.slice(0, separator).trim().toLowerCase();
+    const potentialKey = separator === -1 ? null : line.slice(0, separator).trim().toLowerCase();
 
     if (potentialKey != null && KNOWN_KEYS.has(potentialKey)) {
       return {

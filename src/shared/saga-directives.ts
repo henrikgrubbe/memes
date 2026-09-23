@@ -3,8 +3,7 @@
 // (read + write the same saga). The name is restricted to a filename-safe
 // slug; a space after the colon (e.g. "read: the news") does not match,
 // avoiding false positives.
-const SAGA_DIRECTIVE =
-  /\b(read|write|print|saga):([A-Za-z0-9_-]+)|\blist:sagas\b/gi;
+const SAGA_DIRECTIVE = /\b(read|write|print|saga):([A-Za-z0-9_-]+)|\blist:sagas\b/gi;
 
 const hasRead = (kind: string): boolean => kind === "read" || kind === "saga";
 
@@ -62,8 +61,6 @@ export function parseSagaDirectives(message: string) {
   return {
     ...sagas,
     prompt:
-      stripped === "" && sagas.printSaga == null && !sagas.listSagas
-        ? message.trim()
-        : stripped,
+      stripped === "" && sagas.printSaga == null && !sagas.listSagas ? message.trim() : stripped,
   };
 }

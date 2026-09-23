@@ -82,9 +82,7 @@ describe("parseSagaDirectives", () => {
   });
 
   it("de-duplicates repeated read targets without changing their order", () => {
-    const r = parseSagaDirectives(
-      "read:one read:two read:one draw a crossover",
-    );
+    const r = parseSagaDirectives("read:one read:two read:one draw a crossover");
     expect(r.readSagas).toEqual(["one", "two"]);
     expect(r.prompt).toBe("draw a crossover");
   });

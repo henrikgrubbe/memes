@@ -3,13 +3,11 @@ import { describe, expect, it } from "vitest";
 import { IssueFields, makeRequestAppConfig, parseIssueBody } from "./config.js";
 import { failureOrThrow } from "./test-support.js";
 
-const run = (body: string) =>
-  Effect.runPromise(Effect.exit(parseIssueBody(body)));
+const run = (body: string) => Effect.runPromise(Effect.exit(parseIssueBody(body)));
 
 describe("parseIssueBody", () => {
   it("parses all known fields", async () => {
-    const body =
-      "sender: hhb\nmessage: funny cat\nchannel: #memes\nlink: https://slack.com/x";
+    const body = "sender: hhb\nmessage: funny cat\nchannel: #memes\nlink: https://slack.com/x";
     const exit = await run(body);
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
@@ -54,14 +52,11 @@ describe("parseIssueBody", () => {
   });
 
   it("ignores unknown keys", async () => {
-    const body =
-      "sender: hhb\nrandom: ignored\nmessage: hi\nchannel: #c\nlink: https://x";
+    const body = "sender: hhb\nrandom: ignored\nmessage: hi\nchannel: #c\nlink: https://x";
     const exit = await run(body);
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
-      expect(
-        (exit.value as unknown as Record<string, unknown>)["random"],
-      ).toBeUndefined();
+      expect((exit.value as unknown as Record<string, unknown>)["random"]).toBeUndefined();
     }
   });
 
@@ -102,8 +97,7 @@ describe("parseIssueBody", () => {
   });
 
   it("trims whitespace around field values", async () => {
-    const body =
-      "sender:   hhb   \nmessage:  hi  \nchannel: #c\nlink: https://x";
+    const body = "sender:   hhb   \nmessage:  hi  \nchannel: #c\nlink: https://x";
     const exit = await run(body);
     expect(Exit.isSuccess(exit)).toBe(true);
     if (Exit.isSuccess(exit)) {
@@ -172,8 +166,7 @@ describe("request-scoped AppConfig", () => {
   it("builds a list-Sagas command with an empty request prompt", async () => {
     const config = await Effect.runPromise(
       makeRequestAppConfig({
-        issueBody:
-          "sender: hhb\nmessage: list:sagas\nchannel: #memes\nlink: https://slack.com/x",
+        issueBody: "sender: hhb\nmessage: list:sagas\nchannel: #memes\nlink: https://slack.com/x",
         issueNumber: "824",
         repo: "henrikgrubbe/memes",
       }),

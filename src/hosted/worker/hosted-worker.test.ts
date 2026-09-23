@@ -1,22 +1,10 @@
 import { Deferred, Effect, Logger, Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import {
-  ModerationBlockedError,
-  NotificationError,
-} from "../../shared/errors.js";
-import {
-  makeProvidersLayer,
-  ProvidersServiceTag,
-} from "../../shared/providers.js";
+import { ModerationBlockedError, NotificationError } from "../../shared/errors.js";
+import { makeProvidersLayer, ProvidersServiceTag } from "../../shared/providers.js";
 import type { SagaContext } from "../../shared/saga.js";
-import type {
-  DeliveryOutcome,
-  SuccessDeliveryOutcome,
-} from "./hosted-delivery.js";
-import {
-  HostedGitHubError,
-  type HostedGitHubRepository,
-} from "./hosted-github.js";
+import type { DeliveryOutcome, SuccessDeliveryOutcome } from "./hosted-delivery.js";
+import { HostedGitHubError, type HostedGitHubRepository } from "./hosted-github.js";
 import type { SlackSender } from "./hosted-notifier.js";
 import type {
   DeliveryReceiptStore,
@@ -27,10 +15,7 @@ import { makeQueuedDeliveryHandler } from "./hosted-worker.js";
 
 const encode = Schema.encodeSync(Schema.parseJson(Schema.Unknown));
 
-const taskFor = (
-  message: string,
-  overrides: Readonly<Record<string, unknown>> = {},
-) => ({
+const taskFor = (message: string, overrides: Readonly<Record<string, unknown>> = {}) => ({
   deliveryId: "delivery-1",
   issueBody: `sender: U123\nmessage: ${message}\nchannel: C123\nlink: https://example.test/thread`,
   issueNumber: "42",
@@ -38,8 +23,7 @@ const taskFor = (
   ...overrides,
 });
 
-const requestFor = (task: Readonly<Record<string, unknown>>): string =>
-  encode(task);
+const requestFor = (task: Readonly<Record<string, unknown>>): string => encode(task);
 
 const storedSuccess: DeliveryOutcome = {
   history: [{ provider: "OpenAI", status: "success" }],
@@ -105,12 +89,8 @@ const makeHarness = (
         record("slack:post");
       }),
   };
-  function recordDelivery(
-    delivery: PublishImagePlan,
-  ): Effect.Effect<SuccessDeliveryOutcome>;
-  function recordDelivery(
-    delivery: RecordFailurePlan,
-  ): Effect.Effect<StoredOutcome>;
+  function recordDelivery(delivery: PublishImagePlan): Effect.Effect<SuccessDeliveryOutcome>;
+  function recordDelivery(delivery: RecordFailurePlan): Effect.Effect<StoredOutcome>;
   function recordDelivery(
     delivery: PublishImagePlan | RecordFailurePlan,
   ): Effect.Effect<StoredOutcome> {
@@ -153,9 +133,7 @@ const makeHarness = (
   };
 };
 
-const successProviders = (
-  onGenerate: (prompt: string) => void = () => undefined,
-) =>
+const successProviders = (onGenerate: (prompt: string) => void = () => undefined) =>
   makeProvidersLayer({
     OpenAI: (prompt) =>
       Effect.sync(() => {
@@ -167,10 +145,7 @@ const successProviders = (
       }),
   });
 
-const handlerDependencies = (
-  harness: Harness,
-  providers = successProviders(),
-) => ({
+const handlerDependencies = (harness: Harness, providers = successProviders()) => ({
   allowedRepository: "owner/repo",
   compressSaga: (_saga: string, canon: string, prompt: string) =>
     Effect.succeed(`${canon}\n- ${prompt}`),
@@ -217,12 +192,11 @@ describe("hosted queued delivery", () => {
       ),
     );
 
-    const { requestedAt: _omitted, ...withoutRequestedAt } = taskFor(
-      "A functional meme",
-    ) as Record<string, unknown>;
-    const result = await Effect.runPromise(
-      handler.handle(JSON.stringify(withoutRequestedAt)),
-    );
+    const { requestedAt: _omitted, ...withoutRequestedAt } = taskFor("A functional meme") as Record<
+      string,
+      unknown
+    >;
+    const result = await Effect.runPromise(handler.handle(JSON.stringify(withoutRequestedAt)));
 
     expect(withoutRequestedAt).not.toHaveProperty("requestedAt");
     expect(result.status).toBe(200);
@@ -301,9 +275,7 @@ describe("hosted queued delivery", () => {
       ),
     );
 
-    await Effect.runPromise(
-      handler.handle(requestFor(taskFor("saga:story A functional meme"))),
-    );
+    await Effect.runPromise(handler.handle(requestFor(taskFor("saga:story A functional meme"))));
 
     expect(providerPrompt).toContain("Existing canon");
     expect(harness.events()).toContain("storage:put-image");
@@ -312,9 +284,7 @@ describe("hosted queued delivery", () => {
     );
     expect(harness.events()).toContain("slack:post");
     expect(harness.comments()).toHaveLength(1);
-    expect(harness.comments()[0]).toContain(
-      "**Requested prompt:** `A functional meme`",
-    );
+    expect(harness.comments()[0]).toContain("**Requested prompt:** `A functional meme`");
     expect(harness.comments()[0]).toContain(
       "<summary><strong>Full generation prompt</strong></summary>",
     );
@@ -329,9 +299,7 @@ describe("hosted queued delivery", () => {
     const repository: HostedGitHubRepository = {
       ...harness.repository,
       readText: (path) =>
-        Effect.succeed(
-          path.endsWith("characters.md") ? "A".repeat(3000) : "B".repeat(3000),
-        ),
+        Effect.succeed(path.endsWith("characters.md") ? "A".repeat(3000) : "B".repeat(3000)),
     };
     const handler = makeQueuedDeliveryHandler({
       ...handlerDependencies(
@@ -350,11 +318,7 @@ describe("hosted queued delivery", () => {
     });
 
     const result = await Effect.runPromise(
-      handler.handle(
-        requestFor(
-          taskFor("read:characters read:setting draw their next adventure"),
-        ),
-      ),
+      handler.handle(requestFor(taskFor("read:characters read:setting draw their next adventure"))),
     );
 
     expect(result.body["disposition"]).toBe("processed");
@@ -382,23 +346,15 @@ describe("hosted queued delivery", () => {
       repositoryFor: () => repository,
     });
 
-    const result = await Effect.runPromise(
-      handler.handle(requestFor(taskFor("print:heist"))),
-    );
+    const result = await Effect.runPromise(handler.handle(requestFor(taskFor("print:heist"))));
 
     expect(result).toEqual({
       body: { disposition: "processed" },
       status: 200,
     });
     expect(providerCalls).toBe(0);
-    expect(harness.events()).toEqual([
-      "slack:post",
-      "github:comment",
-      "github:close",
-    ]);
-    expect(harness.comments()[0]).toContain(
-      "The cats still need a getaway car.",
-    );
+    expect(harness.events()).toEqual(["slack:post", "github:comment", "github:close"]);
+    expect(harness.comments()[0]).toContain("The cats still need a getaway car.");
   });
 
   it("lists Sagas without generating an image or modifying canon", async () => {
@@ -413,20 +369,14 @@ describe("hosted queued delivery", () => {
       ),
     );
 
-    const result = await Effect.runPromise(
-      handler.handle(requestFor(taskFor("list:sagas"))),
-    );
+    const result = await Effect.runPromise(handler.handle(requestFor(taskFor("list:sagas"))));
 
     expect(result).toEqual({
       body: { disposition: "processed" },
       status: 200,
     });
     expect(providerCalls).toBe(0);
-    expect(harness.events()).toEqual([
-      "slack:post",
-      "github:comment",
-      "github:close",
-    ]);
+    expect(harness.events()).toEqual(["slack:post", "github:comment", "github:close"]);
     expect(harness.comments()[0]).toContain("`heist`");
     expect(harness.comments()[0]).toContain("`space`");
   });
@@ -450,13 +400,9 @@ describe("hosted queued delivery", () => {
     expect(first.body["disposition"]).toBe("processed");
     expect(second.body["disposition"]).toBe("resumed");
     expect(providerCalls).toBe(0);
-    expect(harness.events().filter((event) => event === "storage:get")).toEqual(
-      [],
-    );
+    expect(harness.events().filter((event) => event === "storage:get")).toEqual([]);
     expect(
-      harness
-        .events()
-        .filter((event) => event.startsWith("github:saga:context/story.md")),
+      harness.events().filter((event) => event.startsWith("github:saga:context/story.md")),
     ).toHaveLength(1);
   });
 
@@ -478,9 +424,7 @@ describe("hosted queued delivery", () => {
           ),
         ),
     });
-    const handler = makeQueuedDeliveryHandler(
-      handlerDependencies(harness, providers),
-    );
+    const handler = makeQueuedDeliveryHandler(handlerDependencies(harness, providers));
     const request = requestFor(taskFor("A functional meme"));
 
     const first = await Effect.runPromise(handler.handle(request));
@@ -489,9 +433,7 @@ describe("hosted queued delivery", () => {
     expect(first.body["disposition"]).toBe("processed");
     expect(second.body["disposition"]).toBe("resumed");
     expect(providerCalls).toBe(1);
-    expect(
-      harness.events().filter((event) => event === "storage:put-failure"),
-    ).toHaveLength(1);
+    expect(harness.events().filter((event) => event === "storage:put-failure")).toHaveLength(1);
     expect(harness.currentOutcome()).toMatchObject({
       closeNotPlanned: true,
       kind: "failure",
@@ -508,11 +450,7 @@ describe("hosted queued delivery", () => {
       slack: {
         post: () =>
           Deferred.succeed(slackFailed, undefined).pipe(
-            Effect.zipRight(
-              Effect.fail(
-                new NotificationError({ detail: "Slack unavailable" }),
-              ),
-            ),
+            Effect.zipRight(Effect.fail(new NotificationError({ detail: "Slack unavailable" }))),
           ),
       },
     };
@@ -539,15 +477,11 @@ describe("hosted queued delivery", () => {
     const repository: HostedGitHubRepository = {
       ...harness.repository,
       foldSaga: () =>
-        Deferred.succeed(sagaFailed, undefined).pipe(
-          Effect.zipRight(Effect.fail(sagaError)),
-        ),
+        Deferred.succeed(sagaFailed, undefined).pipe(Effect.zipRight(Effect.fail(sagaError))),
     };
     const slack: SlackSender = {
       post: (payload) =>
-        Deferred.await(sagaFailed).pipe(
-          Effect.zipRight(harness.slack.post(payload)),
-        ),
+        Deferred.await(sagaFailed).pipe(Effect.zipRight(harness.slack.post(payload))),
     };
     const dependencies = {
       ...handlerDependencies(harness),
@@ -583,15 +517,11 @@ describe("hosted queued delivery", () => {
     ];
 
     const results = await Promise.all(
-      invalidRequests.map((request) =>
-        Effect.runPromise(handler.handle(request)),
-      ),
+      invalidRequests.map((request) => Effect.runPromise(handler.handle(request))),
     );
 
     expect(results.every(({ status }) => status === 200)).toBe(true);
-    expect(
-      results.every(({ body }) => body["disposition"] === "rejected"),
-    ).toBe(true);
+    expect(results.every(({ body }) => body["disposition"] === "rejected")).toBe(true);
     expect(harness.events()).toEqual([]);
   });
 

@@ -4,9 +4,7 @@ import { MemeRequestTask } from "../task.js";
 
 const SUPPORTED_ACTIONS = new Set(["opened", "reopened"]);
 
-export class WebhookRequestError extends Data.TaggedError(
-  "WebhookRequestError",
-)<{
+export class WebhookRequestError extends Data.TaggedError("WebhookRequestError")<{
   readonly status: 400 | 401;
   readonly detail: string;
 }> {
@@ -24,19 +22,13 @@ export class WebhookQueueError extends Data.TaggedError("WebhookQueueError")<{
 }
 
 export interface WebhookQueue {
-  readonly enqueue: (
-    task: MemeRequestTask,
-  ) => Effect.Effect<void, WebhookQueueError>;
+  readonly enqueue: (task: MemeRequestTask) => Effect.Effect<void, WebhookQueueError>;
 }
 
-export class WebhookQueueTag extends Context.Tag("WebhookQueue")<
-  WebhookQueueTag,
-  WebhookQueue
->() {}
+export class WebhookQueueTag extends Context.Tag("WebhookQueue")<WebhookQueueTag, WebhookQueue>() {}
 
-export const makeWebhookQueueLayer = (
-  queue: WebhookQueue,
-): Layer.Layer<WebhookQueueTag> => Layer.succeed(WebhookQueueTag, queue);
+export const makeWebhookQueueLayer = (queue: WebhookQueue): Layer.Layer<WebhookQueueTag> =>
+  Layer.succeed(WebhookQueueTag, queue);
 
 interface GitHubWebhookRequest {
   readonly body: string;
@@ -63,10 +55,7 @@ const IssueWebhook = Schema.Struct({
 
 const decodeIssueWebhook = Schema.decodeUnknown(Schema.parseJson(IssueWebhook));
 
-const invalid = (
-  status: 400 | 401,
-  detail: string,
-): Effect.Effect<never, WebhookRequestError> =>
+const invalid = (status: 400 | 401, detail: string): Effect.Effect<never, WebhookRequestError> =>
   Effect.fail(new WebhookRequestError({ status, detail }));
 
 export function verifyGitHubSignature(
@@ -85,19 +74,13 @@ export function verifyGitHubSignature(
   }
 
   const supplied = Buffer.from(suppliedHex, "hex");
-  return (
-    supplied.length === expected.length && timingSafeEqual(supplied, expected)
-  );
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
 export const handleGitHubWebhook = (
   secret: string,
   request: GitHubWebhookRequest,
-): Effect.Effect<
-  GitHubWebhookResult,
-  WebhookRequestError | WebhookQueueError,
-  WebhookQueueTag
-> =>
+): Effect.Effect<GitHubWebhookResult, WebhookRequestError | WebhookQueueError, WebhookQueueTag> =>
   Effect.gen(function* () {
     if (!verifyGitHubSignature(secret, request.body, request.signature)) {
       return yield* invalid(401, "Invalid GitHub webhook signature");

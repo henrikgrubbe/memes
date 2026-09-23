@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  AllProvidersExhaustedError,
-  ModerationFailedError,
-  ProviderError,
-} from "./errors.js";
+import { AllProvidersExhaustedError, ModerationFailedError, ProviderError } from "./errors.js";
 import { failureDisposition } from "./disposition.js";
 
 describe("failureDisposition", () => {
@@ -26,9 +22,7 @@ describe("failureDisposition", () => {
     const error = new ProviderError({
       provider: "OpenAI",
       detail: "network error",
-      history: [
-        { provider: "OpenAI", status: "failed", message: "network error" },
-      ],
+      history: [{ provider: "OpenAI", status: "failed", message: "network error" }],
     });
 
     expect(failureDisposition(error)).toEqual({
