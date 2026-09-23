@@ -40,9 +40,7 @@ describe("makeScalewayQueue", () => {
       },
     ]);
     expect(
-      Schema.decodeUnknownSync(Schema.parseJson(MemeRequestTask))(
-        requests[0]?.MessageBody,
-      ),
+      Schema.decodeUnknownSync(Schema.parseJson(MemeRequestTask))(requests[0]?.MessageBody),
     ).toEqual(task);
   });
 
@@ -55,9 +53,7 @@ describe("makeScalewayQueue", () => {
     );
     const exit = await Effect.runPromise(queue.enqueue(task).pipe(Effect.exit));
 
-    expect(failureOfType(exit, WebhookQueueError).message).toContain(
-      "unavailable",
-    );
+    expect(failureOfType(exit, WebhookQueueError).message).toContain("unavailable");
   });
 
   it("surfaces stalled message publication before GitHub times out", async () => {
@@ -68,12 +64,8 @@ describe("makeScalewayQueue", () => {
       config,
       { publishTimeout: "10 millis" },
     );
-    const result = await Effect.runPromise(
-      queue.enqueue(task).pipe(Effect.exit),
-    );
+    const result = await Effect.runPromise(queue.enqueue(task).pipe(Effect.exit));
 
-    expect(failureOfType(result, WebhookQueueError).message).toContain(
-      "timed out",
-    );
+    expect(failureOfType(result, WebhookQueueError).message).toContain("timed out");
   }, 200);
 });

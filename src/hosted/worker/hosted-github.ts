@@ -24,9 +24,7 @@ export interface GitHubApiRequest {
 }
 
 export interface GitHubApi {
-  readonly request: <T>(
-    request: GitHubApiRequest,
-  ) => Effect.Effect<T, HostedGitHubError>;
+  readonly request: <T>(request: GitHubApiRequest) => Effect.Effect<T, HostedGitHubError>;
 }
 
 interface GitHubApiOptions {
@@ -68,9 +66,7 @@ export const makeGitHubApi = ({
             return (
               responseBody === ""
                 ? undefined
-                : Schema.decodeUnknownSync(Schema.parseJson(Schema.Unknown))(
-                    responseBody,
-                  )
+                : Schema.decodeUnknownSync(Schema.parseJson(Schema.Unknown))(responseBody)
             ) as T;
           }),
         ),
@@ -92,23 +88,12 @@ export interface SagaCommit {
 
 export interface HostedGitHubRepository {
   readonly branch: string;
-  readonly closeIssue: (
-    reason?: "not_planned",
-  ) => Effect.Effect<void, HostedGitHubError>;
-  readonly commentOnce: (
-    body: string,
-  ) => Effect.Effect<void, HostedGitHubError>;
-  readonly foldSaga: (
-    saga: SagaCommit,
-  ) => Effect.Effect<boolean, HostedGitHubError>;
-  readonly listSagas: () => Effect.Effect<
-    ReadonlyArray<string>,
-    HostedGitHubError
-  >;
+  readonly closeIssue: (reason?: "not_planned") => Effect.Effect<void, HostedGitHubError>;
+  readonly commentOnce: (body: string) => Effect.Effect<void, HostedGitHubError>;
+  readonly foldSaga: (saga: SagaCommit) => Effect.Effect<boolean, HostedGitHubError>;
+  readonly listSagas: () => Effect.Effect<ReadonlyArray<string>, HostedGitHubError>;
   readonly memeId: string;
-  readonly readText: (
-    path: string,
-  ) => Effect.Effect<string | null, HostedGitHubError>;
+  readonly readText: (path: string) => Effect.Effect<string | null, HostedGitHubError>;
 }
 
 interface HostedRepositoryOptions {
@@ -219,10 +204,7 @@ export const makeHostedGitHubRepository = ({
   const readRefPath = `${repoPath}/git/ref/heads/${encodeURIComponent(branch)}`;
   const updateRefPath = `${repoPath}/git/refs/heads/${encodeURIComponent(branch)}`;
 
-  const readTextAt = (
-    path: string,
-    ref: string,
-  ): Effect.Effect<string | null, HostedGitHubError> =>
+  const readTextAt = (path: string, ref: string): Effect.Effect<string | null, HostedGitHubError> =>
     api
       .request<ContentResponse>({
         method: "GET",
@@ -232,10 +214,7 @@ export const makeHostedGitHubRepository = ({
         Effect.flatMap((response) =>
           response.encoding === "base64"
             ? Effect.succeed(
-                Buffer.from(
-                  response.content.replace(/\s/g, ""),
-                  "base64",
-                ).toString("utf8"),
+                Buffer.from(response.content.replace(/\s/g, ""), "base64").toString("utf8"),
               )
             : Effect.fail(
                 new HostedGitHubError({
@@ -247,9 +226,7 @@ export const makeHostedGitHubRepository = ({
         Effect.catchIf(isNotFound, () => Effect.succeed(null)),
       );
 
-  const listSagasAt = (
-    ref: string,
-  ): Effect.Effect<ReadonlyArray<string>, HostedGitHubError> =>
+  const listSagasAt = (ref: string): Effect.Effect<ReadonlyArray<string>, HostedGitHubError> =>
     api
       .request<unknown>({
         method: "GET",
@@ -275,8 +252,7 @@ export const makeHostedGitHubRepository = ({
         Effect.catchIf(isNotFound, () => Effect.succeed([])),
       );
 
-  const getHead = () =>
-    api.request<GitRef>({ method: "GET", path: readRefPath });
+  const getHead = () => api.request<GitRef>({ method: "GET", path: readRefPath });
 
   const createBlob = (file: RepositoryFile) =>
     api.request<GitObject>({
@@ -285,11 +261,7 @@ export const makeHostedGitHubRepository = ({
       body: { content: file.content, encoding: "utf-8" },
     });
 
-  const commitFiles = (
-    parentSha: string,
-    message: string,
-    files: ReadonlyArray<RepositoryFile>,
-  ) =>
+  const commitFiles = (parentSha: string, message: string, files: ReadonlyArray<RepositoryFile>) =>
     Effect.gen(function* () {
       const parent = yield* api.request<GitCommit>({
         method: "GET",
@@ -334,9 +306,7 @@ export const makeHostedGitHubRepository = ({
     operation(attempt).pipe(
       Effect.catchIf(
         (error): error is HostedGitHubError =>
-          error instanceof HostedGitHubError &&
-          isRefConflict(error) &&
-          attempt < maxCommitAttempts,
+          error instanceof HostedGitHubError && isRefConflict(error) && attempt < maxCommitAttempts,
         () => retryConflict(attempt + 1, operation),
       ),
     );
@@ -349,13 +319,9 @@ export const makeHostedGitHubRepository = ({
       Effect.flatMap((content) =>
         content == null
           ? Effect.succeed(null)
-          : Schema.decodeUnknown(Schema.parseJson(SagaFoldReceiptSchema))(
-              content,
-            ).pipe(
+          : Schema.decodeUnknown(Schema.parseJson(SagaFoldReceiptSchema))(content).pipe(
               Effect.filterOrFail(
-                (receipt) =>
-                  receipt.deliveryId === task.deliveryId &&
-                  receipt.saga === saga,
+                (receipt) => receipt.deliveryId === task.deliveryId && receipt.saga === saga,
                 () =>
                   new HostedGitHubError({
                     detail: `Saga fold receipt ${sagaReceiptPath} has the wrong delivery identity`,
@@ -374,9 +340,7 @@ export const makeHostedGitHubRepository = ({
       ),
     );
 
-  const foldSaga = (
-    saga: SagaCommit,
-  ): Effect.Effect<boolean, HostedGitHubError> =>
+  const foldSaga = (saga: SagaCommit): Effect.Effect<boolean, HostedGitHubError> =>
     retryConflict(1, () =>
       Effect.gen(function* () {
         const head = yield* getHead();
@@ -391,26 +355,20 @@ export const makeHostedGitHubRepository = ({
           folded: true,
           saga: saga.name,
         };
-        yield* commitFiles(
-          head.object.sha,
-          `Update saga for meme request #${task.issueNumber}`,
-          [
-            { content: `${folded}\n`, path: saga.path },
-            {
-              content: `${encodeJson(sagaReceipt)}\n`,
-              path: sagaReceiptPath,
-            },
-          ],
-        );
+        yield* commitFiles(head.object.sha, `Update saga for meme request #${task.issueNumber}`, [
+          { content: `${folded}\n`, path: saga.path },
+          {
+            content: `${encodeJson(sagaReceipt)}\n`,
+            path: sagaReceiptPath,
+          },
+        ]);
         return true;
       }),
     );
 
   const commentMarker = `<!-- meme-worker:${key}:completion -->`;
 
-  const listComments = (
-    page = 1,
-  ): Effect.Effect<ReadonlyArray<IssueComment>, HostedGitHubError> =>
+  const listComments = (page = 1): Effect.Effect<ReadonlyArray<IssueComment>, HostedGitHubError> =>
     Effect.gen(function* () {
       const comments = yield* api.request<ReadonlyArray<IssueComment>>({
         method: "GET",
@@ -427,9 +385,7 @@ export const makeHostedGitHubRepository = ({
     listComments().pipe(
       Effect.flatMap((comments) => {
         const markedBody = `${body}\n\n${commentMarker}`;
-        const existing = comments.find((comment) =>
-          comment.body?.includes(commentMarker),
-        );
+        const existing = comments.find((comment) => comment.body?.includes(commentMarker));
         if (existing == null) {
           return api
             .request<unknown>({
@@ -451,9 +407,7 @@ export const makeHostedGitHubRepository = ({
       }),
     );
 
-  const closeIssue = (
-    reason?: "not_planned",
-  ): Effect.Effect<void, HostedGitHubError> =>
+  const closeIssue = (reason?: "not_planned"): Effect.Effect<void, HostedGitHubError> =>
     api
       .request<unknown>({
         method: "PATCH",

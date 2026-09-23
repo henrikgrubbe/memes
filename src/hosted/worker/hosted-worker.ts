@@ -17,23 +17,14 @@ import {
   type SagaContext,
   type SagaContextShortener,
 } from "../../shared/saga.js";
-import {
-  MemeRequestTask as MemeRequestTaskSchema,
-  type MemeRequestTask,
-} from "../task.js";
+import { MemeRequestTask as MemeRequestTaskSchema, type MemeRequestTask } from "../task.js";
 import type {
   DeliveryOutcome,
   FailureDeliveryOutcome,
   SuccessDeliveryOutcome,
 } from "./hosted-delivery.js";
-import type {
-  HostedGitHubError,
-  HostedGitHubRepository,
-} from "./hosted-github.js";
-import {
-  deliverHostedCompletion,
-  type SlackSender,
-} from "./hosted-notifier.js";
+import type { HostedGitHubError, HostedGitHubRepository } from "./hosted-github.js";
+import { deliverHostedCompletion, type SlackSender } from "./hosted-notifier.js";
 import type {
   DeliveryReceiptStore,
   HostedObjectStorageError,
@@ -41,8 +32,7 @@ import type {
 } from "./hosted-object-storage.js";
 
 const providerFrom = (result: GenerationResult): string =>
-  result.history.find(({ status }) => status === "success")?.provider ??
-  "unknown";
+  result.history.find(({ status }) => status === "success")?.provider ?? "unknown";
 
 const generatedOutcome = (
   memeId: string,
@@ -107,21 +97,11 @@ const finishDelivery = (
   compressSaga: SagaCompressor,
   slack: SlackSender,
 ) => {
-  const notification = deliverHostedCompletion(
-    config,
-    outcome,
-    repository,
-    slack,
-  );
+  const notification = deliverHostedCompletion(config, outcome, repository, slack);
   return config.writeSaga == null || outcome.kind === "failure"
     ? notification
     : runIndependently(
-        contributeSaga(
-          config.writeSaga,
-          config.memePrompt,
-          repository,
-          compressSaga,
-        ),
+        contributeSaga(config.writeSaga, config.memePrompt, repository, compressSaga),
         notification,
       );
 };
@@ -158,17 +138,13 @@ const runGeneratedDelivery = (
       (name) =>
         repository
           .readText(sagaPath(name))
-          .pipe(
-            Effect.map((canon): SagaContext => ({ canon: canon ?? "", name })),
-          ),
+          .pipe(Effect.map((canon): SagaContext => ({ canon: canon ?? "", name }))),
       { concurrency: "unbounded" },
     );
     const context = renderSagaContexts(contexts);
     const contextBudget = maxSagaContextChars(config.memePrompt);
     const generationContext =
-      config.readSagas.length > 1 &&
-      context.length > contextBudget &&
-      contextBudget > 0
+      config.readSagas.length > 1 && context.length > contextBudget && contextBudget > 0
         ? yield* shortenSagaContexts(contexts, contextBudget)
         : contexts;
     const prompt = buildMemePrompt(config.memePrompt, generationContext);
@@ -176,33 +152,15 @@ const runGeneratedDelivery = (
     return yield* providers.generateWithFallback(prompt, config.requester).pipe(
       Effect.matchEffect({
         onFailure: (error) =>
-          persistGenerationFailure(
-            config,
-            error,
-            repository,
-            receipt,
-            compressSaga,
-            slack,
-          ),
+          persistGenerationFailure(config, error, repository, receipt, compressSaga, slack),
         onSuccess: (result) =>
           Effect.gen(function* () {
             const outcome = yield* receipt.record({
               kind: "image",
               image: result.buffer,
-              outcome: generatedOutcome(
-                repository.memeId,
-                config.memePrompt,
-                prompt,
-                result,
-              ),
+              outcome: generatedOutcome(repository.memeId, config.memePrompt, prompt, result),
             });
-            yield* finishDelivery(
-              config,
-              outcome,
-              repository,
-              compressSaga,
-              slack,
-            );
+            yield* finishDelivery(config, outcome, repository, compressSaga, slack);
             return "processed" as const;
           }),
       }),
@@ -236,12 +194,7 @@ const runSagaListDelivery = (
 ) =>
   Effect.gen(function* () {
     const sagas = yield* repository.listSagas();
-    yield* deliverHostedCompletion(
-      config,
-      { kind: "saga-list", sagas },
-      repository,
-      slack,
-    );
+    yield* deliverHostedCompletion(config, { kind: "saga-list", sagas }, repository, slack);
     return "processed" as const;
   });
 
@@ -259,8 +212,7 @@ const runWriteOnlyDelivery = (
       updated: true,
     };
     const folded = yield* repository.foldSaga({
-      derive: (canon) =>
-        compressSaga(config.writeSaga, canon, config.memePrompt),
+      derive: (canon) => compressSaga(config.writeSaga, canon, config.memePrompt),
       name: config.writeSaga,
       path: sagaPath(config.writeSaga),
     });
@@ -277,8 +229,7 @@ interface HostedTaskDependencies {
   readonly storage: DeliveryReceiptStore;
 }
 
-export type HostedTaskError =
-  HostedGitHubError | HostedObjectStorageError | NotificationError;
+export type HostedTaskError = HostedGitHubError | HostedObjectStorageError | NotificationError;
 export type HostedTaskResult = "processed" | "resumed";
 
 const runHostedTask = (
@@ -294,9 +245,7 @@ const runHostedTask = (
   }: HostedTaskDependencies,
 ): Effect.Effect<HostedTaskResult, HostedTaskError> =>
   Effect.gen(function* () {
-    yield* Effect.log(
-      `Processing queued issue #${task.issueNumber} from ${task.repo}`,
-    );
+    yield* Effect.log(`Processing queued issue #${task.issueNumber} from ${task.repo}`);
     if (config.listSagas) {
       return yield* runSagaListDelivery(config, repository, slack);
     }
@@ -320,13 +269,7 @@ const runHostedTask = (
 
     const receipt = yield* storage.receiptFor(config.memePrompt);
     if (receipt.status === "recorded") {
-      yield* finishDelivery(
-        config,
-        receipt.outcome,
-        repository,
-        compressSaga,
-        slack,
-      );
+      yield* finishDelivery(config, receipt.outcome, repository, compressSaga, slack);
       return "resumed" as const;
     }
 
@@ -347,9 +290,7 @@ export interface WorkerHttpResult {
 }
 
 export interface QueuedDeliveryHandler {
-  readonly handle: (
-    requestBody: string,
-  ) => Effect.Effect<WorkerHttpResult, never>;
+  readonly handle: (requestBody: string) => Effect.Effect<WorkerHttpResult, never>;
 }
 
 export class WorkerMessageError extends Data.TaggedError("WorkerMessageError")<{
@@ -367,19 +308,14 @@ interface QueuedDeliveryDependencies {
   readonly repositoryFor: (task: MemeRequestTask) => HostedGitHubRepository;
   readonly shortenSagaContexts: SagaContextShortener;
   readonly slack: SlackSender;
-  readonly storageFor: (
-    task: MemeRequestTask,
-    memeId: string,
-  ) => DeliveryReceiptStore;
+  readonly storageFor: (task: MemeRequestTask, memeId: string) => DeliveryReceiptStore;
 }
 
 type QueuedDeliveryError = ConfigError | HostedTaskError | WorkerMessageError;
 
 // Scaleway's SQS-triggered container invocation posts the raw queue message
 // body directly as the HTTP request body — there is no wrapping envelope.
-const decodeEmbeddedTask = Schema.decodeUnknown(
-  Schema.parseJson(MemeRequestTaskSchema),
-);
+const decodeEmbeddedTask = Schema.decodeUnknown(Schema.parseJson(MemeRequestTaskSchema));
 
 const invalidMessage = () =>
   new WorkerMessageError({
@@ -391,9 +327,7 @@ const decodeQueuedTask = (
 ): Effect.Effect<MemeRequestTask, WorkerMessageError> =>
   decodeEmbeddedTask(requestBody).pipe(Effect.mapError(invalidMessage));
 
-const rejectMessage = (
-  error: WorkerMessageError,
-): Effect.Effect<WorkerHttpResult> =>
+const rejectMessage = (error: WorkerMessageError): Effect.Effect<WorkerHttpResult> =>
   Effect.logWarning(`Rejecting queue delivery: ${error.message}`).pipe(
     Effect.as({
       body: { disposition: "rejected", error: error.message },
@@ -410,9 +344,7 @@ const retryMessage = (): Effect.Effect<WorkerHttpResult> =>
 // A retried delivery is invisible in the logs unless the cause is recorded, so
 // a queue that quietly dead-letters after its retries looks identical to one
 // that was never delivered at all.
-const retryAfterFailure = (
-  error: ConfigError | HostedTaskError,
-): Effect.Effect<WorkerHttpResult> =>
+const retryAfterFailure = (error: ConfigError | HostedTaskError): Effect.Effect<WorkerHttpResult> =>
   Effect.logError(
     `Retrying queue delivery after ${error._tag}: ${
       error instanceof Error ? error.message : String(error)
@@ -461,9 +393,7 @@ const processQueuedTask = (
 export const makeQueuedDeliveryHandler = (
   dependencies: QueuedDeliveryDependencies,
 ): QueuedDeliveryHandler => {
-  const handle = (
-    requestBody: string,
-  ): Effect.Effect<WorkerHttpResult, never> =>
+  const handle = (requestBody: string): Effect.Effect<WorkerHttpResult, never> =>
     decodeQueuedTask(requestBody).pipe(
       Effect.matchEffect({
         onFailure: rejectMessage,
@@ -483,9 +413,7 @@ export const makeQueuedDeliveryHandler = (
           ),
       }),
       Effect.catchAllCause((cause) =>
-        Effect.logError(Cause.pretty(cause)).pipe(
-          Effect.zipRight(retryMessage()),
-        ),
+        Effect.logError(Cause.pretty(cause)).pipe(Effect.zipRight(retryMessage())),
       ),
     );
 

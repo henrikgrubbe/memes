@@ -12,9 +12,7 @@ export const failureOrThrow = <A, E>(exit: Exit.Exit<A, E>): E => {
   return exit.cause.error;
 };
 
-type ErrorConstructor<E extends Error> = abstract new (
-  ...args: ReadonlyArray<never>
-) => E;
+type ErrorConstructor<E extends Error> = abstract new (...args: ReadonlyArray<never>) => E;
 
 export const failureOfType = <A, E, Expected extends Error>(
   exit: Exit.Exit<A, E>,

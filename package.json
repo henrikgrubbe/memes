@@ -2,8 +2,8 @@
   "type": "module",
   "scripts": {
     "prepare": "effect-tsgo patch --typescript --no-oxlint",
-    "format": "prettier --write \"src/**/*.ts\" \"*.{json,ts}\" \".github/workflows/*.yml\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"*.{json,ts}\" \".github/workflows/*.yml\"",
+    "format": "oxfmt --write src package.json package-lock.json renovate.json tsconfig.ingress.json tsconfig.json tsconfig.worker.json vitest-browser.d.ts vitest.config.ts .github/workflows",
+    "format:check": "oxfmt --check src package.json package-lock.json renovate.json tsconfig.ingress.json tsconfig.json tsconfig.worker.json vitest-browser.d.ts vitest.config.ts .github/workflows",
     "lint": "oxlint --import-plugin -D import/order --deny-warnings src",
     "lint:ci": "npm run lint -- --format=github",
     "typecheck": "tsc --noEmit",
@@ -29,8 +29,8 @@
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^5.0.0",
     "@vitest/expect": "^5.0.0",
+    "oxfmt": "^0.70.0",
     "oxlint": "1.85.0",
-    "prettier": "3.9.8",
     "tsx": "^4.23.9",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"

@@ -53,9 +53,7 @@ export const MODERATION_FALLBACK_PROVIDER: ProviderConfig = {
   name: "xAI",
   envKey: "AI_PROVIDER_XAI_API_KEY",
   baseURL: "https://api.x.ai/v1",
-  models: [
-    { model: "grok-imagine-image", params: { response_format: "b64_json" } },
-  ],
+  models: [{ model: "grok-imagine-image", params: { response_format: "b64_json" } }],
 };
 
 export interface ProvidersService {
@@ -98,10 +96,8 @@ export const makeProvidersLayer = (
 ): Layer.Layer<ProvidersServiceTag> =>
   Layer.succeed(ProvidersServiceTag, makeService(primaries, fallback ?? null));
 
-export const modelLabel = (
-  config: ProviderConfig,
-  model: ModelConfig,
-): string => model.label ?? `${config.name} (${model.model})`;
+export const modelLabel = (config: ProviderConfig, model: ModelConfig): string =>
+  model.label ?? `${config.name} (${model.model})`;
 
 export const makeCandidates = (
   config: ProviderConfig,
@@ -115,15 +111,7 @@ export const makeCandidates = (
   return config.models.map((model) => {
     const label = modelLabel(config, model);
     const generate: ProviderFn = (prompt, user) =>
-      callWithRetry(
-        label,
-        client,
-        model.model,
-        model.params ?? {},
-        prompt,
-        user,
-        model.pricing,
-      );
+      callWithRetry(label, client, model.model, model.params ?? {}, prompt, user, model.pricing);
 
     return [label, generate] as const;
   });
@@ -136,8 +124,7 @@ const loadProvider = (
     Effect.map(
       Option.match({
         onNone: () => [],
-        onSome: (apiKey) =>
-          apiKey.trim() === "" ? [] : makeCandidates(config, apiKey),
+        onSome: (apiKey) => (apiKey.trim() === "" ? [] : makeCandidates(config, apiKey)),
       }),
     ),
   );
@@ -154,9 +141,9 @@ export const ProvidersLayer = Layer.effect(
       );
     }
 
-    const fallbackCandidates = (yield* loadProvider(
-      MODERATION_FALLBACK_PROVIDER,
-    )).map(([, candidate]) => candidate);
+    const fallbackCandidates = (yield* loadProvider(MODERATION_FALLBACK_PROVIDER)).map(
+      ([, candidate]) => candidate,
+    );
     const fallback: ProviderFn | null =
       fallbackCandidates.length === 0
         ? null

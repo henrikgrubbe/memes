@@ -1,24 +1,13 @@
 import { createServer } from "node:http";
-import {
-  HttpRouter,
-  HttpServer,
-  HttpServerRequest,
-  HttpServerResponse,
-} from "@effect/platform";
+import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "@effect/platform";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { Config, Context, Effect, Layer } from "effect";
 import { handleGitHubWebhook } from "./github-webhook.js";
 import { ScalewayQueueLive } from "./scaleway-queue.js";
 
-class WebhookSecret extends Context.Tag("WebhookSecret")<
-  WebhookSecret,
-  string
->() {}
+class WebhookSecret extends Context.Tag("WebhookSecret")<WebhookSecret, string>() {}
 
-const WebhookSecretLive = Layer.effect(
-  WebhookSecret,
-  Config.string("GH_WEBHOOK_SECRET"),
-);
+const WebhookSecretLive = Layer.effect(WebhookSecret, Config.string("GH_WEBHOOK_SECRET"));
 
 const githubWebhook = Effect.gen(function* () {
   const request = yield* HttpServerRequest.HttpServerRequest;
@@ -33,18 +22,10 @@ const githubWebhook = Effect.gen(function* () {
     Effect.catchTags({
       WebhookRequestError: (error) =>
         Effect.succeed(
-          HttpServerResponse.unsafeJson(
-            { error: error.message },
-            { status: error.status },
-          ),
+          HttpServerResponse.unsafeJson({ error: error.message }, { status: error.status }),
         ),
       WebhookQueueError: (error) =>
-        Effect.succeed(
-          HttpServerResponse.unsafeJson(
-            { error: error.message },
-            { status: 503 },
-          ),
-        ),
+        Effect.succeed(HttpServerResponse.unsafeJson({ error: error.message }, { status: 503 })),
     }),
   );
 

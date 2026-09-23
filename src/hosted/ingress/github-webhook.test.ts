@@ -48,24 +48,21 @@ const run = (
     signature: options.signature ?? signature(body),
   });
 
-  return Effect.runPromise(
-    effect.pipe(Effect.provide(layer), Effect.exit),
-  ).then((exit) => ({ exit, tasks }));
+  return Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.exit)).then((exit) => ({
+    exit,
+    tasks,
+  }));
 };
 
 describe("verifyGitHubSignature", () => {
   it("accepts the matching sha256 signature", () => {
-    expect(verifyGitHubSignature(secret, payload, signature(payload))).toBe(
-      true,
-    );
+    expect(verifyGitHubSignature(secret, payload, signature(payload))).toBe(true);
   });
 
   it("rejects missing, malformed, and mismatched signatures", () => {
     expect(verifyGitHubSignature(secret, payload, undefined)).toBe(false);
     expect(verifyGitHubSignature(secret, payload, "sha256=xyz")).toBe(false);
-    expect(verifyGitHubSignature(secret, payload, signature("different"))).toBe(
-      false,
-    );
+    expect(verifyGitHubSignature(secret, payload, signature("different"))).toBe(false);
   });
 });
 
@@ -97,9 +94,7 @@ describe("handleGitHubWebhook", () => {
 
     const requestedAt = tasks[0]?.requestedAt;
     expect(requestedAt).toBeDefined();
-    const stamped = DateTime.toEpochMillis(
-      DateTime.unsafeMake(String(requestedAt)),
-    );
+    const stamped = DateTime.toEpochMillis(DateTime.unsafeMake(String(requestedAt)));
     expect(stamped).toBeGreaterThanOrEqual(before - 1000);
     expect(stamped).toBeLessThanOrEqual(after + 1000);
     expect(String(requestedAt)).not.toContain("2020");
@@ -126,12 +121,8 @@ describe("handleGitHubWebhook", () => {
     });
     const edited = await run(editedBody);
 
-    expect(Exit.isSuccess(ping.exit) && ping.exit.value.disposition).toBe(
-      "ignored",
-    );
-    expect(Exit.isSuccess(edited.exit) && edited.exit.value.disposition).toBe(
-      "ignored",
-    );
+    expect(Exit.isSuccess(ping.exit) && ping.exit.value.disposition).toBe("ignored");
+    expect(Exit.isSuccess(edited.exit) && edited.exit.value.disposition).toBe("ignored");
     expect([...ping.tasks, ...edited.tasks]).toEqual([]);
   });
 
@@ -156,9 +147,7 @@ describe("handleGitHubWebhook", () => {
   it("rejects malformed issue payloads", async () => {
     const { exit, tasks } = await run("{");
 
-    expect(failureOfType(exit, WebhookRequestError).message).toBe(
-      "Invalid issue webhook payload",
-    );
+    expect(failureOfType(exit, WebhookRequestError).message).toBe("Invalid issue webhook payload");
     expect(tasks).toEqual([]);
   });
 
@@ -170,9 +159,7 @@ describe("handleGitHubWebhook", () => {
     });
     const { exit, tasks } = await run(missingBody);
 
-    expect(failureOfType(exit, WebhookRequestError).message).toBe(
-      "Issue body is required",
-    );
+    expect(failureOfType(exit, WebhookRequestError).message).toBe("Issue body is required");
     expect(tasks).toEqual([]);
   });
 
@@ -194,8 +181,6 @@ describe("handleGitHubWebhook", () => {
       ),
     );
 
-    expect(failureOfType(exit, WebhookQueueError).message).toBe(
-      "queue unavailable",
-    );
+    expect(failureOfType(exit, WebhookQueueError).message).toBe("queue unavailable");
   });
 });

@@ -52,13 +52,9 @@ export type ProviderFn = (
   ModerationBlockedError | RateLimitError | ProviderError | QuotaExhaustedError
 >;
 
-export function computeCostCents(
-  usage: UsageEntry,
-  pricing: ModelPricing,
-): number {
+export function computeCostCents(usage: UsageEntry, pricing: ModelPricing): number {
   return (
-    ((usage.inputTokens * pricing.inputPerMillion +
-      usage.outputTokens * pricing.outputPerMillion) /
+    ((usage.inputTokens * pricing.inputPerMillion + usage.outputTokens * pricing.outputPerMillion) /
       1_000_000) *
     100
   );

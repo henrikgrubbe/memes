@@ -1,10 +1,7 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import type { FailureDeliveryOutcome } from "./hosted-delivery.js";
-import {
-  makeHostedObjectStorage,
-  type ObjectStorageApi,
-} from "./hosted-object-storage.js";
+import { makeHostedObjectStorage, type ObjectStorageApi } from "./hosted-object-storage.js";
 
 interface StoredObject {
   readonly body: string | Uint8Array;
@@ -93,9 +90,7 @@ const success = {
 describe("hosted Object Storage", () => {
   it("publishes immutable JPEGs conditionally with compact retry metadata", async () => {
     const memory = makeMemoryApi();
-    const receipt = await Effect.runPromise(
-      makeStore(memory.api).receiptFor("A meme"),
-    );
+    const receipt = await Effect.runPromise(makeStore(memory.api).receiptFor("A meme"));
     expect(receipt.status).toBe("missing");
     if (receipt.status === "recorded") {
       throw new Error("Expected a missing receipt");
@@ -108,9 +103,7 @@ describe("hosted Object Storage", () => {
       }),
     );
 
-    expect(outcome.imageUrl).toBe(
-      "https://s3.nl-ams.scw.cloud/bucket/memes/meme-1.jpg",
-    );
+    expect(outcome.imageUrl).toBe("https://s3.nl-ams.scw.cloud/bucket/memes/meme-1.jpg");
     expect(memory.puts).toHaveLength(1);
     expect(memory.puts[0]).toMatchObject({
       bucket: "bucket",
@@ -128,9 +121,7 @@ describe("hosted Object Storage", () => {
       },
     });
     expect(memory.puts[0]?.metadata?.["meme-provider"]).toBe("T3BlbkFJ");
-    expect(JSON.stringify(memory.puts[0]?.metadata)).not.toContain(
-      "revised prompt",
-    );
+    expect(JSON.stringify(memory.puts[0]?.metadata)).not.toContain("revised prompt");
   });
 
   it("reconstructs a degraded success from image metadata", async () => {
@@ -185,9 +176,7 @@ describe("hosted Object Storage", () => {
       putObject: () => Promise.reject(preconditionFailed()),
     };
 
-    const receipt = await Effect.runPromise(
-      makeStore(api).receiptFor("A meme"),
-    );
+    const receipt = await Effect.runPromise(makeStore(api).receiptFor("A meme"));
     expect(receipt.status).toBe("missing");
     if (receipt.status === "recorded") {
       throw new Error("Expected a missing receipt");
@@ -215,28 +204,23 @@ describe("hosted Object Storage", () => {
         "meme-result-version": "1",
       },
     ],
-  ])(
-    "uses a safe degraded success for %s image metadata",
-    async (_name, metadata) => {
-      const memory = makeMemoryApi({
-        "memes/meme-1.jpg": { body: Buffer.from("jpeg"), metadata },
-      });
+  ])("uses a safe degraded success for %s image metadata", async (_name, metadata) => {
+    const memory = makeMemoryApi({
+      "memes/meme-1.jpg": { body: Buffer.from("jpeg"), metadata },
+    });
 
-      const receipt = await Effect.runPromise(
-        makeStore(memory.api).receiptFor("Current prompt"),
-      );
+    const receipt = await Effect.runPromise(makeStore(memory.api).receiptFor("Current prompt"));
 
-      expect(receipt).toMatchObject({
-        status: "recorded",
-        outcome: {
-          history: [{ provider: "unknown", status: "success" }],
-          kind: "success",
-          provider: "unknown",
-        },
-      });
-      expect(receipt).not.toHaveProperty("outcome.metadata");
-    },
-  );
+    expect(receipt).toMatchObject({
+      status: "recorded",
+      outcome: {
+        history: [{ provider: "unknown", status: "success" }],
+        kind: "success",
+        provider: "unknown",
+      },
+    });
+    expect(receipt).not.toHaveProperty("outcome.metadata");
+  });
 
   it("stores terminal outcomes privately and resumes them", async () => {
     const memory = makeMemoryApi();
@@ -253,9 +237,7 @@ describe("hosted Object Storage", () => {
     if (missingReceipt.status === "recorded") {
       throw new Error("Expected a missing receipt");
     }
-    await Effect.runPromise(
-      missingReceipt.record({ kind: "terminal-failure", outcome: failure }),
-    );
+    await Effect.runPromise(missingReceipt.record({ kind: "terminal-failure", outcome: failure }));
     const resumed = await Effect.runPromise(store.receiptFor("Prompt"));
 
     expect(resumed).toEqual({ status: "recorded", outcome: failure });
