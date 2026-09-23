@@ -6,16 +6,19 @@
   - Mar, a data librarian who safeguards the histories of wide networks.
   - Back, Mar's quirky assistant who often gets into mishaps due to a glitchy interface.
   - The Overwrite, an antagonist who seeks to corrupt and erase data for control.
+  - Rune Sostack Clausen, a curious data explorer who often shares insights about the functions of the network but has a mysterious past.
 
 - Locations:
   - Data Forest: A lush area filled with byte trees and source-code streams.
   - The Archive: Mar's main hub, where all data is cataloged and stored securely.
   - Glitch Alley: A chaotic section of the network where errors run rampant.
+  - Rune's Lab: A secluded space within the Archive where Rune conducts experiments on data integrity and restoration.
 
 - Story Beats:
   - Mar discovered the existence of The Overwrite while cataloging a suspicious wave of corrupted data.
   - Back tried to fix a file path that led to Glitch Alley but ended up unleashing a swarm of rogue pixels instead.
   - Mar and Back teamed up to secure the Archive, using their skills to stave off The Overwrite's first major attack, which involved a mass data wipe in the Data Forest.
+  - Rune revealed his address as a potential safe location for meeting and strategizing against The Overwrite: Data Lane 42, Binary City.
 
 - The importance of backups: Mar continuously reminded others in the network that regular backups are the key to preserving their digital lives. The recurring joke in the Archive is that “you can't have too many backups,” a sentiment Back often misinterpreted, leading to humorous situations with excessive copies of the same file.
 
@@ -23,6 +26,7 @@
   - Mar initiated the process to "read:mar write:mar-backup," creating a fail-safe system to ensure that if the Archive was breached again, they would have a safe replica to restore from.
   - Back received an upgrade, allowing for improved scanning of corrupted files, but it occasionally malfunctioned, leading to bizarre interpretations of data sets.
   - The community in the Data Forest held a gathering to share food, notably preparing Gözleme as a way to bond and relax amid the ongoing threat, showcasing their resilience.
+  - Rune's Lab became a hub for testing new backup technologies, often drawing Back's curiosity and leading to accidental glitches.
 
 - Current Status:
   - The battle against The Overwrite intensifies as Mar's new backup system faces its first real test.
