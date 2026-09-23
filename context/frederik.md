@@ -5,3 +5,4 @@
 - Frederik er til ekstremsport, men han tør ikke lave fejl i bankernes systemer.
 - Frederik elsker beach-volley, men han har altid en skadet ankel, tå, ben, lårknogle, finger, håndled eller noget andet.
 - Frederik øver sig ofte i at hoppe højt. En gang kom han til at hoppe op i sit eget loft og slå hovedet.
+- Frederik smidder altid alt hvad han har i hænderne, hvis nogen kommer med det mindste hint om et problem, så han kan hjælpe med at løse det.
