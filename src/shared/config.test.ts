@@ -160,11 +160,31 @@ describe("request-scoped AppConfig", () => {
 
     expect(config).toMatchObject({
       issueNumber: "823",
+      listSagas: false,
       memePrompt: "make a sequel",
       printSaga: null,
       readSagas: ["origin"],
       repo: "henrikgrubbe/memes",
       writeSaga: "origin",
+    });
+  });
+
+  it("builds a list-Sagas command with an empty request prompt", async () => {
+    const config = await Effect.runPromise(
+      makeRequestAppConfig({
+        issueBody:
+          "sender: hhb\nmessage: list:sagas\nchannel: #memes\nlink: https://slack.com/x",
+        issueNumber: "824",
+        repo: "henrikgrubbe/memes",
+      }),
+    );
+
+    expect(config).toMatchObject({
+      listSagas: true,
+      memePrompt: "",
+      printSaga: null,
+      readSagas: [],
+      writeSaga: null,
     });
   });
 });

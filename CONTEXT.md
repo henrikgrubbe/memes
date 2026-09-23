@@ -6,7 +6,7 @@ A meme can opt in to a shared, evolving context called a **saga**, so
 generations can build on each other (recurring characters, running jokes,
 story beats).
 
-Four inline tokens in the Slack message opt in (they are stripped from the
+Five inline tokens in the Slack message opt in (they are stripped from the
 prompt before generation, and are case-insensitive; saga names are slugs of
 `A–Z a–z 0–9 _ -`):
 
@@ -18,11 +18,18 @@ prompt before generation, and are case-insensitive; saga names are slugs of
   "keep participating in this saga" case).
 - `print:<saga>` — post the current canon to the request's GitHub issue and
   link it from the Slack notification without generating or updating anything.
+- `print:all` — post the sorted names of all current Sagas to the request's
+  GitHub issue and Slack notification without generating or updating anything.
+  It reuses the existing `print` Slack keyword group; `all` is reserved for
+  this command.
+- `list:sagas` — equivalent to `print:all` for direct integrations that do
+  not need to reuse the Slack `print` keyword group.
 
 They are independent: a meme may read one saga, write another, both, or
 neither. A space after the colon (`read: the news`) is **not** a directive.
-`print:` is a standalone inspection command and takes precedence if combined
-with other directives.
+`print:` is a standalone inspection command and takes precedence over read and
+write directives. `print:all` and `list:sagas` take precedence over all other
+directives.
 
 When `write:<saga>` is used without `read:<saga>`, the contribution updates the
 canon without generating an image. The issue and Slack thread receive a
@@ -75,7 +82,7 @@ Its completion module owns both GitHub comments and Slack payloads.
 
 The ingress stamps each task with a `requestedAt` timestamp at enqueue time,
 and the completion module reports the elapsed time to completion as a
-`**Took:**` line on the issue comment and a `duration_seconds` Slack field.
+`**Took:**` line on the issue comment.
 Enqueue time is used rather than `issue.created_at` because a reopened issue
 keeps its original creation time, which would report a wildly inflated
 duration. `requestedAt` is optional on the wire: ingress and worker deploy

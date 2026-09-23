@@ -10,6 +10,7 @@ import { deliverHostedCompletion, makeSlackSender } from "./hosted-notifier.js";
 const config: AppConfig = {
   channel: "C123",
   issueNumber: "42",
+  listSagas: false,
   memePrompt: "Prompt",
   printSaga: null,
   readSagas: [],
@@ -34,6 +35,7 @@ const makeRepository = (
       record(`comment:${body}`);
     }),
   foldSaga: () => Effect.succeed(true),
+  listSagas: () => Effect.succeed([]),
   memeId: "meme-1",
   readText: () => Effect.succeed(null),
 });
@@ -295,6 +297,45 @@ describe("hosted notifier", () => {
         type: "saga-context",
         write_saga: "",
       },
+    ]);
+  });
+
+  it("sends the sorted Saga names through the existing context payload", async () => {
+    const { events, payloads } = await captureCompletion({
+      kind: "saga-list",
+      sagas: ["heist", "space"],
+    });
+
+    expect(events.join("\n")).toContain("`heist`");
+    expect(events.join("\n")).toContain("`space`");
+    expect(payloads).toEqual([
+      {
+        channel: "C123",
+        content_url: "https://github.com/owner/repo/tree/main/context",
+        cost_cents: "",
+        meme_id: "",
+        read_sagas: "",
+        requester: "U123",
+        text: "heist\nspace",
+        title: "Current Sagas",
+        type: "saga-context",
+        write_saga: "story",
+      },
+    ]);
+  });
+
+  it("reports an empty Saga list without a directory link", async () => {
+    const { payloads } = await captureCompletion({
+      kind: "saga-list",
+      sagas: [],
+    });
+
+    expect(payloads).toEqual([
+      expect.objectContaining({
+        content_url: "",
+        text: "There are no Sagas yet.",
+        type: "saga-context",
+      }),
     ]);
   });
 

@@ -101,6 +101,10 @@ export interface HostedGitHubRepository {
   readonly foldSaga: (
     saga: SagaCommit,
   ) => Effect.Effect<boolean, HostedGitHubError>;
+  readonly listSagas: () => Effect.Effect<
+    ReadonlyArray<string>,
+    HostedGitHubError
+  >;
   readonly memeId: string;
   readonly readText: (
     path: string,
@@ -129,6 +133,11 @@ interface GitObject {
 interface ContentResponse {
   readonly content: string;
   readonly encoding: string;
+}
+
+interface DirectoryEntry {
+  readonly name: string;
+  readonly type: string;
 }
 
 interface IssueComment {
@@ -182,6 +191,21 @@ const isNotFound = (error: HostedGitHubError): boolean => error.status === 404;
 const isRefConflict = (error: HostedGitHubError): boolean =>
   error.status === 409 || error.status === 422;
 
+const sagaNameFromEntry = (entry: DirectoryEntry): string | null => {
+  if (entry.type !== "file" || !/^[A-Za-z0-9_-]+\.md$/.test(entry.name)) {
+    return null;
+  }
+  return entry.name.slice(0, -".md".length);
+};
+
+const isDirectoryEntry = (value: unknown): value is DirectoryEntry =>
+  typeof value === "object" &&
+  value != null &&
+  "name" in value &&
+  typeof value.name === "string" &&
+  "type" in value &&
+  typeof value.type === "string";
+
 export const makeHostedGitHubRepository = ({
   api,
   branch,
@@ -221,6 +245,34 @@ export const makeHostedGitHubRepository = ({
               ),
         ),
         Effect.catchIf(isNotFound, () => Effect.succeed(null)),
+      );
+
+  const listSagasAt = (
+    ref: string,
+  ): Effect.Effect<ReadonlyArray<string>, HostedGitHubError> =>
+    api
+      .request<unknown>({
+        method: "GET",
+        path: `${repoPath}/contents/context?ref=${encodeURIComponent(ref)}`,
+      })
+      .pipe(
+        Effect.flatMap((response) =>
+          Array.isArray(response)
+            ? Effect.succeed(
+                response
+                  .filter(isDirectoryEntry)
+                  .map(sagaNameFromEntry)
+                  .filter((name): name is string => name != null)
+                  .sort(),
+              )
+            : Effect.fail(
+                new HostedGitHubError({
+                  detail: "GitHub list Sagas returned a non-directory response",
+                  operation: "list Sagas",
+                }),
+              ),
+        ),
+        Effect.catchIf(isNotFound, () => Effect.succeed([])),
       );
 
   const getHead = () =>
@@ -418,6 +470,7 @@ export const makeHostedGitHubRepository = ({
     closeIssue,
     commentOnce,
     foldSaga,
+    listSagas: () => listSagasAt(branch),
     memeId,
     readText: (path) => readTextAt(path, branch),
   };

@@ -69,6 +69,8 @@ branches for `image`, `saga-updated`, `saga-context`, and `failure`. Bind
 than hard-coding a channel. A `saga-context` payload carries the complete
 current canon in `text`; an `image` payload carries a stable `meme_id` for
 future image-edit requests and a visible Saga-provenance sentence in `text`.
+Both `print:<saga>` and `print:all` use `saga-context`: the title identifies
+the result, while `text` carries either the canon or sorted Saga names.
 
 #### Workflow Builder migration
 
@@ -96,7 +98,7 @@ make the following changes in Slack Workflow Builder:
    | -------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
    | `image`        | Quote `title`, link `content_url`, identify `requester`, then show `text` (for example, `Saga context: characters, setting`). | Reply in thread with `Puuha den var dyr, kostede fandme da {cost_cents}. Meme ID: {meme_id}`. Keep the money reaction if desired. |
    | `saga-updated` | `Så {requester}! Dine skriblerier er nu skrevet ind i sagaen om {write_saga}` linked to `content_url`.                        | Keep the receipt reaction if desired.                                                                                             |
-   | `saga-context` | Show `title`, followed by the complete `text` canon.                                                                          | Optional book or receipt reaction.                                                                                                |
+   | `saga-context` | Show `title`, followed by `text`: it is either the complete canon or a newline-separated Saga list.                           | Optional book or receipt reaction.                                                                                                |
    | `failure`      | Keep the existing failure copy, substituting `title` and `text`.                                                              | Keep the existing failure reaction if desired.                                                                                    |
 
 4. Delete the nested provider switch and its provider-specific reactions:

@@ -197,6 +197,15 @@ const sagaContextComment = ({
         ...fencedCode(canon),
       ].join("\n");
 
+const sagaListComment = ({
+  sagas,
+}: Extract<DeliveryOutcome, { readonly kind: "saga-list" }>): string =>
+  sagas.length === 0
+    ? "📚 There are no Sagas yet."
+    : ["📚 Current Sagas:", ``, ...sagas.map((saga) => `- \`${saga}\``)].join(
+        "\n",
+      );
+
 export interface SlackSender {
   readonly post: (payload: unknown) => Effect.Effect<void, NotificationError>;
 }
@@ -351,6 +360,23 @@ const completionPlan = (
             outcome.canon.trim() === ""
               ? `Saga "${outcome.saga}" has no context yet.`
               : outcome.canon,
+        }),
+      };
+    case "saga-list":
+      return {
+        close: true,
+        comment: sagaListComment(outcome),
+        slackPayload: slackPayload(config, {
+          type: "saga-context",
+          content_url:
+            outcome.sagas.length === 0
+              ? ""
+              : `https://github.com/${config.repo}/tree/${branch}/context`,
+          title: "Current Sagas",
+          text:
+            outcome.sagas.length === 0
+              ? "There are no Sagas yet."
+              : outcome.sagas.join("\n"),
         }),
       };
     case "failure":

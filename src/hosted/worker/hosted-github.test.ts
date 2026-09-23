@@ -123,6 +123,65 @@ describe("hosted GitHub persistence", () => {
     }
   });
 
+  it("lists only safe Markdown Saga names in sorted order", async () => {
+    const api = makeApi((request) => {
+      if (
+        request.method === "GET" &&
+        request.path === "/repos/owner/repo/contents/context?ref=main"
+      ) {
+        return Effect.succeed([
+          { name: "zebra.md", type: "file" },
+          { name: "README.md", type: "file" },
+          { name: "heist.md", type: "file" },
+          { name: "nested", type: "dir" },
+          { name: "../unsafe.md", type: "file" },
+          { name: "plain.txt", type: "file" },
+        ]);
+      }
+      return Effect.fail(notFound(request.path));
+    });
+    const repository = makeHostedGitHubRepository({
+      api,
+      branch: "main",
+      task,
+    });
+
+    await expect(Effect.runPromise(repository.listSagas())).resolves.toEqual([
+      "README",
+      "heist",
+      "zebra",
+    ]);
+  });
+
+  it("treats an absent context directory as an empty Saga list", async () => {
+    const repository = makeHostedGitHubRepository({
+      api: makeApi((request) => Effect.fail(notFound(request.path))),
+      branch: "main",
+      task,
+    });
+
+    await expect(Effect.runPromise(repository.listSagas())).resolves.toEqual(
+      [],
+    );
+  });
+
+  it("reports an unexpected context response explicitly", async () => {
+    const repository = makeHostedGitHubRepository({
+      api: makeApi(() => Effect.succeed({ name: "context", type: "file" })),
+      branch: "main",
+      task,
+    });
+
+    const exit = await Effect.runPromise(
+      repository.listSagas().pipe(Effect.exit),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      expect(String(exit.cause)).toContain("non-directory response");
+    }
+  });
+
   it("commits the Saga canon and minimal fold receipt atomically", async () => {
     let treeBody: unknown;
     let blobs: ReadonlyArray<string> = [];
