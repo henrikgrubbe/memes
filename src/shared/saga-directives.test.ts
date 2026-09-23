@@ -5,6 +5,7 @@ describe("parseSagaDirectives", () => {
   it("returns no sagas and the untouched prompt when there are no directives", () => {
     const r = parseSagaDirectives("a cat riding a bike");
     expect(r).toEqual({
+      listSagas: false,
       printSaga: null,
       readSagas: [],
       writeSaga: null,
@@ -94,5 +95,29 @@ describe("parseSagaDirectives", () => {
     expect(r.readSagas).toEqual([]);
     expect(r.writeSaga).toBeNull();
     expect(r.prompt).toBe("");
+  });
+
+  it("parses list:sagas as a standalone Saga-inspection command", () => {
+    const r = parseSagaDirectives("LIST:SAGAS");
+    expect(r.listSagas).toBe(true);
+    expect(r.printSaga).toBeNull();
+    expect(r.readSagas).toEqual([]);
+    expect(r.writeSaga).toBeNull();
+    expect(r.prompt).toBe("");
+  });
+
+  it("parses print:all as a list command without a separate Slack keyword", () => {
+    const r = parseSagaDirectives("PRINT:ALL");
+    expect(r.listSagas).toBe(true);
+    expect(r.printSaga).toBeNull();
+    expect(r.readSagas).toEqual([]);
+    expect(r.writeSaga).toBeNull();
+    expect(r.prompt).toBe("");
+  });
+
+  it("does not treat a different list target as a Saga directive", () => {
+    const r = parseSagaDirectives("list:stories");
+    expect(r.listSagas).toBe(false);
+    expect(r.prompt).toBe("list:stories");
   });
 });

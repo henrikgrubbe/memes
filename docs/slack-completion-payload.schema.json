@@ -38,11 +38,11 @@
       "type": "string"
     },
     "content_url": {
-      "description": "Generated image or Saga file URL; empty for failures.",
+      "description": "Generated image, Saga file, or Saga directory URL; empty for failures and empty Saga lists.",
       "type": "string"
     },
     "text": {
-      "description": "Human-readable type-specific body: Saga provenance for images, the current canon for Saga inspection, failure detail for failures, or empty for successful Saga updates.",
+      "description": "Human-readable type-specific body: Saga provenance for images, current canon or newline-separated Saga names for `saga-context`, failure detail for failures, or empty for successful Saga updates.",
       "type": "string"
     },
     "cost_cents": {

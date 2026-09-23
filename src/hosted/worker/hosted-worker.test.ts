@@ -52,7 +52,7 @@ const storedSuccess: DeliveryOutcome = {
 
 type StoredOutcome = Exclude<
   DeliveryOutcome,
-  { readonly kind: "saga-updated" | "saga-context" }
+  { readonly kind: "saga-updated" | "saga-context" | "saga-list" }
 >;
 
 interface Harness {
@@ -95,6 +95,7 @@ const makeHarness = (
             sagaFolded = true;
             return true;
           }),
+    listSagas: () => Effect.succeed(["heist", "space"]),
     memeId: "meme-1",
     readText: () => Effect.succeed("Existing canon"),
   };
@@ -398,6 +399,36 @@ describe("hosted queued delivery", () => {
     expect(harness.comments()[0]).toContain(
       "The cats still need a getaway car.",
     );
+  });
+
+  it("lists Sagas without generating an image or modifying canon", async () => {
+    const harness = makeHarness();
+    let providerCalls = 0;
+    const handler = makeQueuedDeliveryHandler(
+      handlerDependencies(
+        harness,
+        successProviders(() => {
+          providerCalls += 1;
+        }),
+      ),
+    );
+
+    const result = await Effect.runPromise(
+      handler.handle(requestFor(taskFor("list:sagas"))),
+    );
+
+    expect(result).toEqual({
+      body: { disposition: "processed" },
+      status: 200,
+    });
+    expect(providerCalls).toBe(0);
+    expect(harness.events()).toEqual([
+      "slack:post",
+      "github:comment",
+      "github:close",
+    ]);
+    expect(harness.comments()[0]).toContain("`heist`");
+    expect(harness.comments()[0]).toContain("`space`");
   });
 
   it("processes and resumes a write-only Saga without storage or providers", async () => {

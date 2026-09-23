@@ -229,6 +229,22 @@ const runSagaContextDelivery = (
     return "processed" as const;
   });
 
+const runSagaListDelivery = (
+  config: AppConfig,
+  repository: HostedGitHubRepository,
+  slack: SlackSender,
+) =>
+  Effect.gen(function* () {
+    const sagas = yield* repository.listSagas();
+    yield* deliverHostedCompletion(
+      config,
+      { kind: "saga-list", sagas },
+      repository,
+      slack,
+    );
+    return "processed" as const;
+  });
+
 const runWriteOnlyDelivery = (
   config: AppConfig & { readonly writeSaga: string },
   repository: HostedGitHubRepository,
@@ -281,6 +297,10 @@ const runHostedTask = (
     yield* Effect.log(
       `Processing queued issue #${task.issueNumber} from ${task.repo}`,
     );
+    if (config.listSagas) {
+      return yield* runSagaListDelivery(config, repository, slack);
+    }
+
     if (config.printSaga != null) {
       return yield* runSagaContextDelivery(
         { ...config, printSaga: config.printSaga },
