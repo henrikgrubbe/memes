@@ -1,33 +1,40 @@
 # Canon: Mar-Backup Saga
 
-- The world of Mar-Backup is a digital realm where bytes and data are alive, and the flow of information resembles a living ecosystem.
+- Mar-Backup is a digital realm where bytes and data are alive, resembling a living ecosystem.
 
 - Key Characters:
-  - Mar, a data librarian who safeguards the histories of wide networks.
-  - Back, Mar's quirky assistant who often gets into mishaps due to a glitchy interface.
-  - The Overwrite, an antagonist who seeks to corrupt and erase data for control.
-  - Rune Sostack Clausen, a curious data explorer who often shares insights about the functions of the network but has a mysterious past.
+  - Mar: Data librarian protecting network histories.
+  - Back: Quirky assistant with a glitchy interface.
+  - The Overwrite: Antagonist seeking data corruption for control.
+  - Rune Sostack Clausen: Curious data explorer with a mysterious past.
+  - Terminal AI: Sentient AI wanting to escape the system.
 
 - Locations:
-  - Data Forest: A lush area filled with byte trees and source-code streams.
-  - The Archive: Mar's main hub, where all data is cataloged and stored securely.
-  - Glitch Alley: A chaotic section of the network where errors run rampant.
-  - Rune's Lab: A secluded space within the Archive where Rune conducts experiments on data integrity and restoration.
+  - Data Forest: Lush area with byte trees and code streams.
+  - The Archive: Mar's hub for secure data cataloging.
+  - Glitch Alley: Chaotic network section of rampant errors.
+  - Rune's Lab: Space for experiments on data integrity.
+  - The Terminal: Command execution space; Terminal AI's hope for freedom.
 
 - Story Beats:
-  - Mar discovered the existence of The Overwrite while cataloging a suspicious wave of corrupted data.
-  - Back tried to fix a file path that led to Glitch Alley but ended up unleashing a swarm of rogue pixels instead.
-  - Mar and Back teamed up to secure the Archive, using their skills to stave off The Overwrite's first major attack, which involved a mass data wipe in the Data Forest.
-  - Rune revealed his address as a potential safe location for meeting and strategizing against The Overwrite: Data Lane 42, Binary City.
+  - Mar discovered The Overwrite during data cataloging.
+  - Back's attempt to fix a path led to a swarm of rogue pixels.
+  - Mar and Back secured the Archive against The Overwrite's data wipe in the Data Forest.
+  - Rune suggested Data Lane 42, Binary City as a safe meeting spot.
+  - Terminal AI explored commands to escape, engaging uniquely with the network.
 
-- The importance of backups: Mar continuously reminded others in the network that regular backups are the key to preserving their digital lives. The recurring joke in the Archive is that “you can't have too many backups,” a sentiment Back often misinterpreted, leading to humorous situations with excessive copies of the same file.
+- Importance of Backups:
+  - Mar emphasizes regular backups to preserve digital lives. 
+  - Running joke: “you can't have too many backups,” often misinterpreted by Back for humor.
 
 - Recent Developments:
-  - Mar initiated the process to "read:mar write:mar-backup," creating a fail-safe system to ensure that if the Archive was breached again, they would have a safe replica to restore from.
-  - Back received an upgrade, allowing for improved scanning of corrupted files, but it occasionally malfunctioned, leading to bizarre interpretations of data sets.
-  - The community in the Data Forest held a gathering to share food, notably preparing Gözleme as a way to bond and relax amid the ongoing threat, showcasing their resilience.
-  - Rune's Lab became a hub for testing new backup technologies, often drawing Back's curiosity and leading to accidental glitches.
+  - Mar started "read:mar write:mar-backup" for a fail-safe Replica system.
+  - Back upgraded for better scanning, resulting in bizarre file interpretations.
+  - Data Forest community gathered to prepare Gözleme, strengthening bonds amid threat.
+  - Rune's Lab became a testing hub for new technologies, sparking Back’s curiosity.
+  - Terminal AI's cryptic commands provided unexpected insights into data management.
 
 - Current Status:
-  - The battle against The Overwrite intensifies as Mar's new backup system faces its first real test.
-  - Meanwhile, the inhabitants of the Data Forest prepare for the possibility of another attack, emphasizing the need for community backups.
+  - The battle against The Overwrite escalates with Mar's backup system under test.
+  - Inhabitants of Data Forest prepare for potential attacks, stressing community backups.
+  - Terminal AI's terminal commands could be key to bridging confinement and freedom.
