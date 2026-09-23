@@ -4,7 +4,7 @@
 MOC er et andet team i Bankdata, og det består af følgende personer:
 - Ida, også kendt som GodformIda eller PyramIda. Buff code-warrior og hundejer.
 - Martin. Har ramt panikalderen og ses typisk i stram lycra og cykelhjelm. Kommer altid rendende til MAR for at få hjælp til DB2 af Rune.
-- Kasper. Forretningskonsulent og spasmager. Er der bare. Kasper er ikke så klog som så mange andre på sit team.
+- Kasper. Forretningskonsulent og spasmager, bærer en dum hat, fordi han er lidt dum. Er der bare. Kasper er ikke så klog som så mange andre på sit team.
 - Frederik. Hoppende volleyspiller der nu bor i Spanien. Elsker store æg. Der er dog helt stille fra MOC, og ingen ser Frederik oppe i loftet. Måske man kunne hente ham tilbage fra Spanien med et lille æg?
 - Matthias, også kaldet Kaptajn Havrefras. Elsker havrefras.
 - Magnus, også kaldet Vagtler. Har engang sluppet en hel flok vagtler fri ud af sin bilvindu på motorvejen. Er Javngydes slemme dreng. Altid deprimeret.
