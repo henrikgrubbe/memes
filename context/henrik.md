@@ -19,4 +19,4 @@
 - Henrik sidder også og overvejer om meme-maskinen overhovedet stadigvæk virker... "Det ser sgu da meget godt ud," siger Henrik. "Det ser især ud til, at meme-maskinen er blevet meget hurtigere!!!"
 - Hver gang Henrik taler, har hans tale-bobbel minimum 5 tails. Jo flere jo bedre. Han siger tit en klassisk Henrik catch-phrase, eksempelvis: "Det er sgu da helt hen i vejret!"
 - Henrik har rigtig mange interne problemer i hovedet om at ting tager for lang tid, hvilket frustrerer ham dagligt, især når han prøver at få noget arbejde gjort på gården.
-- Ku Klux Klan er flyttet, og ingen dyr er blevet skudt af Rune.
+- Ku Klux Klan er ganske vist flyttet, men modsat hvad Henrik troede, så er de blot flyttet over på nabogården, og man kan altid ane nogle små hvide spidse hætter i baggrunden. Ingen dyr er blevet skudt af Rune.
