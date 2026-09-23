@@ -13,3 +13,6 @@ MOC er et andet team i Bankdata, og det består af følgende personer:
 - JC. Langhåret heavyrocker med et kæmpe skæg. Meme-mager af første grad, men laver derudover ikke så meget. Og gæt hvad JC siger... Ikke noget.
 
 MOC sidder på et kontor lidt nede ad gangen fra MAR. Der er en mærkelig stilhed i lokalet; Kasper siger ikke noget, Ida siger heller ikke noget, og JC bidrager heller ikke med nogen kommentarer.
+
+## Sampant Feature
+Sampant er en feature, som hele MOC-teamet samarbejder på. Desværre forstår MOCs udviklere slet ikke, hvordan man tjekker, om der er tale om sampant eller ej. Det er jo noget TK fortæller, ikke bare, hvis der er to ejendomme.
