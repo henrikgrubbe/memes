@@ -12,7 +12,7 @@
 - **Træmand Brandborg**: Rune’s ceramics rival sharing eco-tips.
 - **Henrik (Henrik OK)**: The world's okayest Henrik, relieved with meme machine activity.
 - **Gitte**: Assertive product owner reporting on innovations.
-- **Teslatrubaduren Morten Skildpadde**: Meme enthusiast juggling trends and music.
+- **Teslatrubaduren Morten Skildpadde**: Meme enthusiast juggling trends and music; also a turtle.
 - **Lærke**: Pink ghost giving quirky tips, mentoring Laban.
 - **Nicolai**: Ghost in a suit mixing humor with local drink news.
 - **Steffen**: Nutella-loving ghost delivering sweet jokes.
