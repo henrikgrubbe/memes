@@ -5,3 +5,4 @@
 - Henrik laver altid en rød pil, der peger på lasagnerne, så han kan finde dem igen.
 - Shai Hulud prøver konstant at spise hans lasagner, men Træmand Brandborg beskytter lasagnerne.
 - Som resultat er Shai Hulud og Træmand Brandborg for evigt fanget i en slåskamp i baggrunden.
+- Der er åbenbart nogle zombie regnorme, der er kommet ind i huset. De holder banner med tacos på, hvilket tyder på en demonstration af en art.
