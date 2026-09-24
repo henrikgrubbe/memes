@@ -1,27 +1,28 @@
 # Team MAR
 
-**Setting**: At Bankdata ("meme-fabrikken"), chaos erupts around ceramic cup painting, DHL runs, and ServiceNow training. Enjoy Mexican lasagne, Yamas nights, and Rune’s avoidance of golf lovers. Skjoldbamsen Sigurd humorously discusses Graves disease while passionately opposing cherry sauce, overseeing ceramics in an exaggerated kawaii manga style. Laban, the tuxedo cat, has swapped his donut bed for an ultra-soft Georg Jensen cat bed, damask woven from 100% combed cotton, offering a soft and smooth surface. Tension escalates when Sæbekassebilen gets stolen, turning into a trophy competition at Carsten's driveway. The office drama peaks when a Shai Hulud consumes it, marking a major incident. The team's segment, "Dagens nyheder, fortalt af team MARs mange dyr," garners attention, while the notice board humorously displays "Dage uden major incident" with a count of 0.
+**Setting**: At Bankdata ("meme-fabrikken"), chaos unfolds over ceramic cup painting, DHL runs, and ServiceNow training. Enjoy Mexican lasagne, Yamas nights, and Rune’s avoidance of golf lovers. Skjoldbamsen Sigurd humorously discusses Graves disease and his disdain for cherry sauce, managing ceramics in an exaggerated kawaii manga style. A parrot, following Sebastian from the Faroe Islands, now lives in the office, sharing a donut bed with Laban. Tension escalates when Sæbekassebilen is stolen, leading to a trophy competition at Carsten's driveway. The drama peaks when a Shai Hulud devours the car, marking a significant incident. The team's segment, "Dagens nyheder, fortalt af team MARs mange dyr," gains attention, and the notice board comically shows "Dage uden major incident" with a count of 0.
 
 **Characters**:
 - **Rune Beaufillou**: "Viking of Vibes," hosts animal news, plans green PEPE cake, obsessed with Leopardus tilcayo.
-- **Persille-Sebastian**: "Parsley Avenger," quirky developer avoiding meetings.
+- **Persille-Sebastian**: "Parsley Avenger," quirky developer avoiding meetings; now has a parrot.
 - **Elmast Jeppe**: "Metal Elmast," updates on electrical outages.
-- **Alpaca Alpár**: Now an actual alpaca, comedic sage enjoying snacks and Laban's banana cat.
-- **Laban**: Tuxedo cat "Weather Wizard," inaccurately predicts weather and now luxuriates in a new ultra-soft Georg Jensen bed.
-- **Skjoldbamsen Sigurd**: "Sigurd Newton," the kawaii manga-style bear overseeing ceramics, opposes cherry sauce and exclaims "BLEH" when he dislikes something.
+- **Alpaca Alpár**: An actual alpaca and comedic sage, loves snacks and Laban's banana cat.
+- **Laban**: Tuxedo cat "Weather Wizard," inaccurately predicts weather, enjoys a soft Georg Jensen bed, shares a donut bed with the parrot.
+- **Skjoldbamsen Sigurd**: "Sigurd Newton," kawaii-style bear managing ceramics, opposes cherry sauce, exclaiming "BLEH."
 - **Træmand Brandborg**: Rune’s ceramics rival sharing eco-tips.
-- **Henrik (Henrik OK)**: The world's okayest Henrik, relieved with meme machine activity.
-- **Gitte**: Assertive product owner reporting on innovations.
-- **Teslatrubaduren Morten Skildpadde**: Meme enthusiast juggling trends and music; also a turtle.
-- **Lærke**: Pink ghost giving quirky tips, mentoring Laban.
-- **Nicolai**: Ghost in a suit mixing humor with local drink news.
-- **Steffen**: Nutella-loving ghost delivering sweet jokes.
-- **Random Character**: Photorealistic figure adding absurdity.
+- **Henrik (Henrik OK)**: The world's okayest Henrik, enjoys meme machine activity.
+- **Gitte**: Assertive product owner reporting innovations.
+- **Teslatrubaduren Morten Skildpadde**: Meme enthusiast, manages trends and music; also a turtle.
+- **Lærke**: Pink ghost offering quirky tips, mentoring Laban.
+- **Nicolai**: Ghost in a suit, mixes humor with local drink news.
+- **Steffen**: Nutella-loving ghost telling sweet jokes.
+- **Random Character**: Absurdly photorealistic figure.
 
 **Dagens nyheder, fortalt af team MARs mange dyr**:
-- Laban’s inaccurate weather predictions from his new luxurious bed.
-- Alpaca Alpár (the alpaca) shares snack love and Laban’s banana cat.
-- Rune recounts baking fails and Leopardus tilcayo obsession.
-- Skjoldbamsen Sigurd updates on ceramics with kawaii charm, emphasizes his distaste for cherry sauce, and adds a humorous "BLEH" when voicing his dislikes.
+- Laban’s inaccurate weather predictions from his luxurious bed.
+- Alpaca Alpár shares love for snacks and Laban’s banana cat.
+- Rune recounts baking fails and his Leopardus tilcayo obsession.
+- Skjoldbamsen Sigurd updates on ceramics, expressing his dislike for cherry sauce with a humorous "BLEH."
+- Sebastian’s parrot (from the Faroe Islands) now cuddles in the office donut bed with Laban.
 
-Team MAR's animal news showcases whimsical escapades with Alpaca Alpár's antics as a beloved alpaca amidst the chaos. The random character adds absurdity, while the Shai Hulud incident shifts dynamics, becoming a major incident. "Dagens nyheder" delivers chaotic yet delightful insights, with the notice board amusingly declaring 0 days without a major incident as they navigate their chaotic reality.
+Team MAR's animal news features whimsical escapades with Alpaca Alpár and the parrot, amid the chaos. The Shai Hulud incident catalyzes change, marking a major event. "Dagens nyheder" provides chaotic yet delightful insights, with the notice board humorously displaying 0 days without a major incident as they navigate their tumultuous reality.
