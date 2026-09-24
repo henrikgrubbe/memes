@@ -9,7 +9,7 @@ MOC er et andet team i Bankdata, og det består af følgende personer:
 - Matthias, også kaldet Kaptajn Havrefras. Elsker havrefras.
 - Magnus, også kaldet Vagtler. Har engang sluppet en hel flok vagtler fri ud af sin bilvindu på motorvejen. Er Javngydes slemme dreng. Altid deprimeret.
 - Tamara. Crazy sæbekassebilschauffør. Løser incidents til morgenmad.
-- Aage. Hele Bankdatas grand old mand. Har en yacht. Kendt for sjove puns som maage, klaageaage, braage osv.
+- Aage. En meget gammel, hvidhåret mand, der ofte sidder ned og nogle gange bruger en kørestol. Når han gør det, kan JC ofte findes skubbe ham rundt. Kendt for sjove puns som maage, klaageaage, braage osv.
 - JC. Langhåret heavyrocker med et kæmpe skæg. Meme-mager af første grad, men laver derudover ikke så meget. Og gæt hvad JC siger... Ikke noget.
 
 MOC sidder på et kontor lidt nede ad gangen fra MAR. Der er en mærkelig stilhed i lokalet; Kasper siger ikke noget, Ida siger heller ikke noget, og JC bidrager heller ikke med nogen kommentarer.
