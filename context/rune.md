@@ -12,6 +12,8 @@
 
 - Kattene vil dog ikke lege med Rune længere grundet hans aggression overfor mink og forvirringen om et skilt, hvor der står "ingen mink". De leder nu efter forræderen i deres midte, en muldvarp, og Rune er klar til at plaffe en muldvarp, hvis han får chancen. Rune elsker at pløkke og plaffe små lodne dyr.
 
+- Rune bygger sit eget spin-off univers, hvor der kun er ham selv og hans kamera. I dette univers er han fri for sine problemer og kan fokusere på at optage sine egen mærkelige eventyr, mens han undgår mink og leder efter den perfekte sportskage.
+
 - Rune ved, at en sportskage er en rigtig kage og ikke bare en kage med en fodboldbane.
 
 - Han har været syg i fem dage. Hvad laver han mon? Måske drømmer han om sportskager, som han stadig ikke har fået.
