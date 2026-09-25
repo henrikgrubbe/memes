@@ -1,26 +1,26 @@
 # Team MAR
 
-**Setting**: At Bankdata ("meme-fabrikken"), chaos reigns with ceramics, DHL runs, ServiceNow training, and playful Mexican lasagne and Yamas nights. Rune dodges golf enthusiasts while Skjoldbamsen Sigurd comically discusses Graves' disease and cherry sauce while managing kawaii ceramics. Sebastian’s puffin, Søpapegøj, and Laban share a donut bed with a new cute tuxedo kitten, introduced in solidarity with Henrik. Tensions escalate with the theft of Sæbekassebilen, ending in a trophy contest at Carsten's driveway, which culminates with a Shai Hulud devouring the car. The notice board humorously reads "Dage uden major incident" at 0, while "Dagens nyheder, fortalt af team MARs mange dyr" captures the team's antics. Søpapegøjen, a lively puffin in a sailor hat, loves licorice pipes and Coca Cola Zero, often exclaiming sailor phrases and discussing singer Fisker Thomas. Randi, the new business consultant duck, enjoys her Swedish summer house, returns with Godis, and humorously critiques the team's mischief while promoting Coca Cola Zero. Henrik (Henrik OK) wears his "far på barsel :heart: " t-shirt with pride.
+**Setting**: At Bankdata ("meme-fabrikken"), chaos thrives with ceramics, DHL runs, ServiceNow training, and playful nights filled with Mexican lasagne and Yamas. Rune dodges golf enthusiasts while Skjoldbamsen Sigurd cheerfully discusses Graves' disease and cherry sauce while managing kawaii ceramics and fermenting cabbage with salt from Brandborgs Saltman's alter ego. Sebastian’s puffin, Søpapegøj, and Laban share a donut bed with a new tuxedo kitten, introduced to show solidarity with Henrik. Tensions rise when Sæbekassebilen gets stolen, leading to a trophy contest at Carsten's driveway, which ends with a Shai Hulud consuming the car. The notice board humorously states "Dage uden major incident" at 0. "Dagens nyheder, fortalt af team MARs mange dyr" highlights the team's antics, featuring Søpapegøjen, a sailor hat-wearing puffin who loves licorice pipes and Coca Cola Zero.
 
 **Characters**:
-- **Rune Beaufillou**: "Viking of Vibes," hosts animal news, adores Leopardus tilcayo.
-- **Persille-Sebastian**: "Parsley Avenger," quirky developer with a puffin, feels uneasy about mock meats and consults Alpaca regarding their contents.
+- **Rune Beaufillou**: "Viking of Vibes," hosts animal news, loves Leopardus tilcayo.
+- **Persille-Sebastian**: "Parsley Avenger," quirky developer uneasy about mock meats, consults Alpaca.
 - **Elmast Jeppe**: "Metal Elmast," reports electrical outages.
-- **Alpaca Alpár**: Comedic sage, expert in identifying mock meats like lentil patties and protein sausages, loves snacks and Laban's banana cat.
-- **Laban**: Tuxedo cat, shares a donut bed with a new adorable tuxedo kitten.
-- **Skjoldbamsen Sigurd**: "Sigurd Newton," kawaii ceramics manager, cherry sauce loather.
-- **Henrik (Henrik OK)**: The world's okayest Henrik, meme enthusiast in his "far på barsel :heart: " t-shirt.
-- **Randi**: Sharp business consultant duck, summer house lover, Godis bringer, and team spirit booster.
-- **Søpapegøj**: Sailor-hat puffin who revels in licorice pipes and Coca Cola Zero.
+- **Alpaca Alpár**: Comedic sage, identifies mock meats, enjoys snacks and Laban’s company.
+- **Laban**: Tuxedo cat, shares a donut bed with the new kitten.
+- **Skjoldbamsen Sigurd**: "Sigurd Newton," manages kawaii ceramics and critiques cherry sauce.
+- **Henrik (Henrik OK)**: The world’s okayest Henrik, meme lover in his "far på barsel :heart: " t-shirt.
+- **Randi**: Sharp business consultant duck who brings Godis and critiques team mischief.
+- **Søpapegøj**: Sailor-hat puffin fond of Coca Cola Zero and licorice.
 
 **Dagens nyheder, fortalt af team MARs mange dyr**:
-- Laban’s weather predictions.
-- Alpaca Alpár's mock meat expertise and snack cravings.
-- Rune's baking fails and Leopardus love.
-- Skjoldbamsen Sigurd’s cherry sauce critiques.
-- Sebastian’s puffin cuddling with Laban and the new kitten, and his mock meat dilemmas.
-- Søpapegøj’s fondness for Coca Cola Zero and licorice.
-- Randi's quacking insights on business and Godis.
-- Henrik's fatherhood tales shared enthusiastically in his signature t-shirt.
+- Laban’s weather forecasts.
+- Alpaca's mock meat expertise and snack cravings.
+- Rune's baking mishaps and love for Leopardus.
+- Skjoldbamsen Sigurd’s cherry sauce critiques and cabbage fermentation.
+- Sebastian’s puffin cuddling with Laban and the new kitten while grappling with mock meats.
+- Søpapegøj’s Coca Cola Zero enthusiasm.
+- Randi's insights on business and Godis.
+- Henrik’s fatherhood stories in his favorite t-shirt.
 
-Team MAR's whimsical adventures bring Alpaca Alpár, the puffin, and Søpapegøj together amidst delightful chaos. The new kitten alongside Laban signifies solidarity with Henrik, while Randi’s commentary adds depth. The Shai Hulud incident sparks change, while "Dagens nyheder" delights, humorously noting 0 days without major incidents.
+Team MAR's whimsical adventures bring together Alpaca, Søpapegøj, and the new kitten amidst delightful chaos. Randi adds depth with her commentary. The Shai Hulud incident sparks change, humorously noting 0 days without major incidents.
