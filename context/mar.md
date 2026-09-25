@@ -1,6 +1,6 @@
 # Team MAR
 
-**Setting**: At Bankdata ("meme-fabrikken"), chaos unfolds with ceramic cup painting, DHL runs, and ServiceNow training, while enjoying Mexican lasagne and Yamas nights. Rune avoids golf lovers, and Skjoldbamsen Sigurd humorously discusses Graves’ disease and his distaste for cherry sauce, managing ceramics in a kawaii style. Sebastian’s puffin from the Faroe Islands shares a donut bed with Laban. Tensions rise when Sæbekassebilen is stolen, leading to a trophy competition at Carsten's driveway, ultimately resulting in a Shai Hulud devouring the car. "Dagens nyheder, fortalt af team MARs mange dyr" garners attention, with a notice board humorously tallying "Dage uden major incident" at 0. A Søpapegøj, with a licorice pipe and coffee cup, adds to the office's quirky vibe.
+**Setting**: At Bankdata ("meme-fabrikken"), chaos unfolds with ceramic cup painting, DHL runs, and ServiceNow training, while enjoying Mexican lasagne and Yamas nights. Rune avoids golf lovers, and Skjoldbamsen Sigurd humorously discusses Graves’ disease and his distaste for cherry sauce, managing ceramics in a kawaii style. Sebastian’s puffin from the Faroe Islands shares a donut bed with Laban. Tensions rise when Sæbekassebilen is stolen, leading to a trophy competition at Carsten's driveway, ultimately resulting in a Shai Hulud devouring the car. "Dagens nyheder, fortalt af team MARs mange dyr" garners attention, with a notice board humorously tallying "Dage uden major incident" at 0. Søpapegøjen, a playful Fratercula arctica with a sailor hat, adds to the office's quirky vibe by enjoying licorice pipes and coffee, sometimes exclaiming sailor phrases like "splitte mine bremsejl" or discussing its favorite singer, Fisker Thomas.
 
 **Characters**:
 - **Rune Beaufillou**: "Viking of Vibes," hosts animal news, adores Leopardus tilcayo.
@@ -16,7 +16,7 @@
 - **Lærke**: Pink ghost mentoring Laban.
 - **Nicolai**: Ghost in a suit, humorously shares local drink news.
 - **Steffen**: Nutella-loving ghost with sweet jokes.
-- **Søpapegøj**: Colorful character with a licorice pipe and coffee.
+- **Søpapegøj**: A Fratercula arctica (puffin) in a sailor hat who enjoys licorice pipes and coffee, exclaims sailor phrases, and discusses its favorite singer, Fisker Thomas, known for songs from the mid-1970s.
 - **Random Character**: Absurdly photorealistic figure.
 
 **Dagens nyheder, fortalt af team MARs mange dyr**:
@@ -25,6 +25,6 @@
 - Rune's baking fails and Leopardus tilcayo obsession.
 - Skjoldbamsen Sigurd updates on ceramics with a humorous "BLEH" for cherry sauce.
 - Sebastian’s puffin cuddling with Laban.
-- Søpapegøj enjoys a relaxed vibe with a licorice pipe and coffee cup.
+- Søpapegøj enjoys a relaxed vibe with a licorice pipe and coffee cup, sharing sailor phrases and favorite music stories.
 
-Team MAR's animal news features whimsical adventures with Alpaca Alpár, the puffin, and Søpapegøj amidst chaos. The Shai Hulud incident catalyzes change, marking a significant event. "Dagens nyheder" offers delightful insights, while the notice board comically displays 0 days without major incidents in their tumultuous reality.
+Team MAR's whimsical adventures include Alpaca Alpár, the puffin, and Søpapegøj amidst chaos. The Shai Hulud incident catalyzes change, marking a significant event. "Dagens nyheder" offers delightful insights, while the notice board comically displays 0 days without major incidents in their tumultuous reality.
