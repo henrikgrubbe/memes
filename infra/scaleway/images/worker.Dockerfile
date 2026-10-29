@@ -1,4 +1,4 @@
-FROM node:24-slim AS build
+FROM node:26-slim AS build
 
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json tsconfig.worker.json ./
@@ -8,7 +8,7 @@ COPY src/hosted/task.ts ./src/hosted/task.ts
 COPY src/hosted/worker ./src/hosted/worker
 RUN npm exec -- tsc --project tsconfig.worker.json
 
-FROM node:24-slim
+FROM node:26-slim
 
 ENV NODE_ENV=production
 WORKDIR /app
