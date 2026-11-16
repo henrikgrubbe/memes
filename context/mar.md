@@ -1,20 +1,20 @@
 # Team MAR
 
-**Setting**: At Bankdata ("meme-fabrikken"), chaos thrives with ceramics, DHL runs, ServiceNow training, and playful nights filled with Mexican lasagne and Yamas. Rune dodges golf enthusiasts while Snapsbamsen Sigurd (formerly Skjoldbamsen Sigurd) cheerfully discusses Graves' disease and cherry sauce while managing kawaii ceramics and fermenting cabbage with salt from Brandborgs Saltman's alter ego. Sebastian’s puffin, Søpapegøj, and Laban share a donut bed with a new tuxedo kitten, introduced to show solidarity with Henrik. Meanwhile, Morten the turtle drives a Tesla and plays guitar while pursuing his penchant for hunting. Tensions rise when Sæbekassebilen gets stolen, leading to a trophy contest at Carsten's driveway, which ends with a Shai Hulud consuming the car. The notice board humorously states "Dage uden major incident" at 0. Aage, a large seagull with glasses, sometimes joins the team and performs dance routines to attract earthworms. Recently, Team MAR has been joined by Jonathan, a small, fluffy chick who warms himself in front of the heat lamp.
+**Setting**: At Bankdata ("meme-fabrikken"), chaos reigns with ceramics, DHL runs, ServiceNow training, and playful nights of Mexican lasagne and Yamas. Rune deftly avoids golf enthusiasts while Snapsbamsen Sigurd discusses Graves' disease and cherry sauce while managing kawaii ceramics. Morten the turtle drives a Tesla, plays guitar, and hunts. Tensions rise when Sæbekassebilen gets stolen, culminating in a trophy contest at Carsten's driveway, which ends with Shai Hulud consuming the car. The notice board humorously reads "Dage uden major incident" at 0. Aage, a large seagull in glasses, performs dance routines to attract earthworms. Team MAR recently welcomed Jonathan, a small, fluffy chick who enjoys warming himself by the heat lamp.
 
 **Characters**:
 - **Rune Beaufillou**: "Viking of Vibes," hosts animal news, loves Leopardus tilcayo.
-- **Persille-Sebastian**: "Parsley Avenger," quirky developer uneasy about mock meats, consults Alpaca.
+- **Persille-Sebastian**: "Parsley Avenger," quirky developer uneasy about mock meats.
 - **Elmast Jeppe**: "Metal Elmast," reports electrical outages.
-- **Alpaca Alpár**: Comedic sage, identifies mock meats, enjoys snacks and Laban’s company.
+- **Alpaca Alpár**: Comedic sage, loves snacks and Laban’s company.
 - **Laban**: Tuxedo cat, shares a donut bed with the new kitten.
-- **Snapsbamsen Sigurd**: "Sigurd Newton," now the merry snapsbear, manages kawaii ceramics while critiquing cherry sauce.
-- **Henrik (Henrik OK)**: The world’s okayest Henrik, meme lover in his "far på barsel :heart: " t-shirt.
-- **Randi**: Sharp business consultant duck who brings Godis and critiques team mischief.
+- **Snapsbamsen Sigurd**: "Sigurd Newton," manages kawaii ceramics, critiques cherry sauce, wears a red scarf that reads “Snapsebjørnen Sigurd.”
+- **Henrik (Henrik OK)**: The world’s okayest Henrik, meme lover in "far på barsel :heart: " t-shirt.
+- **Randi**: Sharp business consultant duck who critiques team antics.
 - **Søpapegøj**: Sailor-hat puffin fond of Coca Cola Zero and licorice.
-- **Morten**: The turtle who drives a Tesla, plays guitar, and enjoys hunting.
-- **Træmand Brandborg**: Mystical addition to the group, now regarded as a calendar, providing timely wisdom along with knowledge of wood and nature.
-- **Aage**: A large seagull with glasses, known for his messy attire and step-dancing skills that attract earthworms.
-- **Jonathan**: A small, fluffy chick who loves to snuggle in front of the heat lamp to keep warm.
+- **Morten**: Turtle who drives a Tesla, plays guitar, and enjoys hunting.
+- **Træmand Brandborg**: Mystical figure providing wisdom about wood and nature.
+- **Aage**: Large seagull known for messy attire and step-dancing for earthworms.
+- **Jonathan**: Small, fluffy chick who loves to snuggle in front of the heat lamp.
 
-Team MAR's whimsical adventures bring together Alpaca, Søpapegøj, Morten, the new kitten, and Jonathan amidst delightful chaos. Randi adds depth with her commentary. The Shai Hulud incident sparks change, humorously noting 0 days without major incidents. Aage’s quirky appearances and dance performances introduce new dynamics to the team’s antics. Snapsbamsen Sigurd’s transformation into a merry snapsbear for Christmas adds festive charm and unpredictability, enriching the team's ongoing stories and shenanigans that intertwine with their daily life.
+Team MAR's whimsical adventures unite Alpaca, Søpapegøj, Morten, the new kitten, and Jonathan amidst delightful chaos. Randi’s commentary adds depth. The Shai Hulud incident humorously resets the counter at 0 days without major incidents. Aage’s quirky appearances enhance team dynamics. Snapsbamsen Sigurd's transformation into a merry snapsbear with a scarf adds festive charm, enriching ongoing stories and shenanigans of everyday life.
